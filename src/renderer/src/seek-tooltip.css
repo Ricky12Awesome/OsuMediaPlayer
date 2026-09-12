@@ -5,6 +5,22 @@
   left: var(--seek-tooltip-position, 50%);
 }
 
+.transport-scrubber .seek-current-tooltip {
+  left: clamp(
+    4.5rem,
+    var(--seek-tooltip-position, 50%),
+    calc(100% - 4.5rem)
+  );
+}
+
+.transport-scrubber .seek-hover-tooltip {
+  left: clamp(
+    2.5rem,
+    var(--seek-tooltip-position, 50%),
+    calc(100% - 2.5rem)
+  );
+}
+
 .transport-scrubber:focus-within .seek-tooltip {
   opacity: 0;
   transform: translate(-50%, 4px);
@@ -14,6 +30,11 @@
 .transport-scrubber:has(.seek-slider:focus-visible) .seek-tooltip {
   opacity: 1;
   transform: translate(-50%);
+}
+
+.transport-scrubber:has(.seek-slider:active) .seek-hover-tooltip {
+  opacity: 0;
+  transform: translate(-50%, 4px);
 }
 
 .seek-slider {

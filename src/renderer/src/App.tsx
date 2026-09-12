@@ -931,12 +931,21 @@ export function App() {
           onPointerLeave={clearSeekPreview}
         >
           <span
-            className="seek-tooltip"
+            className="seek-tooltip seek-current-tooltip"
             aria-hidden="true"
-            style={{ "--seek-tooltip-position": tooltipPosition + "%" } as CSSProperties}
+            style={{ "--seek-tooltip-position": currentProgress + "%" } as CSSProperties}
           >
-            {formatDuration(seekPreview?.time ?? seekTooltipPreview?.time ?? player.currentTime)}
+            {formatDuration(player.currentTime)} / {formatDuration(duration)}
           </span>
+          {seekTooltipPreview && (
+            <span
+              className="seek-tooltip seek-hover-tooltip"
+              aria-hidden="true"
+              style={{ "--seek-tooltip-position": tooltipPosition + "%" } as CSSProperties}
+            >
+              {formatDuration(seekTooltipPreview.time)}
+            </span>
+          )}
           <input
             className="seek-slider"
             type="range"
