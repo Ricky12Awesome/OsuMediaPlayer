@@ -4,7 +4,7 @@ import {
   navigateShuffleHistory,
   nextQueueIndex,
   parsePlaybackSettings,
-} from "../src/player-utils";
+} from "../src/renderer/src/player-utils";
 
 test("queue navigation honors repeat and boundaries", () => {
   assert.equal(

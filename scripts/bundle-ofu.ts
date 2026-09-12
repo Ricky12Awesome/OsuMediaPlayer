@@ -1,7 +1,7 @@
 import { cp } from "node:fs/promises";
 import { join } from "node:path";
 import { Arch } from "builder-util";
-import { ensureOfu } from "../electron/ofu";
+import { ensureOfu } from "../src/main/ofu";
 
 export default async function bundleOfu(context: {
   electronPlatformName: string;

@@ -6,7 +6,7 @@ import {
   isAssetHash,
   mimeForFilename,
   parseRange,
-} from "../electron/media";
+} from "../src/main/media";
 
 const hash = "0123456789abcdef".repeat(4);
 

@@ -1,4 +1,4 @@
-import type { LibraryQuery, RepeatMode } from "../shared/types";
+import type { LibraryQuery, RepeatMode } from "../../shared/types";
 
 export interface PlaybackSettings {
   volume: number;

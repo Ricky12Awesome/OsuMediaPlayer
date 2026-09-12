@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { LibraryIndex, parseBeatmapVideoEvent } from "../electron/library";
-import type { Track } from "../shared/types";
+import { LibraryIndex, parseBeatmapVideoEvent } from "../src/main/library";
+import type { Track } from "../src/shared/types";
 
 test("beatmap video events parse quoted and unquoted filenames", () => {
   assert.deepEqual(

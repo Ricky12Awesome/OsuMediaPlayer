@@ -10,7 +10,7 @@ import type {
   PlayerAPI,
   RepeatMode,
   Track,
-} from "../shared/types";
+} from "../../shared/types";
 import {
   cloneQueueQuery,
   navigateShuffleHistory,

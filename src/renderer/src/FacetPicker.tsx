@@ -9,7 +9,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown, Search, X } from "lucide-react";
-import type { LibraryFacet } from "../shared/types";
+import type { LibraryFacet } from "../../shared/types";
 
 const rowHeight = 32;
 const viewportRows = 8;

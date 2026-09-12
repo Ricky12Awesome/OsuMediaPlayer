@@ -16,12 +16,12 @@ const common = {
 await Promise.all([
   build({
     ...common,
-    entryPoints: ["electron/main.ts"],
+    entryPoints: ["src/main/index.ts"],
     outfile: "dist-electron/main.cjs",
   }),
   build({
     ...common,
-    entryPoints: ["electron/preload.ts"],
+    entryPoints: ["src/preload/index.ts"],
     outfile: "dist-electron/preload.cjs",
   }),
   build({

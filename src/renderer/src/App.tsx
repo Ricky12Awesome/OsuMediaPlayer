@@ -47,7 +47,7 @@ import type {
   PlayerAPI,
   SortKey,
   Track,
-} from "../shared/types";
+} from "../../shared/types";
 import { FacetPicker } from "./FacetPicker";
 import { VirtualTrackList } from "./VirtualTrackList";
 import { usePlayer } from "./usePlayer";

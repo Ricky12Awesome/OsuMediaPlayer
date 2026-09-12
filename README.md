@@ -11,6 +11,21 @@ npm run build
 npm run dev
 ```
 
+## Project structure
+
+The project follows the electron-vite process layout:
+
+```text
+src/
+  main/       Electron main process and native services
+  preload/    Context-isolated renderer bridge
+  renderer/   Vite/React renderer application
+    index.html
+    src/      React components and renderer utilities
+  shared/     Types shared across process boundaries
+scripts/      Build and packaging helpers
+```
+
 ## AI Disclosure
 
 This project is mostly written with AI (since I suck at making UIs)

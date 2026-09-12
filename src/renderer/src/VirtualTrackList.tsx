@@ -16,7 +16,7 @@ import {
   Music2,
   SearchX,
 } from "lucide-react";
-import type { LibraryQuery, PlayerAPI, Track } from "../shared/types";
+import type { LibraryQuery, PlayerAPI, Track } from "../../shared/types";
 
 const pageSize = 64;
 const pageCacheLimit = 8;
