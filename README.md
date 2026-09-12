@@ -18,7 +18,16 @@ allowlisted media files through the private osu-media: protocol.
 This working tree was reconstructed after an accidental
 git filter-repo --path tools/ofu --force. The original Electron TypeScript
 sources were recovered exactly from embedded source maps in dist-electron.
-The original renderer source maps were not shipped, so the production renderer
-bundle and compiled CSS are retained as src/recovered-renderer.js and
-src/styles.css. The small tests in tests/ validate recovered behavior and
-are newly reconstructed, not the original test files.
+The original renderer source maps were not shipped, so the exact original JSX
+text cannot be recovered. The production bundle is retained separately as
+`recovery/original-renderer.bundle.js` for reference; it is not imported by the
+application. Its generated package name was `dist/assets/index-CGtVxkz-.js`,
+not `recovered-renderer.js`.
+
+The maintainable renderer has been reconstructed into the source layout
+supported by the surviving build artifacts: `src/main.tsx` is the likely
+renderer entry, with `App.tsx`, `VirtualTrackList.tsx`, `FacetPicker.tsx`,
+`usePlayer.ts`, and the CSS files alongside it. The original entry filename
+cannot be proven because no renderer source map or Git object survived. The
+small tests in tests/ validate recovered behavior and are newly reconstructed,
+not the original test files.
