@@ -1,6 +1,23 @@
 # OsuMediaPlayer
 
+Plays songs from osu!lazer (only)
 
+This project is still in early stages and will have bugs 
+
+## Current Features
+- System Media Controls 
+- Background art of current song (if map has one)
+- Video playback (if map supports it)
+- Search (collections, tags, etc)
+- Shuffle
+- Fullscreen mode
+
+## Planned Features
+these are features I want to add in the future
+
+- Audio Visualizer
+- Dynamic Theming based on what's currently playing
+- Storyboards (might be difficult to do)
 
 ## Development
 
@@ -9,21 +26,6 @@ Install dependencies, then run:
 ```sh
 npm run build
 npm run dev
-```
-
-## Project structure
-
-The project follows the electron-vite process layout:
-
-```text
-src/
-  main/       Electron main process and native services
-  preload/    Context-isolated renderer bridge
-  renderer/   Vite/React renderer application
-    index.html
-    src/      React components and renderer utilities
-  shared/     Types shared across process boundaries
-scripts/      Build and packaging helpers
 ```
 
 ## AI Disclosure
