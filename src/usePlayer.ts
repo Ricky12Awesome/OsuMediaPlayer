@@ -207,7 +207,7 @@ export function usePlayer(api: PlayerAPI): PlayerState {
       setDuration(nextTrack.duration);
       setPlaying(false);
       setError(null);
-      setVideoUrl(nextTrack.videoUrl ?? null);
+      setVideoUrl(null);
       setVideoLoading(Boolean(nextTrack.videoUrl));
       setVideoError(null);
       audio.src = nextTrack.audioUrl;
@@ -470,7 +470,13 @@ export function usePlayer(api: PlayerAPI): PlayerState {
       else if (action === "previous") current.previous();
     });
     const mediaSession = navigator.mediaSession;
-    const handlers: Array<[MediaSessionAction, () => void]> = [
+    type MediaSessionDetails = {
+      seekTime?: number;
+      seekOffset?: number;
+    };
+    const handlers: Array<
+      [MediaSessionAction, (details?: MediaSessionDetails) => void]
+    > = [
       ["play", () => controls.current.resume()],
       ["pause", () => controls.current.pause()],
       ["nexttrack", () => controls.current.next()],
@@ -479,7 +485,10 @@ export function usePlayer(api: PlayerAPI): PlayerState {
         controls.current.pause();
         controls.current.seek(0);
       }],
-      ["seekto", () => undefined],
+      ["seekto", (details) => {
+        if (details?.seekTime !== undefined)
+          controls.current.seek(details.seekTime);
+      }],
       ["seekbackward", () => controls.current.seek(audio.currentTime - 10)],
       ["seekforward", () => controls.current.seek(audio.currentTime + 10)],
     ];
@@ -523,7 +532,7 @@ export function usePlayer(api: PlayerAPI): PlayerState {
       setVideoLoading(false);
       return;
     }
-    setVideoUrl(track.videoUrl);
+    setVideoUrl(null);
     setVideoLoading(true);
     api
       .prepareVideo(track.id)
@@ -579,6 +588,7 @@ export function usePlayer(api: PlayerAPI): PlayerState {
     if (!navigator.mediaSession) return;
     if (!track) {
       navigator.mediaSession.metadata = null;
+      navigator.mediaSession.playbackState = "none";
       try {
         navigator.mediaSession.setPositionState();
       } catch {

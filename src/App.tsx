@@ -115,7 +115,7 @@ function writeStorage(key: string, value: unknown): void {
 }
 
 function formatDuration(value: number): string {
-  const seconds = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+  const seconds = Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0;
   return Math.floor(seconds / 60) + ":" + String(seconds % 60).padStart(2, "0");
 }
 
@@ -133,6 +133,8 @@ export function App() {
     records: 0,
   });
   const [revision, setRevision] = useState(0);
+  const [resultTotal, setResultTotal] = useState(0);
+  const [isDesktop, setIsDesktop] = useState(() => window.innerWidth > 760);
   const [searchDraft, setSearchDraft] = useState("");
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<LibraryTab>("all");
@@ -165,11 +167,19 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [captionDragging, setCaptionDragging] = useState(false);
-  const [mobileLibrary, setMobileLibrary] = useState(false);
+  const [captionDragPosition, setCaptionDragPosition] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const [resizing, setResizing] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const captionRef = useRef<HTMLDivElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
+  const libraryRef = useRef<HTMLElement>(null);
   const hideControlsTimer = useRef<number | null>(null);
+  const resizeStart = useRef<{ x: number; width: number } | null>(null);
+  const trackInitialized = useRef(false);
   const drag = useRef<{
     pointerId: number;
     offsetX: number;
@@ -179,10 +189,14 @@ export function App() {
     y: number;
   } | null>(null);
 
+  trackInitialized.current = Boolean(player.track);
+
   const loadLibrary = useCallback(
     async (installPath?: string) => {
+      trackInitialized.current = false;
       player.reset();
       setSummary(null);
+      setResultTotal(0);
       setImporting(true);
       setLoadError("");
       setProgress({ phase: "reading", records: 0 });
@@ -217,6 +231,48 @@ export function App() {
     return removeFullscreen;
   }, []);
 
+  const clampLibraryWidth = useCallback((value: number): number => {
+    const contentWidth = mainRef.current?.clientWidth ?? window.innerWidth;
+    const max = Math.max(320, Math.min(720, contentWidth - 360 - 7));
+    return Math.min(max, Math.max(320, value));
+  }, []);
+
+  useEffect(() => {
+    const onResize = () => {
+      setIsDesktop(window.innerWidth > 760);
+      if (window.innerWidth > 760)
+        setLibraryWidth((value) => clampLibraryWidth(value));
+    };
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [clampLibraryWidth]);
+
+  useEffect(() => {
+    if (!resizing) return;
+    document.body.classList.add("is-resizing-library");
+    const onMove = (event: globalThis.PointerEvent) => {
+      const start = resizeStart.current;
+      if (!start) return;
+      setLibraryWidth(clampLibraryWidth(start.width + start.x - event.clientX));
+    };
+    const finish = () => {
+      resizeStart.current = null;
+      setResizing(false);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", finish, { once: true });
+    window.addEventListener("pointercancel", finish, { once: true });
+    window.addEventListener("blur", finish, { once: true });
+    return () => {
+      document.body.classList.remove("is-resizing-library");
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", finish);
+      window.removeEventListener("blur", finish);
+    };
+  }, [clampLibraryWidth, resizing]);
+
   useEffect(() => {
     const timer = window.setTimeout(() => setSearch(searchDraft), 150);
     return () => window.clearTimeout(timer);
@@ -244,6 +300,27 @@ export function App() {
   }, [settingsOpen, shortcutsOpen]);
 
   useEffect(() => {
+    if (!fullscreen) {
+      setControlsVisible(true);
+      return;
+    }
+    const onActivity = () => controlsActivity();
+    window.addEventListener("pointermove", onActivity, { passive: true });
+    window.addEventListener("pointerdown", onActivity, { passive: true });
+    window.addEventListener("focusin", onActivity);
+    controlsActivity();
+    return () => {
+      window.removeEventListener("pointermove", onActivity);
+      window.removeEventListener("pointerdown", onActivity);
+      window.removeEventListener("focusin", onActivity);
+      if (hideControlsTimer.current !== null) {
+        window.clearTimeout(hideControlsTimer.current);
+        hideControlsTimer.current = null;
+      }
+    };
+  }, [fullscreen]);
+
+  useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       const editing =
@@ -263,7 +340,6 @@ export function App() {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         setSidebarHidden(false);
-        setMobileLibrary(true);
         searchRef.current?.focus();
         return;
       }
@@ -306,6 +382,15 @@ export function App() {
   const queueMatches = useMemo(
     () => JSON.stringify(player.queueQuery) === JSON.stringify(query),
     [player.queueQuery, query],
+  );
+
+  const cueFirstTrack = useCallback(
+    (track: Track) => {
+      if (trackInitialized.current) return;
+      trackInitialized.current = true;
+      player.cueTrack(track, query, 0);
+    },
+    [player.cueTrack, query],
   );
 
   const toggleFavorite = useCallback((track: Track) => {
@@ -377,13 +462,24 @@ export function App() {
       const state = drag.current;
       if (!state || next.pointerId !== state.pointerId) return;
       state.moved ||= Math.hypot(next.clientX - state.x, next.clientY - state.y) > 4;
-      if (state.moved) setCaptionDragging(true);
+      if (state.moved) {
+        const stage = captionRef.current;
+        if (stage) {
+          const bounds = stage.getBoundingClientRect();
+          setCaptionDragPosition({
+            x: next.clientX - bounds.left - state.offsetX,
+            y: next.clientY - bounds.top - state.offsetY,
+          });
+        }
+        setCaptionDragging(true);
+      }
     };
     const finish = (next?: globalThis.PointerEvent) => {
       const state = drag.current;
       if (state && next?.pointerId === state.pointerId && state.moved)
         updateCaptionPosition(next as unknown as PointerEvent<HTMLDivElement>);
       drag.current = null;
+      setCaptionDragPosition(null);
       setCaptionDragging(false);
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", finish);
@@ -415,7 +511,7 @@ export function App() {
   const hasFilters = Boolean(
     search || tag || collection || tab === "favorites",
   );
-  const libraryHidden = sidebarHidden && window.innerWidth > 760;
+  const libraryHidden = sidebarHidden && isDesktop;
 
   const changeSort = (event: React.ChangeEvent<HTMLSelectElement>) => {
     const next = event.target.value as SortKey;
@@ -435,8 +531,10 @@ export function App() {
     >
       <div className="workspace">
         <main
+          ref={mainRef}
           className={
             "main-content " +
+            (resizing ? "is-resizing " : "") +
             (libraryHidden ? "sidebar-is-hidden" : "")
           }
           style={{ "--library-width": libraryWidth + "px" } as CSSProperties}
@@ -482,6 +580,14 @@ export function App() {
                   (captionDragging ? " is-dragging" : "")
                 }
                 aria-label="Now playing information. Drag to move it to an edge."
+                style={
+                  captionDragPosition
+                    ? ({
+                        "--caption-drag-x": captionDragPosition.x + "px",
+                        "--caption-drag-y": captionDragPosition.y + "px",
+                      } as CSSProperties)
+                    : undefined
+                }
                 onPointerDown={beginCaptionDrag}
               >
                 <h2 title={player.track?.title}>
@@ -503,14 +609,52 @@ export function App() {
             </div>
           </section>
 
-          <div className="library-resizer" aria-hidden="true">
+          <div
+            className="library-resizer"
+            role="separator"
+            aria-label="Resize library sidebar"
+            aria-hidden={libraryHidden}
+            aria-orientation="vertical"
+            aria-valuemin={320}
+            aria-valuemax={720}
+            aria-valuenow={Math.round(libraryWidth)}
+            tabIndex={libraryHidden ? -1 : 0}
+            title="Drag to resize · double-click to reset"
+            onPointerDown={(event) => {
+              if (event.button !== 0 || libraryHidden) return;
+              event.preventDefault();
+              resizeStart.current = {
+                x: event.clientX,
+                width: libraryRef.current?.getBoundingClientRect().width ?? libraryWidth,
+              };
+              setResizing(true);
+            }}
+            onDoubleClick={() => setLibraryWidth(clampLibraryWidth(430))}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowLeft") {
+                event.preventDefault();
+                setLibraryWidth((value) => clampLibraryWidth(value + 16));
+              } else if (event.key === "ArrowRight") {
+                event.preventDefault();
+                setLibraryWidth((value) => clampLibraryWidth(value - 16));
+              } else if (event.key === "Home") {
+                event.preventDefault();
+                setLibraryWidth(320);
+              } else if (event.key === "End") {
+                event.preventDefault();
+                setLibraryWidth(clampLibraryWidth(720));
+              }
+            }}
+          >
             <span />
           </div>
 
           <section
+            ref={libraryRef}
             className="library-panel"
             aria-label="Music library"
             aria-hidden={libraryHidden}
+            inert={libraryHidden || undefined}
           >
             <div className="library-search-row">
               <div className="search-box">
@@ -679,7 +823,8 @@ export function App() {
                   favorites={favorites}
                   onPlay={(track, index) => player.playTrack(track, query, index)}
                   onFavorite={toggleFavorite}
-                  onTotal={() => {}}
+                  onTotal={setResultTotal}
+                  onFirstTrack={cueFirstTrack}
                 />
               )}
             </div>
@@ -691,7 +836,7 @@ export function App() {
                   ? summary?.trackCount
                     ? summary.trackCount.toLocaleString() + " songs loaded · Reading library…"
                     : "Connecting to osu!lazer"
-                  : (summary?.trackCount ?? 0).toLocaleString() +
+                  : resultTotal.toLocaleString() +
                     (hasFilters ? " songs found" : " songs in your library")}
               </span>
             </div>
@@ -732,19 +877,40 @@ export function App() {
             value={Math.min(player.currentTime, duration || 1)}
             disabled={!player.track}
             aria-label="Seek"
+            aria-valuetext={formatDuration(player.currentTime) + " of " + formatDuration(duration)}
+            style={
+              {
+                "--range-progress":
+                  (duration ? (player.currentTime / duration) * 100 : 0) + "%",
+              } as CSSProperties
+            }
             onChange={(event) => player.seek(Number(event.target.value))}
           />
         </div>
 
-        <button
-          className={"icon-button shuffle-button " + (player.shuffle ? "active" : "")}
-          aria-label="Shuffle"
-          aria-pressed={player.shuffle}
-          onClick={() => player.setShuffle((value) => !value)}
-        >
-          <Shuffle size={17} />
-        </button>
+        {transportLayout !== "controls-centered" && (
+          <button
+            className={"icon-button shuffle-button " + (player.shuffle ? "active" : "")}
+            aria-label="Shuffle"
+            aria-pressed={player.shuffle}
+            title={player.shuffle ? "Turn off shuffle" : "Turn on shuffle"}
+            onClick={() => player.setShuffle((value) => !value)}
+          >
+            <Shuffle size={17} />
+          </button>
+        )}
         <div className="transport-buttons">
+          {transportLayout === "controls-centered" && (
+            <button
+              className={"icon-button shuffle-button " + (player.shuffle ? "active" : "")}
+              aria-label="Shuffle"
+              aria-pressed={player.shuffle}
+              title={player.shuffle ? "Turn off shuffle" : "Turn on shuffle"}
+              onClick={() => player.setShuffle((value) => !value)}
+            >
+              <Shuffle size={17} />
+            </button>
+          )}
           <button
             className="icon-button skip-button"
             aria-label="Previous track"
@@ -855,6 +1021,12 @@ export function App() {
             step="0.01"
             value={player.muted ? 0 : player.volume}
             aria-label="Volume"
+            style={
+              {
+                "--range-progress":
+                  (player.muted ? 0 : player.volume) * 100 + "%",
+              } as CSSProperties
+            }
             onChange={(event) => player.setVolume(Number(event.target.value))}
           />
           <button
@@ -1001,11 +1173,6 @@ export function App() {
         </div>
       </dialog>
 
-      <button
-        className="mobile-switch"
-        aria-label={mobileLibrary ? "Show player" : "Show library"}
-        onClick={() => setMobileLibrary((value) => !value)}
-      />
     </div>
   );
 }

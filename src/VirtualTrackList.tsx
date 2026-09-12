@@ -293,7 +293,7 @@ export function VirtualTrackList({
         }}
       >
         <span className="track-number" aria-hidden="true">
-          String(index + 1).padStart(2, "0")
+          {String(index + 1).padStart(2, "0")}
         </span>
         {track ? (
           <>
