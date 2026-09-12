@@ -1,0 +1,59 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import {
+  navigateShuffleHistory,
+  nextQueueIndex,
+  parsePlaybackSettings,
+} from "../src/player-utils";
+
+test("queue navigation honors repeat and boundaries", () => {
+  assert.equal(
+    nextQueueIndex({
+      current: 2,
+      total: 3,
+      direction: 1,
+      shuffle: false,
+      repeat: "off",
+    }),
+    null,
+  );
+  assert.equal(
+    nextQueueIndex({
+      current: 2,
+      total: 3,
+      direction: 1,
+      shuffle: false,
+      repeat: "all",
+    }),
+    0,
+  );
+});
+
+test("shuffle history walks backward before selecting a new track", () => {
+  const result = navigateShuffleHistory({
+    history: { entries: [0, 2], position: 1 },
+    current: 2,
+    total: 4,
+    direction: -1,
+    repeat: "off",
+  });
+  assert.deepEqual(result, {
+    index: 0,
+    history: { entries: [0, 2], position: 0 },
+  });
+});
+
+test("stored playback settings are clamped and validated", () => {
+  assert.deepEqual(
+    parsePlaybackSettings(
+      JSON.stringify({ volume: 2, muted: true, shuffle: true, repeat: "one" }),
+    ),
+    { volume: 1, muted: true, shuffle: true, repeat: "one" },
+  );
+  assert.deepEqual(parsePlaybackSettings("{bad"), {
+    volume: 0.75,
+    muted: false,
+    shuffle: false,
+    repeat: "off",
+  });
+});

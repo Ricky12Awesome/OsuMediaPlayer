@@ -1,0 +1,64 @@
+{
+  "name": "osu-media-player",
+  "version": "0.0.1",
+  "private": true,
+  "description": "A osu!lazer music player",
+  "author": "Ricky12Awesome",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist-electron/main.cjs",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "npm run typecheck && vite build && node scripts/build-electron.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "test:e2e": "npm run build && node tests/electron.e2e.mjs",
+    "format": "prettier --write src electron shared tests scripts *.json *.ts index.html README.md",
+    "package": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "@fontsource/nunito-sans": "^5.3.0",
+    "extract-zip": "^2.0.1",
+    "lucide-react": "^0.577.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "tar": "^7.5.22"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^24.13.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "electron": "^44.3.0",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2",
+    "prettier": "^3.9.6",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.0"
+  },
+  "build": {
+    "appId": "dev.osumediaplayer.app",
+    "productName": "OsuMediaPlayer",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "tools/ofu",
+        "to": "ofu"
+      }
+    ],
+    "afterPack": "dist-electron/bundle-ofu.cjs",
+    "linux": {
+      "target": "AppImage",
+      "category": "AudioVideo"
+    }
+  }
+}
