@@ -66,6 +66,10 @@ const positions = [
 type CaptionPosition = (typeof positions)[number];
 type LibraryTab = "all" | "collections" | "favorites";
 type TransportLayout = "controls-left" | "controls-centered";
+type SeekPreview = {
+  time: number;
+  position: number;
+};
 
 const sortOptions: Array<{ value: SortKey; label: string }> = [
   { value: "title", label: "Title" },
@@ -171,6 +175,9 @@ export function App() {
     x: number;
     y: number;
   } | null>(null);
+  const [seekPreview, setSeekPreview] = useState<SeekPreview | null>(null);
+  const [seekTooltipPreview, setSeekTooltipPreview] =
+    useState<SeekPreview | null>(null);
   const [resizing, setResizing] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -178,6 +185,7 @@ export function App() {
   const mainRef = useRef<HTMLElement>(null);
   const libraryRef = useRef<HTMLElement>(null);
   const hideControlsTimer = useRef<number | null>(null);
+  const seekPreviewClearTimer = useRef<number | null>(null);
   const resizeStart = useRef<{ x: number; width: number } | null>(null);
   const trackInitialized = useRef(false);
   const drag = useRef<{
@@ -290,6 +298,16 @@ export function App() {
   useEffect(
     () => writeStorage("osu-music-now-playing-position", captionPosition),
     [captionPosition],
+  );
+
+  useEffect(
+    () => () => {
+      if (seekPreviewClearTimer.current !== null) {
+        window.clearTimeout(seekPreviewClearTimer.current);
+        seekPreviewClearTimer.current = null;
+      }
+    },
+    [],
   );
 
   useEffect(() => {
@@ -504,6 +522,49 @@ export function App() {
     );
   };
   const duration = player.duration || player.track?.duration || 0;
+  const cancelSeekPreviewClear = () => {
+    if (seekPreviewClearTimer.current !== null) {
+      window.clearTimeout(seekPreviewClearTimer.current);
+      seekPreviewClearTimer.current = null;
+    }
+  };
+  const updateSeekPreview = (event: PointerEvent<HTMLInputElement>) => {
+    if (!duration || !player.track) return;
+    cancelSeekPreviewClear();
+    const bounds = event.currentTarget.getBoundingClientRect();
+    if (!bounds.width) return;
+    const position = Math.max(
+      0,
+      Math.min(1, (event.clientX - bounds.left) / bounds.width),
+    );
+    const preview = { time: position * duration, position: position * 100 };
+    setSeekPreview(preview);
+    setSeekTooltipPreview(preview);
+  };
+  const clearSeekPreview = () => {
+    cancelSeekPreviewClear();
+    // The range highlight should disappear as soon as the pointer leaves.
+    setSeekPreview(null);
+    // Keep the tooltip snapshot while it fades out. Clearing it now would
+    // briefly replace it with the live position during that fade.
+    seekPreviewClearTimer.current = window.setTimeout(() => {
+      setSeekTooltipPreview(null);
+      seekPreviewClearTimer.current = null;
+    }, 150);
+  };
+  const resetSeekPreview = () => {
+    cancelSeekPreviewClear();
+    setSeekPreview(null);
+    setSeekTooltipPreview(null);
+  };
+  const currentProgress = duration
+    ? Math.max(0, Math.min(100, (player.currentTime / duration) * 100))
+    : 0;
+  const previewPosition = seekPreview?.position ?? currentProgress;
+  const tooltipPosition =
+    seekPreview?.position ?? seekTooltipPreview?.position ?? currentProgress;
+  const previewStart = Math.min(currentProgress, previewPosition);
+  const previewEnd = Math.max(currentProgress, previewPosition);
   const videoActive = Boolean(
     player.videoUrl &&
       player.currentTime >= Math.max(0, player.track?.videoOffset ?? 0),
@@ -864,9 +925,17 @@ export function App() {
         onPointerMove={controlsActivity}
         onFocus={controlsActivity}
       >
-        <div className="transport-scrubber">
-          <span className="seek-tooltip" aria-hidden="true">
-            {formatDuration(player.currentTime)} / {formatDuration(duration)}
+        <div
+          className="transport-scrubber"
+          onPointerEnter={cancelSeekPreviewClear}
+          onPointerLeave={clearSeekPreview}
+        >
+          <span
+            className="seek-tooltip"
+            aria-hidden="true"
+            style={{ "--seek-tooltip-position": tooltipPosition + "%" } as CSSProperties}
+          >
+            {formatDuration(seekPreview?.time ?? seekTooltipPreview?.time ?? player.currentTime)}
           </span>
           <input
             className="seek-slider"
@@ -880,10 +949,13 @@ export function App() {
             aria-valuetext={formatDuration(player.currentTime) + " of " + formatDuration(duration)}
             style={
               {
-                "--range-progress":
-                  (duration ? (player.currentTime / duration) * 100 : 0) + "%",
+                "--range-progress": currentProgress + "%",
+                "--range-preview-start": previewStart + "%",
+                "--range-preview-end": previewEnd + "%",
               } as CSSProperties
             }
+            onFocus={resetSeekPreview}
+            onPointerMove={updateSeekPreview}
             onChange={(event) => player.seek(Number(event.target.value))}
           />
         </div>

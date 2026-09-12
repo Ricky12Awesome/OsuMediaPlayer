@@ -2,6 +2,7 @@
  * the tooltip visible after the pointer has left the scrubber. */
 .transport-scrubber .seek-tooltip {
   font-size: 18px;
+  left: var(--seek-tooltip-position, 50%);
 }
 
 .transport-scrubber:focus-within .seek-tooltip {
@@ -13,4 +14,24 @@
 .transport-scrubber:has(.seek-slider:focus-visible) .seek-tooltip {
   opacity: 1;
   transform: translate(-50%);
+}
+
+.seek-slider {
+  background-image:
+    linear-gradient(
+      to right,
+      transparent 0%,
+      transparent var(--range-preview-start),
+      #ffb3d5 var(--range-preview-start),
+      #ffb3d5 var(--range-preview-end),
+      transparent var(--range-preview-end),
+      transparent 100%
+    ),
+    linear-gradient(
+      to right,
+      var(--pink) 0%,
+      var(--pink) var(--range-progress),
+      #44364d var(--range-progress),
+      #44364d 100%
+    );
 }
