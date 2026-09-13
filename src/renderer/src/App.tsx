@@ -52,6 +52,7 @@ import type {
   TrackContextMenuInfo,
 } from "../../shared/types";
 import { FacetPicker } from "./FacetPicker";
+import { SortPicker } from "./SortPicker";
 import { TrackContextMenu } from "./TrackContextMenu";
 import { VirtualTrackList } from "./VirtualTrackList";
 import { usePlayer } from "./usePlayer";
@@ -691,8 +692,7 @@ export function App() {
   );
   const libraryHidden = sidebarHidden && isDesktop;
 
-  const changeSort = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const next = event.target.value as SortKey;
+  const changeSort = (next: SortKey) => {
     setSort(next);
     setDescending(next === "added");
   };
@@ -927,18 +927,11 @@ export function App() {
               <div className="sort-controls">
                 <span>Sort by</span>
                 <div className="sort-select">
-                  <select
-                    aria-label="Sort songs"
+                  <SortPicker
                     value={sort}
+                    options={sortOptions}
                     onChange={changeSort}
-                  >
-                    {sortOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  <span aria-hidden="true">⌄</span>
+                  />
                 </div>
                 <button
                   className="icon-button sort-direction"

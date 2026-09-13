@@ -1,6 +1,7 @@
 import "./styles.css";
 import "./seek-tooltip.css";
 import "./zoom-indicator.css";
+import "./sort-picker.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
