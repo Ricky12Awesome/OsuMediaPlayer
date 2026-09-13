@@ -14,6 +14,8 @@ import {
   ArrowUpWideNarrow,
   CircleAlert,
   Disc3,
+  Eye,
+  EyeOff,
   FolderHeart,
   FolderOpen,
   Heart,
@@ -183,6 +185,9 @@ export function App() {
     "controls-centered"
       ? "controls-centered"
       : "controls-left",
+  );
+  const [showNowPlayingTitleArtist, setShowNowPlayingTitleArtist] = useState(
+    () => readStorage("osu-music-show-now-playing-title-artist", true),
   );
   const [libraryWidth, setLibraryWidth] = useState(() => {
     const value = readStorage("osu-music-library-width", 430);
@@ -355,6 +360,14 @@ export function App() {
   useEffect(
     () => writeStorage("osu-music-transport-layout", transportLayout),
     [transportLayout],
+  );
+  useEffect(
+    () =>
+      writeStorage(
+        "osu-music-show-now-playing-title-artist",
+        showNowPlayingTitleArtist,
+      ),
+    [showNowPlayingTitleArtist],
   );
   useEffect(
     () => writeStorage("osu-music-now-playing-position", captionPosition),
@@ -752,34 +765,36 @@ export function App() {
                 />
               )}
               <div className="artwork-grain" />
-              <div
-                className={
-                  "hero-caption hero-caption-" +
-                  captionPosition +
-                  (captionDragging ? " is-dragging" : "")
-                }
-                aria-label="Now playing information. Drag to move it to an edge."
-                style={
-                  captionDragPosition
-                    ? ({
-                        "--caption-drag-x": captionDragPosition.x + "px",
-                        "--caption-drag-y": captionDragPosition.y + "px",
-                      } as CSSProperties)
-                    : undefined
-                }
-                onPointerDown={beginCaptionDrag}
-              >
-                <h2 title={player.track?.title}>
-                  {player.track?.title || "A little more rhythm."}
-                </h2>
-                <p title={player.track?.artist}>
-                  {player.track?.artist ||
-                    "Your osu! library. A whole new way to listen."}
-                </p>
-                {player.track?.source && (
-                  <span className="hero-source">{player.track.source}</span>
-                )}
-              </div>
+              {showNowPlayingTitleArtist && (
+                <div
+                  className={
+                    "hero-caption hero-caption-" +
+                    captionPosition +
+                    (captionDragging ? " is-dragging" : "")
+                  }
+                  aria-label="Now playing information. Drag to move it to an edge."
+                  style={
+                    captionDragPosition
+                      ? ({
+                          "--caption-drag-x": captionDragPosition.x + "px",
+                          "--caption-drag-y": captionDragPosition.y + "px",
+                        } as CSSProperties)
+                      : undefined
+                  }
+                  onPointerDown={beginCaptionDrag}
+                >
+                  <h2 title={player.track?.title}>
+                    {player.track?.title || "A little more rhythm."}
+                  </h2>
+                  <p title={player.track?.artist}>
+                    {player.track?.artist ||
+                      "Your osu! library. A whole new way to listen."}
+                  </p>
+                  {player.track?.source && (
+                    <span className="hero-source">{player.track.source}</span>
+                  )}
+                </div>
+              )}
             </div>
             <div className="player-note">
               <span className="tiny-osu">osu!</span>
@@ -1353,9 +1368,7 @@ export function App() {
       >
         <div className="dialog-heading">
           <div>
-            <h2>
-              {shortcutsOpen ? "Keyboard Shortcuts" : "Settings"}
-            </h2>
+            <h2>{shortcutsOpen ? "Keyboard Shortcuts" : "Settings"}</h2>
           </div>
           <button
             className="icon-button"
@@ -1451,6 +1464,33 @@ export function App() {
                   <span>Track details left</span>
                 </button>
               </div>
+            </div>
+            <div className="settings-block now-playing-display-setting">
+              <span className="settings-label">
+                {showNowPlayingTitleArtist ? (
+                  <Eye size={16} />
+                ) : (
+                  <EyeOff size={16} />
+                )}{" "}
+                NOW PLAYING
+              </span>
+              <button
+                type="button"
+                className={
+                  "settings-toggle " +
+                  (showNowPlayingTitleArtist ? "active" : "")
+                }
+                aria-pressed={showNowPlayingTitleArtist}
+                onClick={() => setShowNowPlayingTitleArtist((value) => !value)}
+              >
+                <span className="settings-toggle-copy">
+                  <strong>Show title / artist</strong>
+                  <span>Display track details over the artwork</span>
+                </span>
+                <span className="settings-toggle-status">
+                  {showNowPlayingTitleArtist ? "On" : "Off"}
+                </span>
+              </button>
             </div>
             <div className="settings-stats">
               <span>
