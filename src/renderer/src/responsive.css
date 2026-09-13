@@ -1,0 +1,353 @@
+/* Responsive layout overrides. */
+
+@media (width>=1550px) {
+  .hero-caption h2 {
+    font-size: 48px;
+  }
+  .track-row {
+    gap: 17px;
+  }
+  .track-title {
+    font-size: 14px;
+  }
+  .track-artist {
+    font-size: 11px;
+  }
+  .track-meta {
+    font-size: 9px;
+  }
+  .transport {
+    height: 76px;
+  }
+  .transport-track-text strong {
+    font-size: 13px;
+  }
+  .transport-track-text > span {
+    font-size: 11px;
+  }
+}
+@media (height<=760px) and (width>=761px) {
+  .player-note {
+    margin-top: 12px;
+    padding-top: 10px;
+  }
+  .hero-caption h2 {
+    font-size: 29px;
+  }
+  .transport {
+    height: 68px;
+  }
+  .library-tabs {
+    margin-top: 11px;
+  }
+  .filter-bar {
+    padding: 10px 0;
+  }
+}
+@media (width<=1100px) {
+  .transport {
+    gap: 16px;
+    padding-left: 18px;
+    padding-right: 20px;
+  }
+  .volume-slider {
+    width: 58px;
+  }
+  .library-tabs {
+    gap: 20px;
+  }
+  .hero-caption h2 {
+    font-size: 31px;
+  }
+  .track-row {
+    gap: 9px;
+    padding-left: 9px;
+    padding-right: 9px;
+  }
+  .track-art {
+    width: 49px;
+    height: 49px;
+  }
+  .track-favorite {
+    width: 20px;
+  }
+  .player-note {
+    font-size: 8px;
+  }
+}
+@media (width<=850px) {
+  .transport {
+    gap: 12px;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .hero-caption h2 {
+    font-size: 26px;
+  }
+  .eyebrow {
+    letter-spacing: 1.5px;
+    font-size: 8px;
+  }
+  .track-row {
+    gap: 8px;
+  }
+  .track-art {
+    width: 43px;
+    height: 48px;
+  }
+  .track-title {
+    font-size: 11px;
+  }
+  .track-artist {
+    font-size: 9px;
+  }
+}
+@media (width<=760px) {
+  .app-shell {
+    min-height: 440px;
+  }
+  .main-content {
+    flex-direction: column;
+    gap: 10px;
+    padding: 13px 20px 0;
+    display: flex;
+  }
+  .now-playing-panel,
+  .library-panel {
+    min-height: 0;
+    display: flex;
+  }
+  .now-playing-panel {
+    background: 0 0;
+    flex: 0 42%;
+    min-height: 160px;
+    padding-bottom: 0;
+    overflow: visible;
+  }
+  .library-tabs {
+    justify-content: space-between;
+    gap: 0;
+    margin-top: 10px;
+  }
+  .library-tabs button {
+    padding: 11px 6px 13px;
+    font-size: 11px;
+  }
+  .search-box {
+    height: 42px;
+  }
+  .library-resizer {
+    display: none;
+  }
+  .library-panel {
+    box-shadow: none;
+    background: 0 0;
+    border-left: 0;
+    flex: 58%;
+    padding: 0;
+  }
+  .search-box input {
+    font-size: 12px;
+  }
+  .filter-bar {
+    padding: 10px 0;
+  }
+  .track-art {
+    width: 54px;
+    height: 54px;
+  }
+  .track-row {
+    gap: 13px;
+    padding: 10px 13px;
+  }
+  .track-title {
+    font-size: 12px;
+  }
+  .track-artist {
+    font-size: 11px;
+  }
+  .track-meta {
+    font-size: 9px;
+  }
+  .track-favorite {
+    width: 29px;
+  }
+  .track-favorite svg {
+    width: 17px;
+    height: 17px;
+  }
+  .track-duration {
+    font-size: 11px;
+  }
+  .transport {
+    gap: 8px;
+    height: 70px;
+    min-height: 70px;
+    padding: 12px 12px 6px;
+  }
+  .transport-buttons {
+    gap: 8px;
+    margin-left: 30px;
+  }
+  .transport-controls-centered .transport-track {
+    max-width: 100%;
+    margin-left: 0;
+  }
+  .transport-buttons .icon-button,
+  .shuffle-button {
+    width: 22px;
+    height: 24px;
+  }
+  .transport-buttons .icon-button svg,
+  .shuffle-button svg {
+    width: 17px;
+  }
+  .transport-controls-centered .transport-buttons:after {
+    flex-basis: 22px;
+    width: 22px;
+  }
+  .transport-buttons .skip-button > svg {
+    transform: translate(-2px);
+  }
+  .transport-buttons .play-button {
+    width: 34px;
+    height: 34px;
+  }
+  .transport-buttons .play-button svg {
+    width: 18px;
+    height: 18px;
+  }
+  .transport-extra {
+    gap: 3px;
+  }
+  .transport-extra .icon-button {
+    width: 23px;
+    height: 24px;
+  }
+  .transport-extra svg {
+    width: 14px;
+  }
+  .volume-slider {
+    width: 42px;
+  }
+  .transport-heart {
+    width: 24px;
+    height: 24px;
+  }
+  .transport-track-text strong {
+    font-size: 10px;
+  }
+  .transport-track-text > span {
+    font-size: 8px;
+  }
+  .artwork-stage {
+    border: 1px solid #ffffff0c;
+    border-radius: 15px;
+    flex: 1;
+    min-height: 150px;
+    position: relative;
+    inset: auto;
+  }
+  .hero-caption h2 {
+    font-size: 30px;
+  }
+  .player-note {
+    display: none;
+  }
+  .playback-error {
+    font-size: 11px;
+    bottom: 82px;
+    left: 15px;
+    right: 15px;
+  }
+  .settings-dialog {
+    padding: 22px;
+  }
+  .settings-actions {
+    gap: 8px;
+  }
+  .library-footer {
+    height: 33px;
+    margin-top: 5px;
+  }
+}
+@media (width<=400px) {
+  .main-content,
+  .transport {
+    padding-left: 13px;
+    padding-right: 13px;
+  }
+  .transport-buttons {
+    gap: 5px;
+    margin-left: 27px;
+  }
+  .transport-controls-centered .transport-track {
+    max-width: 100%;
+    margin-left: 0;
+  }
+  .track-row {
+    gap: 10px;
+    padding-left: 9px;
+    padding-right: 9px;
+  }
+  .track-art {
+    width: 48px;
+    height: 48px;
+  }
+  .track-favorite {
+    width: 22px;
+  }
+  .hero-caption h2 {
+    font-size: 25px;
+  }
+  .library-tabs button {
+    font-size: 10px;
+  }
+}
+@media (width<=520px) {
+  .transport {
+    grid-template-rows: repeat(3, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    height: 120px;
+    min-height: 120px;
+  }
+  .transport-track,
+  .transport-controls-centered .transport-track {
+    grid-area: 1/1 / auto/-1;
+    width: 100%;
+    max-width: 100%;
+    margin-left: 0;
+  }
+  .transport-buttons,
+  .transport-controls-centered .transport-buttons {
+    grid-area: 2/1 / auto/-1;
+    justify-self: center;
+    margin-left: 0;
+  }
+  .transport:not(.transport-controls-centered) .transport-buttons {
+    justify-self: start;
+    margin-left: 30px;
+  }
+  .shuffle-button {
+    grid-area: 2/1;
+  }
+  .transport-extra {
+    grid-area: 3/1;
+    justify-self: end;
+  }
+}
+@media (width<=400px) {
+  .transport:not(.transport-controls-centered) .transport-buttons {
+    margin-left: 27px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  :before,
+  :after {
+    scroll-behavior: auto !important;
+    transition: none !important;
+    animation: none !important;
+  }
+}

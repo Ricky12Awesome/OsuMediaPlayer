@@ -1,0 +1,111 @@
+/* Context menu and submenu styles. */
+
+.track-context-layer {
+  z-index: 100;
+  pointer-events: auto;
+  position: fixed;
+  inset: 0;
+}
+.track-context-menu,
+.track-context-submenu {
+  z-index: 1;
+  color: #e9ddec;
+  isolation: isolate;
+  background: linear-gradient(145deg, #282032, #211b29);
+  border: 1px solid #ffffff18;
+  border-radius: 10px;
+  padding: 6px;
+  position: absolute;
+  min-width: 190px;
+  font-family:
+    Nunito Sans,
+    sans-serif;
+  box-shadow:
+    0 18px 55px #080510aa,
+    0 0 0 1px #0003;
+  backdrop-filter: blur(14px);
+  pointer-events: auto;
+}
+.track-context-menu {
+  animation: 0.12s ease-out both track-context-menu-in;
+}
+.track-context-menu-group {
+  position: relative;
+}
+.track-context-item {
+  color: #c8b4d1;
+  text-align: left;
+  background: 0 0;
+  border-radius: 6px;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 31px;
+  padding: 0 9px;
+  font:
+    600 11px Nunito Sans,
+    sans-serif;
+  display: flex;
+  position: relative;
+}
+.track-context-item:hover:not(:disabled),
+.track-context-item:focus-visible,
+.track-context-parent[aria-expanded="true"] {
+  color: #ffe3f0;
+  background: #ff66aa1a;
+  outline: none;
+}
+.track-context-item:active:not(:disabled) {
+  background: #ff66aa2b;
+}
+.track-context-item:disabled {
+  color: #806e8d;
+  cursor: default;
+  opacity: 0.38;
+}
+.track-context-item-icon {
+  color: #a68bb2;
+  align-items: center;
+  display: flex;
+  min-width: 16px;
+}
+.track-context-item:hover:not(:disabled) .track-context-item-icon,
+.track-context-item:focus-visible .track-context-item-icon,
+.track-context-parent[aria-expanded="true"] .track-context-item-icon {
+  color: var(--pink);
+}
+.track-context-chevron {
+  color: #9f82ac;
+  margin-left: auto;
+}
+.track-context-separator {
+  height: 1px;
+  background: #ffffff0d;
+  margin: 5px 4px;
+}
+.track-context-submenu {
+  top: -6px;
+  left: calc(100% + 6px);
+  min-width: 225px;
+  max-height: calc(100vh - 16px);
+  overflow: auto;
+  animation: none;
+}
+.track-context-submenu.opens-left {
+  left: auto;
+  right: calc(100% + 6px);
+}
+.track-context-submenu.opens-up {
+  top: auto;
+  bottom: -6px;
+}
+@keyframes track-context-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

@@ -6,19 +6,11 @@
 }
 
 .transport-scrubber .seek-current-tooltip {
-  left: clamp(
-    4.5rem,
-    var(--seek-tooltip-position, 50%),
-    calc(100% - 4.5rem)
-  );
+  left: clamp(4.5rem, var(--seek-tooltip-position, 50%), calc(100% - 4.5rem));
 }
 
 .transport-scrubber .seek-hover-tooltip {
-  left: clamp(
-    2.5rem,
-    var(--seek-tooltip-position, 50%),
-    calc(100% - 2.5rem)
-  );
+  left: clamp(2.5rem, var(--seek-tooltip-position, 50%), calc(100% - 2.5rem));
 }
 
 .transport-scrubber:focus-within .seek-tooltip {

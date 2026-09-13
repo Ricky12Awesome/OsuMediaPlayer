@@ -1,0 +1,204 @@
+/* Now-playing artwork and caption styles. */
+
+.now-playing-panel {
+  isolation: isolate;
+  background: #19141f;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  position: relative;
+  overflow: hidden;
+}
+.eyebrow {
+  color: #8e849b;
+  letter-spacing: 2px;
+  font-size: 9px;
+  font-weight: 800;
+}
+.artwork-stage {
+  isolation: isolate;
+  background:
+    radial-gradient(at 67% 17%, #8a4a79 0%, #0000 60%),
+    radial-gradient(at 13% 67%, #524b83 0%, #0000 60%), #292339;
+  border: 0;
+  border-radius: 0;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  box-shadow: 0 12px 40px #00000020;
+}
+.hero-background {
+  object-fit: cover;
+  z-index: -4;
+  opacity: 0.9;
+  width: 100%;
+  height: 100%;
+  transition: opacity 0.22s;
+  position: absolute;
+  inset: 0;
+}
+.hero-video {
+  object-fit: cover;
+  z-index: -3;
+  opacity: 0;
+  pointer-events: none;
+  width: 100%;
+  height: 100%;
+  transition: opacity 0.22s;
+  position: absolute;
+  inset: 0;
+}
+.hero-video.is-active {
+  opacity: 1;
+}
+.artwork-stage.video-is-active .hero-background {
+  opacity: 0;
+}
+.artwork-grain {
+  opacity: 0.16;
+  z-index: -1;
+  pointer-events: none;
+  background-image: radial-gradient(#ffffff6b 0.5px, #0000 0.5px);
+  background-size: 5px 5px;
+  position: absolute;
+  inset: 0;
+}
+.is-favorite {
+  color: var(--pink) !important;
+}
+.hero-caption {
+  --caption-edge: 16px;
+  --caption-top-edge: var(--caption-edge);
+  --caption-bottom-edge: var(--caption-edge);
+  width: calc(100% - (var(--caption-edge) * 2));
+  cursor: grab;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  max-width: none;
+  transition:
+    left 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+    top 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.18s;
+  position: absolute;
+}
+.hero-caption.is-dragging {
+  left: var(--caption-drag-x);
+  top: var(--caption-drag-y);
+  cursor: grabbing;
+  opacity: 0.92;
+  will-change: left, top, transform;
+  transition: none;
+  animation: 0.16s ease-out both caption-drag-lift;
+  transform: none;
+}
+@keyframes caption-drag-lift {
+  0% {
+    opacity: 0.78;
+  }
+  to {
+    opacity: 0.92;
+  }
+}
+.hero-caption-top-left {
+  top: var(--caption-top-edge);
+  left: var(--caption-edge);
+  transform: translate(0);
+}
+.hero-caption-top-center {
+  top: var(--caption-top-edge);
+  text-align: center;
+  left: 50%;
+  transform: translate(-50%);
+}
+.hero-caption-top-right {
+  top: var(--caption-top-edge);
+  left: calc(100% - var(--caption-edge));
+  text-align: right;
+  transform: translate(-100%);
+}
+.hero-caption-right-center {
+  top: 50%;
+  left: calc(100% - var(--caption-edge));
+  text-align: right;
+  transform: translate(-100%, -50%);
+}
+.hero-caption-bottom-right {
+  top: calc(100% - var(--caption-bottom-edge));
+  left: calc(100% - var(--caption-edge));
+  text-align: right;
+  transform: translate(-100%, -100%);
+}
+.hero-caption-bottom-center {
+  top: calc(100% - var(--caption-bottom-edge));
+  text-align: center;
+  left: 50%;
+  transform: translate(-50%, -100%);
+}
+.hero-caption-bottom-left {
+  top: calc(100% - var(--caption-bottom-edge));
+  left: var(--caption-edge);
+  transform: translateY(-100%);
+}
+.hero-caption-left-center {
+  top: 50%;
+  left: var(--caption-edge);
+  transform: translateY(-50%);
+}
+.hero-caption-top-center h2,
+.hero-caption-bottom-center h2,
+.hero-caption-top-right h2,
+.hero-caption-right-center h2,
+.hero-caption-bottom-right h2 {
+  margin-left: auto;
+}
+.hero-caption-top-center h2,
+.hero-caption-bottom-center h2 {
+  margin-right: auto;
+}
+.hero-caption h2 {
+  letter-spacing: -1.4px;
+  overflow-wrap: anywhere;
+  text-shadow: 0 2px 20px #0003;
+  margin: 0 0 10px;
+  font-size: clamp(25px, 3vw, 44px);
+  font-weight: 900;
+  line-height: 1.13;
+}
+.hero-caption p {
+  color: #d7c9dc;
+  overflow-wrap: anywhere;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.hero-source {
+  color: #b5a5bf;
+  overflow-wrap: anywhere;
+  margin-top: 6px;
+  font-size: 10px;
+  display: block;
+}
+.player-note {
+  border-top: 1px solid var(--border);
+  color: #6c6278;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+  padding-top: 13px;
+  font-size: 9px;
+  display: none;
+}
+.player-note > svg {
+  color: #7d6488;
+  margin-left: auto;
+}
+.tiny-osu {
+  letter-spacing: -0.7px;
+  color: #ac85a3;
+  font-size: 11px;
+  font-weight: 900;
+}

@@ -1,0 +1,104 @@
+/* Global variables, reset, and form defaults. */
+
+:root {
+  color: #f6f3f8;
+  font-synthesis: none;
+  text-rendering: optimizelegibility;
+  -webkit-font-smoothing: antialiased;
+  --pink: #f6a;
+  --muted: #8d879b;
+  --panel: #201d29;
+  --border: #ffffff0d;
+  background: #15131c;
+  font-family:
+    Nunito Sans,
+    sans-serif;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+button,
+input,
+select {
+  font: inherit;
+}
+button {
+  cursor: pointer;
+}
+button,
+select,
+input {
+  -webkit-tap-highlight-color: transparent;
+}
+button {
+  color: inherit;
+}
+button:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--pink);
+  outline-offset: 3px;
+}
+button {
+  border: 0;
+}
+button,
+select {
+  touch-action: manipulation;
+}
+button svg {
+  flex-shrink: 0;
+}
+button {
+  transition:
+    color 0.15s,
+    background 0.15s,
+    transform 0.15s;
+}
+button:active:not(:disabled) {
+  transform: scale(0.96);
+}
+a {
+  color: inherit;
+}
+::selection {
+  background: #f6a6;
+}
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-thumb {
+  background: #49414f;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-track {
+  background: 0 0;
+}
+select {
+  color: inherit;
+  --lightningcss-light: ;
+  --lightningcss-dark: initial;
+  color-scheme: dark;
+  cursor: pointer;
+}
+select option {
+  background: #28232f;
+}
+input[type="range"] {
+  cursor: pointer;
+}
+input[type="range"]:disabled {
+  cursor: default;
+}
+input[type="range"]:focus-visible {
+  outline-offset: 7px;
+}

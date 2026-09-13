@@ -1,0 +1,61 @@
+/* Application shell and workspace layout. */
+
+.app-shell {
+  flex-direction: column;
+  height: 100dvh;
+  min-height: 480px;
+  display: flex;
+  overflow: hidden;
+}
+.library-footer > span i {
+  background: #91c9ad;
+  border-radius: 50%;
+  width: 5px;
+  height: 5px;
+  box-shadow: 0 0 9px #91c9ad33;
+}
+.workspace {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.main-content {
+  grid-template-columns: minmax(0, 1fr) 7px var(--library-width, 430px);
+  flex: 1;
+  gap: 0;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  display: grid;
+}
+@media (width>=761px) {
+  .main-content {
+    transition: grid-template-columns 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+    overflow: hidden;
+  }
+  .main-content.is-resizing {
+    transition: none;
+  }
+  .library-resizer,
+  .library-panel {
+    transition:
+      opacity 0.18s,
+      transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .main-content.sidebar-is-hidden {
+    grid-template-columns: minmax(0, 1fr) 0 0;
+  }
+  .main-content.sidebar-is-hidden .library-resizer,
+  .main-content.sidebar-is-hidden .library-panel {
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(28px);
+  }
+  .main-content.sidebar-is-hidden .library-panel {
+    visibility: hidden;
+    transition:
+      opacity 0.18s,
+      transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+      visibility 0s linear 0.28s;
+  }
+}

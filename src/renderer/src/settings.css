@@ -1,0 +1,193 @@
+/* Settings dialog and animation utilities. */
+
+.settings-dialog {
+  color: #eaddf0;
+  background: #211b29;
+  border: 1px solid #ffffff12;
+  border-radius: 16px;
+  width: min(470px, 100vw - 32px);
+  max-height: 90dvh;
+  padding: 26px;
+  overflow-y: auto;
+  box-shadow: 0 25px 120px #0009;
+}
+.settings-dialog::backdrop {
+  -webkit-backdrop-filter: blur(7px);
+  backdrop-filter: blur(7px);
+  background: #0c0717b5;
+}
+.dialog-heading {
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+  display: flex;
+}
+.dialog-heading h2 {
+  letter-spacing: -0.7px;
+  margin: 8px 0 0;
+  font-size: 23px;
+  font-weight: 900;
+}
+.dialog-heading .eyebrow {
+  font-size: 8px;
+}
+.settings-label {
+  letter-spacing: 1px;
+  color: #c69fb9;
+  align-items: center;
+  gap: 7px;
+  font-size: 9px;
+  font-weight: 800;
+  display: flex;
+}
+.settings-block > p {
+  color: #9a85a6;
+  font-size: 11px;
+  line-height: 1.7;
+}
+.settings-block > p.install-path {
+  color: #d5bbdf;
+  overflow-wrap: anywhere;
+  background: #15101c;
+  border: 1px solid #ffffff06;
+  border-radius: 6px;
+  padding: 12px;
+  font-family: monospace;
+}
+.settings-actions {
+  gap: 10px;
+  margin-top: 19px;
+  display: flex;
+}
+.transport-layout-setting {
+  margin-top: 24px;
+}
+.transport-layout-options {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+  display: grid;
+}
+.transport-layout-option {
+  color: #927e9e;
+  text-align: left;
+  background: #15101c;
+  border: 1px solid #ffffff0d;
+  border-radius: 7px;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 11px;
+  display: flex;
+}
+.transport-layout-option strong {
+  color: #d8c8df;
+  font-size: 11px;
+  font-weight: 800;
+}
+.transport-layout-option span {
+  color: #8e7d99;
+  font-size: 9px;
+}
+.transport-layout-option:hover {
+  background: #ffffff0a;
+}
+.transport-layout-option.active {
+  background: #f6a1;
+  border-color: #f6a6;
+}
+.transport-layout-option.active strong {
+  color: #ffd0e5;
+}
+.transport-layout-option.active span {
+  color: #e7a6c5;
+}
+.settings-stats {
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  justify-content: space-around;
+  margin: 24px 0;
+  padding: 20px 0;
+  display: flex;
+}
+.settings-stats > span {
+  color: #927c9f;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  display: flex;
+}
+.settings-stats strong {
+  color: #e6d5ee;
+  font-size: 21px;
+  font-weight: 900;
+}
+.settings-note {
+  color: #9a85a6;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 10px;
+  line-height: 1.7;
+  display: flex;
+}
+.settings-note > svg {
+  color: #9bc2ac;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.skipped-note {
+  color: #ab8b9c;
+  font-size: 10px;
+  line-height: 1.6;
+}
+.dialog-footer {
+  border-top: 1px solid var(--border);
+  color: #786283;
+  align-items: center;
+  gap: 8px;
+  margin-top: 22px;
+  padding-top: 18px;
+  font-size: 9px;
+  display: flex;
+}
+.dialog-footer > svg {
+  margin-left: auto;
+}
+.shortcuts > div {
+  border-bottom: 1px solid var(--border);
+  color: #bca5c9;
+  justify-content: space-between;
+  align-items: center;
+  padding: 11px 0;
+  font-size: 12px;
+  display: flex;
+}
+.shortcuts kbd {
+  color: #d7afd1;
+  background: #32263c;
+  border: 1px solid #ffffff0b;
+  border-radius: 4px;
+  padding: 4px 7px;
+  font:
+    10px Nunito Sans,
+    sans-serif;
+}
+.spinning > svg,
+.spin {
+  animation: 1.5s linear infinite spin;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes equalize {
+  0% {
+    transform: scaleY(0.35);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
