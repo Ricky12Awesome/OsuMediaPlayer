@@ -1,17 +1,26 @@
 import {
   app,
   BrowserWindow,
+  ClipboardItem,
+  clipboard,
   dialog,
   ipcMain,
   Menu,
   protocol,
   session,
+  shell,
 } from "electron";
+import { readFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
-import type { LibraryQuery, MediaAction } from "../shared/types";
+import type { LibraryQuery, MediaAction, Track } from "../shared/types";
 import { LibraryIndex, loadLibraryFromOfu } from "./library";
 import { ensureOfu } from "./ofu";
-import { serveMedia } from "./media";
+import {
+  mimeForFilename,
+  resolveMediaFile,
+  serveMedia,
+  type ResolvedMediaFile,
+} from "./media";
 import { VideoTranscoder } from "./video";
 
 const isWaylandSession =
@@ -153,6 +162,143 @@ function createWindow(): void {
   else void window.loadFile(join(__dirname, "../dist/index.html"));
 }
 
+type TrackAssetKind = "audio" | "background" | "video";
+
+function copyMenuItem(
+  label: string,
+  value: string | undefined,
+): Electron.MenuItemConstructorOptions {
+  return {
+    label,
+    enabled: Boolean(value),
+    click: () => {
+      if (value) clipboard.writeText(value);
+    },
+  };
+}
+
+function assetHashForTrack(
+  track: Track,
+  kind: TrackAssetKind,
+): string | undefined {
+  if (kind === "audio") return track.audioHash;
+  if (kind === "background") return track.backgroundHash;
+  return track.videoHash;
+}
+
+async function resolveTrackAsset(
+  index: LibraryIndex,
+  track: Track,
+  kind: TrackAssetKind,
+): Promise<ResolvedMediaFile | null> {
+  const hash = assetHashForTrack(track, kind);
+  if (!hash) return null;
+  try {
+    return await resolveMediaFile(index, hash);
+  } catch {
+    return null;
+  }
+}
+
+async function copyAssetData(asset: ResolvedMediaFile): Promise<void> {
+  const data = await readFile(asset.filename);
+  const mimeType = mimeForFilename(asset.asset.filename);
+  await clipboard.write([
+    new ClipboardItem({
+      [mimeType]: new Blob([data as unknown as BlobPart], { type: mimeType }),
+    }),
+  ]);
+}
+
+function copyAssetDataItem(
+  label: string,
+  asset: ResolvedMediaFile | null,
+): Electron.MenuItemConstructorOptions {
+  return {
+    label,
+    enabled: Boolean(asset),
+    click: () => {
+      if (asset) void copyAssetData(asset).catch(() => {});
+    },
+  };
+}
+
+function openAsset(asset: ResolvedMediaFile | null): void {
+  if (!asset) return;
+  void shell.openPath(asset.filename).catch(() => {
+    /* The default application may be unavailable while closing. */
+  });
+}
+
+async function showTrackContextMenu(track: Track): Promise<void> {
+  const targetWindow = window;
+  const index = library;
+  if (!targetWindow || targetWindow.isDestroyed() || !index) return;
+
+  const [audio, background, video] = await Promise.all([
+    resolveTrackAsset(index, track, "audio"),
+    resolveTrackAsset(index, track, "background"),
+    resolveTrackAsset(index, track, "video"),
+  ]);
+  if (targetWindow.isDestroyed()) return;
+
+  const menu = Menu.buildFromTemplate([
+    {
+      label: "Copy",
+      submenu: [
+        copyMenuItem("Title", track.title),
+        copyMenuItem("Title Unicode", track.titleUnicode),
+        copyMenuItem("Artist", track.artist),
+        copyMenuItem("Artist Unicode", track.artistUnicode),
+        copyAssetDataItem("Audio", audio),
+        copyMenuItem("Audio path", audio?.filename),
+        copyAssetDataItem("Background", background),
+        copyMenuItem("Background path", background?.filename),
+        copyAssetDataItem("Video", video),
+        copyMenuItem("Video path", video?.filename),
+        copyMenuItem(
+          "Online Id",
+          track.onlineId === undefined ? undefined : String(track.onlineId),
+        ),
+        copyMenuItem("MD5 Hash", track.md5Hash),
+      ],
+    },
+    {
+      label: "Open",
+      submenu: [
+        {
+          label: "Listing",
+          enabled: track.onlineId !== undefined,
+          click: () => {
+            if (track.onlineId === undefined) return;
+            void shell
+              .openExternal(`https://osu.ppy.sh/beatmapsets/${track.onlineId}`)
+              .catch(() => {
+                /* The default browser may be unavailable while closing. */
+              });
+          },
+        },
+        {
+          label: "Audio",
+          enabled: Boolean(audio),
+          click: () => openAsset(audio),
+        },
+        {
+          label: "Background",
+          enabled: Boolean(background),
+          click: () => openAsset(background),
+        },
+        {
+          label: "Video",
+          enabled: Boolean(video),
+          click: () => openAsset(video),
+        },
+      ],
+    },
+  ]);
+  menu.popup({ window: targetWindow });
+}
+
 function setupIPC(): void {
   ipcMain.handle("library:load", async (event, requestedPath: unknown) => {
     requireTrusted(event);
@@ -242,6 +388,11 @@ function setupIPC(): void {
       defaultPath: library?.summary.installPath,
     });
     return result.canceled ? null : (result.filePaths[0] ?? null);
+  });
+  ipcMain.on("track:context-menu", (event, id: unknown) => {
+    if (!isTrusted(event) || typeof id !== "string") return;
+    const track = library?.getTrack(id);
+    if (track) void showTrackContextMenu(track);
   });
   ipcMain.on("window:control", (event, action: unknown) => {
     if (!isTrusted(event) || !window) return;

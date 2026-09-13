@@ -419,6 +419,16 @@ async function buildIndex(
       continue;
     }
     const artwork = findAsset(metadata.BackgroundFile);
+    const onlineId =
+      set.onlineId > 0
+        ? set.onlineId
+        : number(map.BeatmapSet) > 0
+          ? number(map.BeatmapSet)
+          : undefined;
+    const md5Hash =
+      string(map.MD5Hash).toLowerCase() ||
+      string(map.OnlineMD5Hash).toLowerCase() ||
+      undefined;
     assets.set(audio.hash, { hash: audio.hash, filename: audio.filename });
     if (artwork)
       assets.set(artwork.hash, {
@@ -453,6 +463,9 @@ async function buildIndex(
       current.stars = Math.max(current.stars, number(map.StarRating));
       current.addedAt = Math.max(current.addedAt, addedAt);
       current.artworkUrl ||= artwork ? assetUrl(artwork.hash) : undefined;
+      current.backgroundHash ||= artwork?.hash;
+      current.onlineId ??= onlineId;
+      current.md5Hash ??= md5Hash;
     } else {
       const track: Track = {
         id,
@@ -472,7 +485,11 @@ async function buildIndex(
         stars: Math.max(0, number(map.StarRating)),
         difficultyCount: 1,
         audioUrl: assetUrl(audio.hash),
+        audioHash: audio.hash,
         artworkUrl: artwork ? assetUrl(artwork.hash) : undefined,
+        backgroundHash: artwork?.hash,
+        onlineId,
+        md5Hash,
         addedAt,
       };
       tracks.set(id, track);
@@ -517,6 +534,7 @@ async function buildIndex(
           ? referenced
           : pending.fallback;
       pending.track.videoUrl = assetUrl(video.hash);
+      pending.track.videoHash = video.hash;
       pending.track.videoOffset = referenced && event ? event.offset : 0;
       assets.set(video.hash, { hash: video.hash, filename: video.filename });
     }

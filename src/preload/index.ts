@@ -71,6 +71,9 @@ const api: PlayerAPI = {
       ipcRenderer.removeListener("window:zoom", callback);
     };
   },
+  showTrackContextMenu: (trackId) => {
+    ipcRenderer.send("track:context-menu", trackId);
+  },
   windowControl: (action) => {
     ipcRenderer.send("window:control", action);
   },

@@ -96,6 +96,7 @@ const defaultApi: PlayerAPI = {
   onMediaAction: () => () => {},
   onFullscreenChange: () => () => {},
   onZoomChange: () => () => {},
+  showTrackContextMenu: () => {},
   windowControl: () => {},
   platform: "browser",
 };
@@ -914,6 +915,7 @@ export function App() {
                   favorites={favorites}
                   onPlay={(track, index) => player.playTrack(track, query, index)}
                   onFavorite={toggleFavorite}
+                  onContextMenu={(track) => api.showTrackContextMenu(track.id)}
                   onTotal={setResultTotal}
                   onFirstTrack={cueFirstTrack}
                 />

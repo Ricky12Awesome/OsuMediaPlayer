@@ -81,6 +81,7 @@ export interface VirtualTrackListProps {
   favorites: Set<string>;
   onPlay: (track: Track, index: number) => void;
   onFavorite: (track: Track) => void;
+  onContextMenu: (track: Track) => void;
   onTotal: (total: number) => void;
   onFirstTrack?: (track: Track) => void;
 }
@@ -95,6 +96,7 @@ export function VirtualTrackList({
   favorites,
   onPlay,
   onFavorite,
+  onContextMenu,
   onTotal,
   onFirstTrack,
 }: VirtualTrackListProps) {
@@ -103,6 +105,7 @@ export function VirtualTrackList({
     query,
     onPlay,
     onFavorite,
+    onContextMenu,
     onTotal,
     onFirstTrack,
   });
@@ -147,7 +150,14 @@ export function VirtualTrackList({
   const previousQueryKey = useRef(queryKey);
 
   useLayoutEffect(() => {
-    latest.current = { query, onPlay, onFavorite, onTotal, onFirstTrack };
+    latest.current = {
+      query,
+      onPlay,
+      onFavorite,
+      onContextMenu,
+      onTotal,
+      onFirstTrack,
+    };
   });
 
   useLayoutEffect(() => {
@@ -460,6 +470,14 @@ export function VirtualTrackList({
           select(index);
           listRef.current?.focus({ preventScroll: true });
           choose(index);
+        }}
+        onContextMenu={(event) => {
+          if (!track) return;
+          event.preventDefault();
+          event.stopPropagation();
+          select(index);
+          listRef.current?.focus({ preventScroll: true });
+          latest.current.onContextMenu(track);
         }}
       >
         {track ? (

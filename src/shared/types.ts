@@ -24,9 +24,14 @@ export interface Track {
   stars: number;
   difficultyCount: number;
   audioUrl: string;
+  audioHash?: string;
   artworkUrl?: string;
+  backgroundHash?: string;
   videoUrl?: string;
+  videoHash?: string;
   videoOffset?: number;
+  onlineId?: number;
+  md5Hash?: string;
   addedAt: number;
 }
 
@@ -88,6 +93,7 @@ export interface PlayerAPI {
   onMediaAction: (listener: (action: MediaAction) => void) => () => void;
   onFullscreenChange: (listener: (active: boolean) => void) => () => void;
   onZoomChange: (listener: (percent: number) => void) => () => void;
+  showTrackContextMenu: (trackId: string) => void;
   windowControl: (action: "minimize" | "maximize" | "fullscreen" | "close") => void;
   platform: string;
 }
