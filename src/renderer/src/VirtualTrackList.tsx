@@ -23,7 +23,7 @@ const pageSize = 64;
 const pageCacheLimit = 8;
 const maxConcurrentRequests = 3;
 const overscanRows = 5;
-const rowHeight = 86;
+const rowHeight = 78;
 
 function formatDuration(value: number): string {
   const seconds = Math.max(0, Math.round(Number.isFinite(value) ? value : 0));
@@ -461,9 +461,6 @@ export function VirtualTrackList({
               </div>
               <div className="track-artist" title={track.artist}>
                 {track.artist}
-              </div>
-              <div className="track-meta">
-                {Math.round(track.bpm)} <span>BPM</span>
               </div>
             </div>
             <span className="track-duration">

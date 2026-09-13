@@ -371,6 +371,7 @@ body.is-resizing-library * {
 .track-details {
   flex: 1;
   min-width: 0;
+  align-self: flex-start;
 }
 .track-title {
   color: #ded5e6;
@@ -393,15 +394,6 @@ body.is-resizing-library * {
   font-size: 10px;
   line-height: 1.5;
   overflow: hidden;
-}
-.track-meta {
-  color: #786883;
-  align-items: center;
-  gap: 5px;
-  margin-top: 3px;
-  font-size: 8px;
-  line-height: 1.2;
-  display: flex;
 }
 .track-duration {
   color: #9a8aa7;

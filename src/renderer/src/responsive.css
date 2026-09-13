@@ -13,9 +13,6 @@
   .track-artist {
     font-size: 11px;
   }
-  .track-meta {
-    font-size: 9px;
-  }
   .transport {
     height: 76px;
   }
@@ -165,9 +162,6 @@
   }
   .track-artist {
     font-size: 11px;
-  }
-  .track-meta {
-    font-size: 9px;
   }
   .track-favorite {
     width: 29px;
