@@ -25,12 +25,9 @@
 }
 .dialog-heading h2 {
   letter-spacing: -0.7px;
-  margin: 8px 0 0;
+  margin: 0;
   font-size: 23px;
   font-weight: 900;
-}
-.dialog-heading .eyebrow {
-  font-size: 8px;
 }
 .settings-label {
   letter-spacing: 1px;
@@ -124,36 +121,10 @@
   font-size: 21px;
   font-weight: 900;
 }
-.settings-note {
-  color: #9a85a6;
-  align-items: flex-start;
-  gap: 9px;
-  font-size: 10px;
-  line-height: 1.7;
-  display: flex;
-}
-.settings-note > svg {
-  color: #9bc2ac;
-  flex-shrink: 0;
-  margin-top: 2px;
-}
 .skipped-note {
   color: #ab8b9c;
   font-size: 10px;
   line-height: 1.6;
-}
-.dialog-footer {
-  border-top: 1px solid var(--border);
-  color: #786283;
-  align-items: center;
-  gap: 8px;
-  margin-top: 22px;
-  padding-top: 18px;
-  font-size: 9px;
-  display: flex;
-}
-.dialog-footer > svg {
-  margin-left: auto;
 }
 .shortcuts > div {
   border-bottom: 1px solid var(--border);

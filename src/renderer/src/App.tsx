@@ -17,7 +17,6 @@ import {
   FolderHeart,
   FolderOpen,
   Heart,
-  Info,
   Keyboard,
   LoaderCircle,
   Maximize2,
@@ -1354,9 +1353,8 @@ export function App() {
       >
         <div className="dialog-heading">
           <div>
-            <span className="eyebrow">MAKE YOURSELF AT HOME</span>
             <h2>
-              {shortcutsOpen ? "Find your flow." : "Your music, your space."}
+              {shortcutsOpen ? "Keyboard Shortcuts" : "Settings"}
             </h2>
           </div>
           <button
@@ -1400,10 +1398,6 @@ export function App() {
               </span>
               <p className="install-path">
                 {summary?.installPath || "Default osu!lazer installation"}
-              </p>
-              <p>
-                Choose the osu!lazer folder that contains your library and
-                files.
               </p>
               <div className="settings-actions">
                 <button
@@ -1471,20 +1465,8 @@ export function App() {
                 <strong>{summary?.collectionCount ?? "—"}</strong> collections
               </span>
             </div>
-            <div className="settings-note">
-              <Info size={17} />
-              <span>
-                Your osu! library is only read. Favorites and player preferences
-                are saved separately in osu! music.
-              </span>
-            </div>
           </>
         )}
-        <div className="dialog-footer">
-          <span className="tiny-osu">osu!</span>
-          <span>music · made for your rhythm</span>
-          <Sparkles size={15} />
-        </div>
       </dialog>
     </div>
   );
