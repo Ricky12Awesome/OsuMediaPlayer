@@ -49,16 +49,40 @@
       "dist-electron/**/*",
       "package.json"
     ],
-    "extraResources": [
-      {
-        "from": "tools/ofu",
-        "to": "ofu"
-      }
-    ],
     "afterPack": "dist-electron/bundle-ofu.cjs",
     "linux": {
-      "target": "AppImage",
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "category": "AudioVideo"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.music",
+      "identity": null
     }
   }
 }
