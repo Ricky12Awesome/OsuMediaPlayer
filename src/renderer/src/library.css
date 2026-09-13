@@ -185,6 +185,15 @@ body.is-resizing-library * {
   font-size: 9px;
   display: flex;
 }
+.collection-filter {
+  flex: 1 1 auto;
+  justify-content: center;
+  min-width: 0;
+  display: flex;
+}
+.collection-filter .facet-picker {
+  max-width: 100%;
+}
 .tag-select,
 .sort-select {
   align-items: center;
@@ -228,31 +237,6 @@ body.is-resizing-library * {
   width: 25px;
   height: 25px;
   margin-left: 3px;
-}
-.collection-select {
-  color: #d39aba;
-  background: #ff66aa07;
-  border: 1px solid #ff66aa24;
-  border-radius: 6px;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 8px;
-  height: 37px;
-  margin-top: 12px;
-  padding: 0 10px;
-  display: flex;
-}
-.collection-select select {
-  appearance: none;
-  background: 0 0;
-  border: 0;
-  outline: none;
-  width: 100%;
-  min-width: 0;
-  font-size: 11px;
-}
-.collection-select > svg {
-  flex-shrink: 0;
 }
 .active-filters {
   color: #e0a8c7;

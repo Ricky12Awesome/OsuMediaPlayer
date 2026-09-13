@@ -73,7 +73,7 @@ const positions = [
   "left-center",
 ] as const;
 type CaptionPosition = (typeof positions)[number];
-type LibraryTab = "all" | "collections" | "favorites";
+type LibraryTab = "all" | "favorites";
 type TransportLayout = "controls-left" | "controls-centered";
 type SeekPreview = {
   time: number;
@@ -469,7 +469,7 @@ export function App() {
   const query = useMemo<LibraryQuery>(
     () => ({
       search,
-      collection: tab === "collections" ? collection || undefined : undefined,
+      collection: collection || undefined,
       tag: tag || undefined,
       sort,
       descending,
@@ -902,14 +902,6 @@ export function App() {
               </button>
               <button
                 role="tab"
-                aria-selected={tab === "collections"}
-                className={tab === "collections" ? "active" : ""}
-                onClick={() => setTab("collections")}
-              >
-                <FolderHeart size={15} /> Collections
-              </button>
-              <button
-                role="tab"
                 aria-selected={tab === "favorites"}
                 className={tab === "favorites" ? "active" : ""}
                 onClick={() => setTab("favorites")}
@@ -918,19 +910,6 @@ export function App() {
                 {favorites.size > 0 && <span>{favorites.size}</span>}
               </button>
             </div>
-
-            {tab === "collections" && (
-              <div className="collection-select">
-                <FacetPicker
-                  label="Filter by collection"
-                  allLabel="All collections"
-                  value={collection}
-                  onChange={setCollection}
-                  items={summary?.collections ?? []}
-                  icon={<FolderHeart size={16} />}
-                />
-              </div>
-            )}
 
             <div className="filter-bar">
               <FacetPicker
@@ -941,6 +920,16 @@ export function App() {
                 items={summary?.tags ?? []}
                 icon={<Tag size={13} />}
               />
+              <div className="collection-filter">
+                <FacetPicker
+                  label="Filter by collection"
+                  allLabel="All collections"
+                  value={collection}
+                  onChange={setCollection}
+                  items={summary?.collections ?? []}
+                  icon={<FolderHeart size={16} />}
+                />
+              </div>
               <div className="sort-controls">
                 <span>Sort by</span>
                 <div className="sort-select">
