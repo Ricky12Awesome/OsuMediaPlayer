@@ -17,6 +17,7 @@ export function cloneQueueQuery(input: LibraryQuery = {}): LibraryQuery {
   return {
     ...query,
     ...(query.favoriteIds ? { favoriteIds: [...query.favoriteIds] } : {}),
+    ...(query.tags ? { tags: [...query.tags] } : {}),
   };
 }
 

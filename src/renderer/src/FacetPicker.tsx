@@ -15,14 +15,27 @@ const rowHeight = 32;
 const viewportRows = 8;
 const overscan = 3;
 
-export interface FacetPickerProps {
+interface FacetPickerBaseProps {
   label: string;
   allLabel: string;
-  value: string;
-  onChange: (value: string) => void;
   items: LibraryFacet[];
   icon?: ReactNode;
 }
+
+interface SingleFacetPickerProps extends FacetPickerBaseProps {
+  multiple?: false;
+  value: string;
+  onChange: (value: string) => void;
+}
+
+interface MultipleFacetPickerProps extends FacetPickerBaseProps {
+  multiple: true;
+  value: string[];
+  onChange: (value: string[]) => void;
+}
+
+export type FacetPickerProps =
+  SingleFacetPickerProps | MultipleFacetPickerProps;
 
 const normalize = (value: string) =>
   value.normalize("NFKC").toLocaleLowerCase();
@@ -34,6 +47,7 @@ export function FacetPicker({
   onChange,
   items,
   icon,
+  multiple = false,
 }: FacetPickerProps) {
   const id = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -57,7 +71,20 @@ export function FacetPicker({
       .filter((item) => terms.every((term) => item.search.includes(term)))
       .map((item) => item.item);
   }, [search, searchable]);
-  const selected = items.find((item) => item.name === value);
+  const selectedValues = Array.isArray(value) ? value : value ? [value] : [];
+  const hasValue = selectedValues.length > 0;
+  const selected = !multiple
+    ? items.find((item) => item.name === value)
+    : undefined;
+  const displayValue = multiple
+    ? selectedValues.length === 0
+      ? allLabel
+      : selectedValues.length === 1
+        ? selectedValues[0]
+        : selectedValues.length + " tags"
+    : typeof value === "string"
+      ? value || allLabel
+      : allLabel;
   const first = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan);
   const last = Math.min(
     filtered.length,
@@ -70,12 +97,33 @@ export function FacetPicker({
     if (focus) triggerRef.current?.focus();
   };
   const choose = (next: string) => {
-    onChange(next);
-    close();
+    if (multiple) {
+      const nextValues = selectedValues.includes(next)
+        ? selectedValues.filter((value) => value !== next)
+        : [...selectedValues, next];
+      (onChange as (value: string[]) => void)(nextValues);
+      setActive(filtered.findIndex((item) => item.name === next));
+    } else {
+      (onChange as (value: string) => void)(next);
+      close();
+    }
+  };
+  const clearSelection = () => {
+    if (multiple) {
+      (onChange as (value: string[]) => void)([]);
+      setActive(-1);
+    } else {
+      (onChange as (value: string) => void)("");
+      close();
+    }
   };
   const openPicker = () => {
     setSearch("");
-    setActive(value ? items.findIndex((item) => item.name === value) : -1);
+    setActive(
+      selectedValues.length
+        ? items.findIndex((item) => selectedValues.includes(item.name))
+        : -1,
+    );
     setScrollTop(0);
     setOpen(true);
   };
@@ -90,7 +138,8 @@ export function FacetPicker({
         340,
         window.innerWidth - 24,
       );
-      const wanted = Math.min(viewportRows, Math.max(1, filtered.length)) * rowHeight;
+      const wanted =
+        Math.min(viewportRows, Math.max(1, filtered.length)) * rowHeight;
       const below = window.innerHeight - trigger.bottom - 16;
       const above = trigger.top - 16;
       const flip = below < wanted + 116 && above > below;
@@ -143,7 +192,10 @@ export function FacetPicker({
     if (!open) return;
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
-      if (!popupRef.current?.contains(target) && !triggerRef.current?.contains(target))
+      if (
+        !popupRef.current?.contains(target) &&
+        !triggerRef.current?.contains(target)
+      )
         close(false);
     };
     document.addEventListener("pointerdown", onPointerDown);
@@ -155,12 +207,12 @@ export function FacetPicker({
       <button
         ref={triggerRef}
         type="button"
-        className={"facet-picker-trigger " + (value ? "has-value" : "")}
+        className={"facet-picker-trigger " + (hasValue ? "has-value" : "")}
         aria-label={label}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? id + "-listbox" : undefined}
-        title={value || allLabel}
+        title={displayValue}
         onClick={() => (open ? close() : openPicker())}
         onKeyDown={(event) => {
           if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -174,13 +226,17 @@ export function FacetPicker({
             {icon}
           </span>
         )}
-        <span className="facet-picker-value">{value || allLabel}</span>
-        {selected && (
+        <span className="facet-picker-value">{displayValue}</span>
+        {selected && !multiple && (
           <span className="facet-picker-count">
             {selected.count.toLocaleString()}
           </span>
         )}
-        <ChevronDown className={open ? "is-open" : ""} size={12} aria-hidden="true" />
+        <ChevronDown
+          className={open ? "is-open" : ""}
+          size={12}
+          aria-hidden="true"
+        />
       </button>
       {open &&
         createPortal(
@@ -195,7 +251,9 @@ export function FacetPicker({
                 aria-expanded="true"
                 aria-controls={id + "-listbox"}
                 aria-activedescendant={optionId(active)}
-                placeholder={"Search " + allLabel.toLowerCase().replace(/^all /, "") + "…"}
+                placeholder={
+                  "Search " + allLabel.toLowerCase().replace(/^all /, "") + "…"
+                }
                 value={search}
                 onChange={(event) => {
                   setSearch(event.target.value);
@@ -210,7 +268,8 @@ export function FacetPicker({
                     close();
                   } else if (event.key === "Enter") {
                     event.preventDefault();
-                    choose(active < 0 ? "" : filtered[active]?.name || "");
+                    if (active < 0) clearSelection();
+                    else if (filtered[active]) choose(filtered[active].name);
                   } else if (
                     ["ArrowDown", "ArrowUp", "PageDown", "PageUp"].includes(
                       event.key,
@@ -225,7 +284,10 @@ export function FacetPicker({
                     setActive((current) =>
                       Math.max(
                         -1,
-                        Math.min(filtered.length - 1, current + amount * direction),
+                        Math.min(
+                          filtered.length - 1,
+                          current + amount * direction,
+                        ),
                       ),
                     );
                   }
@@ -246,27 +308,34 @@ export function FacetPicker({
                 </button>
               )}
             </div>
-            <div id={id + "-listbox"} role="listbox" aria-label={label}>
+            <div
+              id={id + "-listbox"}
+              role="listbox"
+              aria-label={label}
+              aria-multiselectable={multiple || undefined}
+            >
               <div
                 id={optionId(-1)}
                 role="option"
-                aria-selected={!value}
+                aria-selected={!hasValue}
                 className={
                   "facet-picker-option facet-picker-all " +
                   (active === -1 ? "is-active" : "")
                 }
                 onMouseDown={(event) => event.preventDefault()}
                 onMouseMove={() => setActive(-1)}
-                onClick={() => choose("")}
+                onClick={clearSelection}
               >
                 <span>{allLabel}</span>
-                {!value && <Check size={13} aria-hidden="true" />}
+                {!hasValue && <Check size={13} aria-hidden="true" />}
               </div>
               <div
                 ref={viewportRef}
                 className="facet-picker-viewport"
                 style={{ height }}
-                onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+                onScroll={(event) =>
+                  setScrollTop(event.currentTarget.scrollTop)
+                }
               >
                 {filtered.length ? (
                   <div
@@ -280,7 +349,7 @@ export function FacetPicker({
                           key={item.name}
                           id={optionId(index)}
                           role="option"
-                          aria-selected={item.name === value}
+                          aria-selected={selectedValues.includes(item.name)}
                           aria-posinset={index + 2}
                           aria-setsize={filtered.length + 1}
                           className={
@@ -301,7 +370,7 @@ export function FacetPicker({
                         >
                           <span>{item.name}</span>
                           <small>{item.count.toLocaleString()}</small>
-                          {item.name === value && (
+                          {selectedValues.includes(item.name) && (
                             <Check size={13} aria-hidden="true" />
                           )}
                         </div>
@@ -318,7 +387,9 @@ export function FacetPicker({
                 {filtered.length.toLocaleString()}{" "}
                 {search ? "matches" : "available"}
               </span>
-              <span>↑ ↓ · Enter to select</span>
+              <span>
+                {multiple ? "Click to select · Enter" : "↑ ↓ · Enter to select"}
+              </span>
             </div>
           </div>,
           document.body,

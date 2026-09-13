@@ -167,7 +167,9 @@ export class LibraryIndex {
   query(input: LibraryQuery = {}): LibraryPage {
     const search = normalize(string(input.search).slice(0, 1000)).trim();
     const collection = normalize(string(input.collection));
-    const tag = normalize(string(input.tag));
+    const tagFilters = [...strings(input.tags), string(input.tag)]
+      .map(normalize)
+      .filter(Boolean);
     const sort = sorts.has(input.sort as SortKey) ? input.sort! : "title";
     const descending = input.descending === true;
     const favorites = Array.isArray(input.favoriteIds)
@@ -176,7 +178,7 @@ export class LibraryIndex {
     const key = JSON.stringify([
       search,
       collection,
-      tag,
+      tagFilters,
       sort,
       descending,
       favorites ? [...favorites].sort() : null,
@@ -188,7 +190,7 @@ export class LibraryIndex {
         .filter(
           (item) =>
             (!collection || item.collections.has(collection)) &&
-            (!tag || item.tags.has(tag)) &&
+            tagFilters.every((tag) => item.tags.has(tag)) &&
             (!favorites || favorites.has(item.track.id)) &&
             terms.every((term) => item.search.includes(term)),
         )

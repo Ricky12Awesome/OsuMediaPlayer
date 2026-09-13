@@ -163,7 +163,7 @@ export function App() {
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<LibraryTab>("all");
   const [collection, setCollection] = useState("");
-  const [tag, setTag] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
   const [sort, setSort] = useState<SortKey>("title");
   const [descending, setDescending] = useState(false);
   const [favorites, setFavorites] = useState<Set<string>>(
@@ -470,12 +470,12 @@ export function App() {
     () => ({
       search,
       collection: collection || undefined,
-      tag: tag || undefined,
+      tags: tags.length ? tags : undefined,
       sort,
       descending,
       favoriteIds: tab === "favorites" ? [...favorites] : undefined,
     }),
-    [collection, descending, favorites, search, sort, tab, tag],
+    [collection, descending, favorites, search, sort, tab, tags],
   );
   const queueMatches = useMemo(
     () => JSON.stringify(player.queueQuery) === JSON.stringify(query),
@@ -557,7 +557,7 @@ export function App() {
   const clearFilters = () => {
     setSearchDraft("");
     setSearch("");
-    setTag("");
+    setTags([]);
     setCollection("");
     setTab("all");
   };
@@ -703,7 +703,7 @@ export function App() {
     player.currentTime >= Math.max(0, player.track?.videoOffset ?? 0),
   );
   const hasFilters = Boolean(
-    search || tag || collection || tab === "favorites",
+    search || tags.length > 0 || collection || tab === "favorites",
   );
   const libraryHidden = sidebarHidden && isDesktop;
 
@@ -915,8 +915,11 @@ export function App() {
               <FacetPicker
                 label="Filter by tag"
                 allLabel="All tags"
-                value={tag}
-                onChange={setTag}
+                value={tags}
+                multiple
+                onChange={(value) =>
+                  setTags(Array.isArray(value) ? value : value ? [value] : [])
+                }
                 items={summary?.tags ?? []}
                 icon={<Tag size={13} />}
               />
@@ -957,8 +960,8 @@ export function App() {
             {hasFilters && (
               <div className="active-filters">
                 <span>
-                  {tag
-                    ? "#" + tag
+                  {tags.length
+                    ? tags.map((value) => "#" + value).join(", ")
                     : collection ||
                       (tab === "favorites"
                         ? "Your favorites"

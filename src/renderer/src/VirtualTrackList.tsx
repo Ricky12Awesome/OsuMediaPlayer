@@ -84,6 +84,7 @@ export function VirtualTrackList({
         search: query.search ?? "",
         collection: query.collection ?? "",
         tag: query.tag ?? "",
+        tags: query.tags ?? [],
         sort: query.sort ?? "title",
         descending: query.descending ?? false,
         favoriteIds: query.favoriteIds,

@@ -54,6 +54,7 @@ export interface LibraryQuery {
   search?: string;
   collection?: string;
   tag?: string;
+  tags?: string[];
   sort?: SortKey;
   descending?: boolean;
   favoriteIds?: string[];

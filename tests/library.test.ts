@@ -32,11 +32,15 @@ test("library queries search, filter, sort, and paginate tracks", () => {
     addedAt: 0,
   });
   const index = new LibraryIndex(
-    [makeTrack("1", "Alpha", "Favorites"), makeTrack("2", "Beta", "Other")],
+    [
+      makeTrack("1", "Alpha", "Favorites"),
+      makeTrack("2", "Beta", "Other"),
+      { ...makeTrack("3", "Gamma", "Other"), tags: ["electronic", "vocal"] },
+    ],
     new Map(),
     {
-      trackCount: 2,
-      beatmapCount: 2,
+      trackCount: 3,
+      beatmapCount: 3,
       collectionCount: 2,
       collections: [],
       tags: [],
@@ -48,5 +52,11 @@ test("library queries search, filter, sort, and paginate tracks", () => {
   assert.deepEqual(
     index.query({ collection: "favorites" }).items.map((track) => track.id),
     ["1"],
+  );
+  assert.deepEqual(
+    index
+      .query({ tags: ["electronic", "vocal"] })
+      .items.map((track) => track.id),
+    ["3"],
   );
 });
