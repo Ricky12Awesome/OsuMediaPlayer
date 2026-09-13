@@ -891,6 +891,7 @@ export function App() {
                   className="hero-background"
                   src={player.track.artworkUrl}
                   alt=""
+                  draggable={false}
                   onError={(event) => {
                     event.currentTarget.style.display = "none";
                   }}
