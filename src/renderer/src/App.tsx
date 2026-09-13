@@ -24,6 +24,9 @@ import {
   Maximize2,
   Minimize2,
   Music2,
+  PanelLeft,
+  PanelLeftClose,
+  PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
   Pause,
@@ -65,6 +68,7 @@ import {
 import { usePlayer } from "./usePlayer";
 
 const defaultPosition = "bottom-left";
+const defaultLibraryPosition = "right";
 const positions = [
   "top-left",
   "top-center",
@@ -77,6 +81,7 @@ const positions = [
 ] as const;
 type CaptionPosition = (typeof positions)[number];
 type LibraryTab = "all" | "favorites";
+type LibraryPosition = "left" | "right";
 type TransportLayout = "controls-left" | "controls-centered";
 type SeekPreview = {
   time: number;
@@ -150,6 +155,10 @@ function isCaptionPosition(value: unknown): value is CaptionPosition {
   );
 }
 
+function isLibraryPosition(value: unknown): value is LibraryPosition {
+  return value === "left" || value === "right";
+}
+
 export function App() {
   const player = usePlayer(api);
   const [summary, setSummary] = useState<LibrarySummary | null>(null);
@@ -183,6 +192,15 @@ export function App() {
   );
   const [sidebarHidden, setSidebarHidden] = useState(() =>
     readStorage("osu-music-sidebar-hidden", false),
+  );
+  const [libraryPosition, setLibraryPosition] = useState<LibraryPosition>(
+    () => {
+      const stored = readStorage(
+        "osu-music-library-position",
+        defaultLibraryPosition,
+      );
+      return isLibraryPosition(stored) ? stored : defaultLibraryPosition;
+    },
   );
   const [transportLayout, setTransportLayout] = useState<TransportLayout>(() =>
     readStorage<string>("osu-music-transport-layout", "controls-left") ===
@@ -330,7 +348,11 @@ export function App() {
     const onMove = (event: globalThis.PointerEvent) => {
       const start = resizeStart.current;
       if (!start) return;
-      setLibraryWidth(clampLibraryWidth(start.width + start.x - event.clientX));
+      const delta =
+        libraryPosition === "right"
+          ? start.x - event.clientX
+          : event.clientX - start.x;
+      setLibraryWidth(clampLibraryWidth(start.width + delta));
     };
     const finish = () => {
       resizeStart.current = null;
@@ -347,7 +369,7 @@ export function App() {
       window.removeEventListener("pointercancel", finish);
       window.removeEventListener("blur", finish);
     };
-  }, [clampLibraryWidth, resizing]);
+  }, [clampLibraryWidth, libraryPosition, resizing]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setSearch(searchDraft), 150);
@@ -364,6 +386,10 @@ export function App() {
   useEffect(
     () => writeStorage("osu-music-sidebar-hidden", sidebarHidden),
     [sidebarHidden],
+  );
+  useEffect(
+    () => writeStorage("osu-music-library-position", libraryPosition),
+    [libraryPosition],
   );
   useEffect(
     () => writeStorage("osu-music-transport-layout", transportLayout),
@@ -467,10 +493,7 @@ export function App() {
         focusSearch();
         return;
       }
-      if (
-        (event.ctrlKey || event.metaKey) &&
-        event.key.toLowerCase() === "s"
-      ) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();
         setSidebarHidden((value) => !value);
         return;
@@ -828,7 +851,9 @@ export function App() {
           className={
             "main-content " +
             (resizing ? "is-resizing " : "") +
-            (libraryHidden ? "sidebar-is-hidden" : "")
+            (libraryHidden ? "sidebar-is-hidden " : "") +
+            "library-position-" +
+            libraryPosition
           }
           style={{ "--library-width": libraryWidth + "px" } as CSSProperties}
         >
@@ -930,10 +955,18 @@ export function App() {
             onKeyDown={(event) => {
               if (event.key === "ArrowLeft") {
                 event.preventDefault();
-                setLibraryWidth((value) => clampLibraryWidth(value + 16));
+                setLibraryWidth((value) =>
+                  clampLibraryWidth(
+                    value + (libraryPosition === "right" ? 16 : -16),
+                  ),
+                );
               } else if (event.key === "ArrowRight") {
                 event.preventDefault();
-                setLibraryWidth((value) => clampLibraryWidth(value - 16));
+                setLibraryWidth((value) =>
+                  clampLibraryWidth(
+                    value + (libraryPosition === "right" ? -16 : 16),
+                  ),
+                );
               } else if (event.key === "Home") {
                 event.preventDefault();
                 setLibraryWidth(320);
@@ -1405,7 +1438,13 @@ export function App() {
             onClick={() => setSidebarHidden((value) => !value)}
           >
             {sidebarHidden ? (
-              <PanelRightOpen size={19} />
+              libraryPosition === "left" ? (
+                <PanelLeftOpen size={19} />
+              ) : (
+                <PanelRightOpen size={19} />
+              )
+            ) : libraryPosition === "left" ? (
+              <PanelLeftClose size={19} />
             ) : (
               <PanelRightClose size={19} />
             )}
@@ -1534,6 +1573,40 @@ export function App() {
                   }}
                 >
                   <RefreshCw size={15} /> Refresh library
+                </button>
+              </div>
+            </div>
+            <div className="settings-block transport-layout-setting">
+              <span className="settings-label">
+                <PanelLeft size={16} /> SONG LIST POSITION
+              </span>
+              <div
+                className="transport-layout-options"
+                aria-label="Song list position"
+              >
+                <button
+                  type="button"
+                  className={
+                    "transport-layout-option " +
+                    (libraryPosition === "left" ? "active" : "")
+                  }
+                  aria-pressed={libraryPosition === "left"}
+                  onClick={() => setLibraryPosition("left")}
+                >
+                  <strong>Left side</strong>
+                  <span>Show the song list on the left</span>
+                </button>
+                <button
+                  type="button"
+                  className={
+                    "transport-layout-option " +
+                    (libraryPosition === "right" ? "active" : "")
+                  }
+                  aria-pressed={libraryPosition === "right"}
+                  onClick={() => setLibraryPosition("right")}
+                >
+                  <strong>Right side</strong>
+                  <span>Show the song list on the right</span>
                 </button>
               </div>
             </div>

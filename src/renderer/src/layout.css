@@ -21,6 +21,7 @@
 }
 .main-content {
   grid-template-columns: minmax(0, 1fr) 7px var(--library-width, 430px);
+  grid-template-areas: "player resizer library";
   flex: 1;
   gap: 0;
   min-width: 0;
@@ -33,6 +34,19 @@
     transition: grid-template-columns 0.28s cubic-bezier(0.22, 1, 0.36, 1);
     overflow: hidden;
   }
+  .main-content.library-position-left {
+    grid-template-columns: var(--library-width, 430px) 7px minmax(0, 1fr);
+    grid-template-areas: "library resizer player";
+  }
+  .now-playing-panel {
+    grid-area: player;
+  }
+  .library-resizer {
+    grid-area: resizer;
+  }
+  .library-panel {
+    grid-area: library;
+  }
   .main-content.is-resizing {
     transition: none;
   }
@@ -44,6 +58,11 @@
   }
   .main-content.sidebar-is-hidden {
     grid-template-columns: minmax(0, 1fr) 0 0;
+    grid-template-areas: "player resizer library";
+  }
+  .main-content.library-position-left.sidebar-is-hidden {
+    grid-template-columns: 0 0 minmax(0, 1fr);
+    grid-template-areas: "library resizer player";
   }
   .main-content.sidebar-is-hidden .library-resizer,
   .main-content.sidebar-is-hidden .library-panel {
@@ -57,5 +76,9 @@
       opacity 0.18s,
       transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
       visibility 0s linear 0.28s;
+  }
+  .main-content.library-position-left.sidebar-is-hidden .library-resizer,
+  .main-content.library-position-left.sidebar-is-hidden .library-panel {
+    transform: translate(-28px);
   }
 }

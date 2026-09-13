@@ -143,6 +143,10 @@
     flex: 58%;
     padding: 0;
   }
+  .main-content.library-position-left .library-panel {
+    border-right: 0;
+    box-shadow: none;
+  }
   .search-box input {
     font-size: 12px;
   }
