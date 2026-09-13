@@ -115,6 +115,77 @@ export function navigateShuffleHistory({
       };
 }
 
+export function randomQueueIndex({
+  current,
+  total,
+  random = Math.random,
+}: {
+  current: number;
+  total: number;
+  random?: () => number;
+}): number | null {
+  if (total <= 0) return null;
+  const index = Math.max(0, Math.min(Math.trunc(current), total - 1));
+  if (total === 1) return index;
+  return nextQueueIndex({
+    current: index,
+    total,
+    direction: 1,
+    shuffle: true,
+    repeat: "off",
+    random,
+  });
+}
+
+export function navigateRandomHistory({
+  history,
+  current,
+  total,
+  direction,
+  random = Math.random,
+}: {
+  history: ShuffleHistory;
+  current: number;
+  total: number;
+  direction: 1 | -1;
+  random?: () => number;
+}): { index: number | null; history: ShuffleHistory } {
+  if (total <= 0)
+    return { index: null, history: { entries: [], position: -1 } };
+  const entries = history.entries.filter(
+    (entry) => Number.isInteger(entry) && entry >= 0 && entry < total,
+  );
+  let position = Math.max(0, Math.min(history.position, entries.length - 1));
+  if (entries[position] !== current) {
+    const existing = entries.lastIndexOf(current);
+    if (existing >= 0) position = existing;
+    else {
+      entries.push(current);
+      position = entries.length - 1;
+    }
+  }
+
+  if (direction === -1) {
+    if (position === 0) return { index: null, history: { entries, position } };
+    const nextPosition = position - 1;
+    return {
+      index: entries[nextPosition] ?? null,
+      history: { entries, position: nextPosition },
+    };
+  }
+
+  const index = randomQueueIndex({ current, total, random });
+  if (index === null) return { index: null, history: { entries, position } };
+  const retained = entries.slice(0, position + 1);
+  return {
+    index,
+    history: {
+      entries: [...retained, index],
+      position: retained.length,
+    },
+  };
+}
+
 export const defaultPlaybackSettings: PlaybackSettings = {
   volume: 0.75,
   muted: false,
@@ -157,4 +228,6 @@ export function parsePlaybackSettings(
 export const copyQueueQuery = cloneQueueQuery;
 export const getNextQueueIndex = nextQueueIndex;
 export const getShuffleNavigation = navigateShuffleHistory;
+export const getRandomQueueIndex = randomQueueIndex;
+export const getRandomNavigation = navigateRandomHistory;
 export const readPlaybackSettings = parsePlaybackSettings;

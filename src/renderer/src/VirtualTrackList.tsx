@@ -53,6 +53,14 @@ export interface VirtualTrackListProps {
   onContextMenu: (track: Track, x: number, y: number) => void;
   onTotal: (total: number) => void;
   onFirstTrack?: (track: Track) => void;
+  keyboardControlsRef?: {
+    current: VirtualTrackListKeyboardControls | null;
+  };
+}
+
+export interface VirtualTrackListKeyboardControls {
+  moveAndPlay: (direction: -1 | 1) => void;
+  playSelected: () => void;
 }
 
 export function VirtualTrackList({
@@ -68,6 +76,7 @@ export function VirtualTrackList({
   onContextMenu,
   onTotal,
   onFirstTrack,
+  keyboardControlsRef,
 }: VirtualTrackListProps) {
   const listRef = useRef<HTMLDivElement>(null);
   const latest = useRef({
@@ -340,6 +349,37 @@ export function VirtualTrackList({
     },
     [cache, loadPage, total],
   );
+
+  const focusList = useCallback(() => {
+    listRef.current?.focus();
+  }, []);
+  const playSelected = useCallback(() => {
+    focusList();
+    choose(selectedIndex.current);
+  }, [choose, focusList]);
+  const moveAndPlay = useCallback(
+    (direction: -1 | 1) => {
+      if (!total) return;
+      const next = Math.max(
+        0,
+        Math.min(total - 1, selectedIndex.current + direction),
+      );
+      focusList();
+      select(next);
+      choose(next);
+    },
+    [choose, focusList, select, total],
+  );
+
+  useLayoutEffect(() => {
+    if (!keyboardControlsRef) return;
+    const controls = { moveAndPlay, playSelected };
+    keyboardControlsRef.current = controls;
+    return () => {
+      if (keyboardControlsRef.current === controls)
+        keyboardControlsRef.current = null;
+    };
+  }, [keyboardControlsRef, moveAndPlay, playSelected]);
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.target instanceof HTMLElement && event.target.closest("button"))

@@ -58,7 +58,10 @@ import { FacetPicker } from "./FacetPicker";
 import { SortPicker } from "./SortPicker";
 import { TrackArt } from "./TrackArt";
 import { TrackContextMenu } from "./TrackContextMenu";
-import { VirtualTrackList } from "./VirtualTrackList";
+import {
+  VirtualTrackList,
+  type VirtualTrackListKeyboardControls,
+} from "./VirtualTrackList";
 import { usePlayer } from "./usePlayer";
 
 const defaultPosition = "bottom-left";
@@ -216,9 +219,13 @@ export function App() {
   const captionRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLElement>(null);
   const libraryRef = useRef<HTMLElement>(null);
+  const trackListKeyboardRef = useRef<VirtualTrackListKeyboardControls | null>(
+    null,
+  );
   const hideControlsTimer = useRef<number | null>(null);
   const zoomIndicatorTimer = useRef<number | null>(null);
   const zoomInitialized = useRef(false);
+  const focusSearchAfterSidebar = useRef(false);
   const seekPreviewClearTimer = useRef<number | null>(null);
   const resizeStart = useRef<{ x: number; width: number } | null>(null);
   const trackInitialized = useRef(false);
@@ -385,6 +392,23 @@ export function App() {
     [],
   );
 
+  const focusSearch = useCallback(() => {
+    if (isDesktop && sidebarHidden) {
+      focusSearchAfterSidebar.current = true;
+      setSidebarHidden(false);
+      return;
+    }
+    setSidebarHidden(false);
+    searchRef.current?.focus();
+  }, [isDesktop, sidebarHidden]);
+
+  useEffect(() => {
+    if (!focusSearchAfterSidebar.current || (isDesktop && sidebarHidden))
+      return;
+    focusSearchAfterSidebar.current = false;
+    searchRef.current?.focus();
+  }, [isDesktop, sidebarHidden]);
+
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
@@ -435,14 +459,39 @@ export function App() {
         api.windowControl("fullscreen");
         return;
       }
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        ["f", "k"].includes(event.key.toLowerCase())
+      ) {
         event.preventDefault();
-        setSidebarHidden(false);
-        searchRef.current?.focus();
+        focusSearch();
+        return;
+      }
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        event.key.toLowerCase() === "s"
+      ) {
+        event.preventDefault();
+        setSidebarHidden((value) => !value);
         return;
       }
       if (settingsOpen || shortcutsOpen || editing) return;
-      if (event.code === "Space") {
+      if (
+        event.key === "F2" &&
+        !event.repeat &&
+        !event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey
+      ) {
+        event.preventDefault();
+        void player.jumpRandom(event.shiftKey ? -1 : 1);
+      } else if (
+        event.code === "Space" &&
+        !event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.shiftKey
+      ) {
         event.preventDefault();
         player.toggle();
       } else if (event.key === "ArrowRight") {
@@ -451,6 +500,32 @@ export function App() {
       } else if (event.key === "ArrowLeft") {
         event.preventDefault();
         player.seek(player.currentTime - 5);
+      } else if (
+        !event.shiftKey &&
+        !event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        event.key.toLowerCase() === "a"
+      ) {
+        event.preventDefault();
+        void player.previous();
+      } else if (
+        !event.shiftKey &&
+        !event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        event.key.toLowerCase() === "d"
+      ) {
+        event.preventDefault();
+        void player.next();
+      } else if (
+        !event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        event.key === "Tab"
+      ) {
+        event.preventDefault();
+        setShowNowPlayingTitleArtist((value) => !value);
       } else if (event.key.toLowerCase() === "m") player.toggleMute();
       else if (event.key === "?") setShortcutsOpen(true);
     };
@@ -459,9 +534,13 @@ export function App() {
   }, [
     fullscreen,
     player.currentTime,
+    player.jumpRandom,
+    player.next,
+    player.previous,
     player.seek,
     player.toggle,
     player.toggleMute,
+    focusSearch,
     settingsOpen,
     shortcutsOpen,
   ]);
@@ -712,6 +791,27 @@ export function App() {
     setDescending(next === "added");
   };
 
+  const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.shiftKey ||
+      (event.key !== "Enter" &&
+        event.key !== "ArrowUp" &&
+        event.key !== "ArrowDown")
+    )
+      return;
+    event.preventDefault();
+    event.stopPropagation();
+    searchRef.current?.blur();
+    if (event.key === "Enter") trackListKeyboardRef.current?.playSelected();
+    else
+      trackListKeyboardRef.current?.moveAndPlay(
+        event.key === "ArrowUp" ? -1 : 1,
+      );
+  };
+
   return (
     <div
       className={
@@ -860,6 +960,7 @@ export function App() {
                   ref={searchRef}
                   value={searchDraft}
                   onChange={(event) => setSearchDraft(event.target.value)}
+                  onKeyDown={handleSearchKeyDown}
                   placeholder="Search songs, artists, tags…"
                   aria-label="Search library"
                 />
@@ -871,7 +972,7 @@ export function App() {
                     <X size={15} />
                   </button>
                 ) : (
-                  <kbd>Ctrl K</kbd>
+                  <kbd>Ctrl F</kbd>
                 )}
               </div>
               <button
@@ -1031,6 +1132,7 @@ export function App() {
                   onContextMenu={openTrackContextMenu}
                   onTotal={setResultTotal}
                   onFirstTrack={cueFirstTrack}
+                  keyboardControlsRef={trackListKeyboardRef}
                 />
               )}
             </div>
@@ -1384,10 +1486,16 @@ export function App() {
           <div className="shortcuts">
             {[
               ["Play / pause", "Space"],
+              ["Previous track", "A"],
+              ["Next track", "D"],
+              ["Toggle song list", "Ctrl / ⌘ S"],
+              ["Show / hide title / artist", "Tab"],
+              ["Random track", "F2"],
+              ["Previous random track", "Shift F2"],
               ["Browse songs", "↑ / ↓"],
               ["Play selected song", "Enter"],
               ["Seek 5 seconds", "← / →"],
-              ["Search your library", "Ctrl / ⌘ K"],
+              ["Search your library", "Ctrl / ⌘ F"],
               ["Zoom in", "Ctrl / ⌘ ="],
               ["Zoom out", "Ctrl / ⌘ -"],
               ["Reset zoom", "Ctrl / ⌘ 0"],

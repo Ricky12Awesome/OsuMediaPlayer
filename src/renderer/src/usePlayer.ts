@@ -13,6 +13,7 @@ import type {
 } from "../../shared/types";
 import {
   cloneQueueQuery,
+  navigateRandomHistory,
   navigateShuffleHistory,
   nextQueueIndex,
   parsePlaybackSettings,
@@ -60,6 +61,7 @@ export interface PlayerState {
   seek: (time: number) => void;
   next: () => Promise<void>;
   previous: () => Promise<void>;
+  jumpRandom: (direction: 1 | -1) => Promise<void>;
   audioRef: RefObject<HTMLAudioElement>;
   videoRef: RefObject<HTMLVideoElement | null>;
   videoUrl: string | null;
@@ -370,6 +372,71 @@ export function usePlayer(api: PlayerAPI): PlayerState {
   const next = useCallback(() => navigate(1), [navigate]);
   const previous = useCallback(() => navigate(-1), [navigate]);
 
+  const jumpRandom = useCallback(
+    async (direction: 1 | -1) => {
+      if (!activeTrack.current) return;
+      const id = ++generation.current;
+      const currentQueue = queue.current;
+      setLoading(true);
+      setError(null);
+      try {
+        let total = currentQueue.total;
+        if (total === undefined) {
+          const page = await api.queryLibrary({
+            ...currentQueue.query,
+            offset: currentQueue.index,
+            limit: 1,
+          });
+          if (id !== generation.current || !mounted.current) return;
+          total = page.total;
+          currentQueue.total = total;
+        }
+
+        const selected = navigateRandomHistory({
+          history: {
+            entries: history.current,
+            position: historyPosition.current,
+          },
+          current: currentQueue.index,
+          total,
+          direction,
+        });
+        if (selected.index === null) {
+          setLoading(false);
+          return;
+        }
+
+        const page = await api.queryLibrary({
+          ...currentQueue.query,
+          offset: selected.index,
+          limit: 1,
+        });
+        if (id !== generation.current || !mounted.current) return;
+        const nextTrack = page.items[0];
+        if (!nextTrack) {
+          currentQueue.total = page.total;
+          setLoading(false);
+          setError(
+            "This queue changed. Select a track from the library to continue.",
+          );
+          return;
+        }
+
+        history.current = selected.history.entries;
+        historyPosition.current = selected.history.position;
+        loadTrack(nextTrack, currentQueue.query, selected.index, true, true);
+        queue.current.total = page.total;
+      } catch {
+        if (id !== generation.current || !mounted.current) return;
+        setLoading(false);
+        setError(
+          "Could not load a random track. Please select a track or try again.",
+        );
+      }
+    },
+    [api, loadTrack],
+  );
+
   const setVolume = useCallback((nextVolume: number) => {
     if (!Number.isFinite(nextVolume)) return;
     setVolumeState(Math.max(0, Math.min(1, nextVolume)));
@@ -650,6 +717,7 @@ export function usePlayer(api: PlayerAPI): PlayerState {
     seek,
     next,
     previous,
+    jumpRandom,
     audioRef,
     videoRef,
     videoUrl,

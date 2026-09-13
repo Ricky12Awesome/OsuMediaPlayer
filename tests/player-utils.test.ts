@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  navigateRandomHistory,
   navigateShuffleHistory,
   nextQueueIndex,
   parsePlaybackSettings,
@@ -41,6 +42,33 @@ test("shuffle history walks backward before selecting a new track", () => {
     index: 0,
     history: { entries: [0, 2], position: 0 },
   });
+});
+
+test("random forward navigation drops forward history and can reverse", () => {
+  const forward = navigateRandomHistory({
+    history: { entries: [0, 2, 1], position: 1 },
+    current: 2,
+    total: 4,
+    direction: 1,
+    random: () => 0,
+  });
+  assert.deepEqual(forward, {
+    index: 0,
+    history: { entries: [0, 2, 0], position: 2 },
+  });
+
+  assert.deepEqual(
+    navigateRandomHistory({
+      history: forward.history,
+      current: 0,
+      total: 4,
+      direction: -1,
+    }),
+    {
+      index: 2,
+      history: { entries: [0, 2, 0], position: 1 },
+    },
+  );
 });
 
 test("stored playback settings are clamped and validated", () => {
