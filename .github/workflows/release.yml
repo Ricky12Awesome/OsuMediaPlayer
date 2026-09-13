@@ -2,6 +2,8 @@ name: Publish release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*"
 
@@ -9,12 +11,81 @@ permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.repository }}
   cancel-in-progress: false
 
 jobs:
+  prepare:
+    name: Prepare release tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+
+    steps:
+      - name: Check out source and tags
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create release tag when the version changes
+        id: release
+        shell: bash
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          CURRENT_SHA: ${{ github.sha }}
+          REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          current_version="$(node -p 'require("./package.json").version')"
+          release_tag="v${current_version}"
+
+          if [[ "$REF" == refs/tags/* ]]; then
+            if [[ "$REF_NAME" != "$release_tag" ]]; then
+              echo "::error::Tag $REF_NAME does not match package.json version $current_version."
+              exit 1
+            fi
+            echo "tag=$REF_NAME" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          previous_version=""
+          if git cat-file -e "$BEFORE_SHA^{commit}" 2>/dev/null && \
+            git cat-file -e "$BEFORE_SHA:package.json" 2>/dev/null; then
+            previous_version="$(
+              git show "$BEFORE_SHA:package.json" |
+                node -e 'let input=""; process.stdin.on("data", chunk => input += chunk).on("end", () => process.stdout.write(JSON.parse(input).version ?? ""));'
+            )"
+          fi
+
+          if [[ "$current_version" == "$previous_version" ]]; then
+            echo "package.json version is unchanged ($current_version)."
+            exit 0
+          fi
+
+          if git rev-parse --verify --quiet "refs/tags/$release_tag" >/dev/null; then
+            tag_commit="$(git rev-list -n 1 "$release_tag")"
+            if [[ "$tag_commit" != "$CURRENT_SHA" ]]; then
+              echo "::error::Tag $release_tag already exists on $tag_commit, not $CURRENT_SHA."
+              exit 1
+            fi
+            echo "tag=$release_tag" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag --annotate "$release_tag" "$CURRENT_SHA" --message "Release $release_tag"
+          git push origin "$release_tag"
+          echo "tag=$release_tag" >> "$GITHUB_OUTPUT"
+
   build:
     name: Build ${{ matrix.platform }} release
+    needs: prepare
+    if: needs.prepare.outputs.tag != ''
     strategy:
       fail-fast: false
       matrix:
@@ -33,6 +104,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -60,7 +133,8 @@ jobs:
 
   publish:
     name: Publish GitHub release
-    needs: build
+    needs: [prepare, build]
+    if: needs.prepare.outputs.tag != ''
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -76,7 +150,7 @@ jobs:
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ needs.prepare.outputs.tag }}
           generate_release_notes: true
           fail_on_unmatched_files: true
           files: release-assets/*
