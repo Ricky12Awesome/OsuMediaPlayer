@@ -87,6 +87,7 @@ export interface PlayerAPI {
   onLibraryProgress: (listener: (progress: LibraryProgress) => void) => () => void;
   onMediaAction: (listener: (action: MediaAction) => void) => () => void;
   onFullscreenChange: (listener: (active: boolean) => void) => () => void;
+  onZoomChange: (listener: (percent: number) => void) => () => void;
   windowControl: (action: "minimize" | "maximize" | "fullscreen" | "close") => void;
   platform: string;
 }

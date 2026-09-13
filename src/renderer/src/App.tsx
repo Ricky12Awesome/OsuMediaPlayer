@@ -95,6 +95,7 @@ const defaultApi: PlayerAPI = {
   onLibraryProgress: () => () => {},
   onMediaAction: () => () => {},
   onFullscreenChange: () => () => {},
+  onZoomChange: () => () => {},
   windowControl: () => {},
   platform: "browser",
 };
@@ -170,6 +171,8 @@ export function App() {
   const [controlsVisible, setControlsVisible] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [zoomPercent, setZoomPercent] = useState(100);
+  const [zoomIndicatorVisible, setZoomIndicatorVisible] = useState(false);
   const [captionDragging, setCaptionDragging] = useState(false);
   const [captionDragPosition, setCaptionDragPosition] = useState<{
     x: number;
@@ -185,6 +188,8 @@ export function App() {
   const mainRef = useRef<HTMLElement>(null);
   const libraryRef = useRef<HTMLElement>(null);
   const hideControlsTimer = useRef<number | null>(null);
+  const zoomIndicatorTimer = useRef<number | null>(null);
+  const zoomInitialized = useRef(false);
   const seekPreviewClearTimer = useRef<number | null>(null);
   const resizeStart = useRef<{ x: number; width: number } | null>(null);
   const trackInitialized = useRef(false);
@@ -237,6 +242,31 @@ export function App() {
   useEffect(() => {
     const removeFullscreen = api.onFullscreenChange(setFullscreen);
     return removeFullscreen;
+  }, []);
+
+  useEffect(() => {
+    const removeZoom = api.onZoomChange((percent) => {
+      const nextPercent = Math.max(25, Math.min(500, Math.round(percent)));
+      setZoomPercent(nextPercent);
+      if (!zoomInitialized.current) {
+        zoomInitialized.current = true;
+        return;
+      }
+      setZoomIndicatorVisible(true);
+      if (zoomIndicatorTimer.current !== null)
+        window.clearTimeout(zoomIndicatorTimer.current);
+      zoomIndicatorTimer.current = window.setTimeout(() => {
+        setZoomIndicatorVisible(false);
+        zoomIndicatorTimer.current = null;
+      }, 1400);
+    });
+    return () => {
+      removeZoom();
+      if (zoomIndicatorTimer.current !== null) {
+        window.clearTimeout(zoomIndicatorTimer.current);
+        zoomIndicatorTimer.current = null;
+      }
+    };
   }, []);
 
   const clampLibraryWidth = useCallback((value: number): number => {
@@ -914,6 +944,12 @@ export function App() {
         </div>
       )}
 
+      {zoomIndicatorVisible && (
+        <div className="zoom-indicator" role="status" aria-live="polite">
+          Zoom {zoomPercent}%
+        </div>
+      )}
+
       <footer
         className={
           "transport " +
@@ -1160,6 +1196,9 @@ export function App() {
               ["Play selected song", "Enter"],
               ["Seek 5 seconds", "← / →"],
               ["Search your library", "Ctrl / ⌘ K"],
+              ["Zoom in", "Ctrl / ⌘ ="],
+              ["Zoom out", "Ctrl / ⌘ -"],
+              ["Reset zoom", "Ctrl / ⌘ 0"],
               ["Mute / unmute", "M"],
               ["Keyboard shortcuts", "?"],
               ["Fullscreen view", "F11"],

@@ -1,0 +1,35 @@
+.zoom-indicator {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  z-index: 20;
+  pointer-events: none;
+  transform: translateX(-50%);
+  color: #f8e9f4;
+  background: #2a2032e8;
+  border: 1px solid #ffffff18;
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  box-shadow: 0 8px 28px #08051066;
+  animation: zoom-indicator-in 0.16s ease-out both;
+}
+
+@keyframes zoom-indicator-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -5px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zoom-indicator {
+    animation: none;
+  }
+}

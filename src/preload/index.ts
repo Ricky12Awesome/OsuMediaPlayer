@@ -47,6 +47,30 @@ const api: PlayerAPI = {
       ipcRenderer.removeListener("window:fullscreen", callback);
     };
   },
+  onZoomChange: (listener) => {
+    let subscribed = true;
+    let receivedChange = false;
+    const callback = (_event: Electron.IpcRendererEvent, percent: number) => {
+      if (!Number.isFinite(percent)) return;
+      receivedChange = true;
+      listener(percent);
+    };
+    ipcRenderer.on("window:zoom", callback);
+    // Synchronize the current value for renderer reloads and startup.
+    void ipcRenderer
+      .invoke("window:zoom-level")
+      .then((percent: number) => {
+        if (subscribed && !receivedChange && Number.isFinite(percent))
+          listener(percent);
+      })
+      .catch(() => {
+        /* The window may be closing during subscription. */
+      });
+    return () => {
+      subscribed = false;
+      ipcRenderer.removeListener("window:zoom", callback);
+    };
+  },
   windowControl: (action) => {
     ipcRenderer.send("window:control", action);
   },

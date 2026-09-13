@@ -48,7 +48,55 @@ let pendingLoad: Promise<LibraryIndex> | null = null;
 let pendingPath: string | undefined;
 let importController: AbortController | null = null;
 let videoTranscoder: VideoTranscoder | null = null;
+let zoomStatusMenuItem: Electron.MenuItem | null = null;
 const rendererUrl = process.env.ELECTRON_RENDERER_URL;
+const zoomStages = [
+  25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400,
+  500,
+] as const;
+
+function currentZoomPercent(): number {
+  if (!window || window.isDestroyed()) return 100;
+  return Math.round(window.webContents.getZoomFactor() * 100);
+}
+
+function notifyZoomChange(): void {
+  if (!window || window.isDestroyed()) return;
+  const percent = currentZoomPercent();
+  if (zoomStatusMenuItem) zoomStatusMenuItem.label = `Zoom: ${percent}%`;
+  window.webContents.send("window:zoom", percent);
+}
+
+function changeZoom(delta: number): void {
+  if (!window || window.isDestroyed()) return;
+  const current = window.webContents.getZoomFactor() * 100;
+  let next: (typeof zoomStages)[number] = zoomStages[0];
+  if (delta > 0) {
+    next = zoomStages[zoomStages.length - 1];
+    for (const stage of zoomStages) {
+      if (stage > current + 0.01) {
+        next = stage;
+        break;
+      }
+    }
+  } else {
+    for (let index = zoomStages.length - 1; index >= 0; index -= 1) {
+      const stage = zoomStages[index];
+      if (stage < current - 0.01) {
+        next = stage;
+        break;
+      }
+    }
+  }
+  window.webContents.setZoomFactor(next / 100);
+  notifyZoomChange();
+}
+
+function resetZoom(): void {
+  if (!window || window.isDestroyed()) return;
+  window.webContents.setZoomFactor(1);
+  notifyZoomChange();
+}
 
 function isTrusted(
   event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent,
@@ -94,6 +142,8 @@ function createWindow(): void {
   window.on("closed", () => {
     window = null;
   });
+  window.webContents.on("zoom-changed", notifyZoomChange);
+  window.webContents.on("did-finish-load", notifyZoomChange);
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   window.webContents.on("will-navigate", (event) => event.preventDefault());
   window.webContents.on("will-attach-webview", (event) =>
@@ -179,6 +229,10 @@ function setupIPC(): void {
     requireTrusted(event);
     return window?.isFullScreen() ?? false;
   });
+  ipcMain.handle("window:zoom-level", (event) => {
+    requireTrusted(event);
+    return currentZoomPercent();
+  });
   ipcMain.handle("library:choose", async (event) => {
     requireTrusted(event);
     const result = await dialog.showOpenDialog(window!, {
@@ -223,22 +277,53 @@ void app.whenReady().then(() => {
     return serveMedia(request, library);
   });
   setupIPC();
-  Menu.setApplicationMenu(
-    Menu.buildFromTemplate([
-      ...(process.platform === "darwin" ? [{ role: "appMenu" as const }] : []),
-      {
-        label: "Playback",
-        submenu: [
-          { label: "Play / Pause", click: () => sendMediaAction("toggle") },
-          { label: "Next track", click: () => sendMediaAction("next") },
-          { label: "Previous track", click: () => sendMediaAction("previous") },
-        ],
-      },
-      { role: "editMenu" },
-      { role: "viewMenu" },
-    ]),
-  );
   createWindow();
+  const menu = Menu.buildFromTemplate([
+    ...(process.platform === "darwin" ? [{ role: "appMenu" as const }] : []),
+    {
+      label: "Playback",
+      submenu: [
+        { label: "Play / Pause", click: () => sendMediaAction("toggle") },
+        { label: "Next track", click: () => sendMediaAction("next") },
+        { label: "Previous track", click: () => sendMediaAction("previous") },
+      ],
+    },
+    { role: "editMenu" },
+    {
+      label: "View",
+      submenu: [
+        { role: "reload" },
+        { role: "forceReload" },
+        { role: "toggleDevTools" },
+        { type: "separator" },
+        {
+          id: "zoom-status",
+          label: "Zoom: 100%",
+          enabled: false,
+        },
+        {
+          label: "Zoom In",
+          accelerator: "CommandOrControl+=",
+          click: () => changeZoom(1),
+        },
+        {
+          label: "Zoom Out",
+          accelerator: "CommandOrControl+-",
+          click: () => changeZoom(-1),
+        },
+        {
+          label: "Reset Zoom",
+          accelerator: "CommandOrControl+0",
+          click: resetZoom,
+        },
+        { type: "separator" },
+        { role: "togglefullscreen" },
+      ],
+    },
+  ]);
+  zoomStatusMenuItem = menu.getMenuItemById("zoom-status");
+  Menu.setApplicationMenu(menu);
+  notifyZoomChange();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
