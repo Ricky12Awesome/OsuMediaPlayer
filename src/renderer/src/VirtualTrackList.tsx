@@ -81,7 +81,7 @@ export interface VirtualTrackListProps {
   favorites: Set<string>;
   onPlay: (track: Track, index: number) => void;
   onFavorite: (track: Track) => void;
-  onContextMenu: (track: Track) => void;
+  onContextMenu: (track: Track, x: number, y: number) => void;
   onTotal: (total: number) => void;
   onFirstTrack?: (track: Track) => void;
 }
@@ -477,7 +477,7 @@ export function VirtualTrackList({
           event.stopPropagation();
           select(index);
           listRef.current?.focus({ preventScroll: true });
-          latest.current.onContextMenu(track);
+          latest.current.onContextMenu(track, event.clientX, event.clientY);
         }}
       >
         {track ? (

@@ -8,6 +8,7 @@ import {
   type KeyboardEvent,
   type PointerEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   ArrowDownWideNarrow,
   ArrowUpWideNarrow,
@@ -47,8 +48,11 @@ import type {
   PlayerAPI,
   SortKey,
   Track,
+  TrackContextMenuAction,
+  TrackContextMenuInfo,
 } from "../../shared/types";
 import { FacetPicker } from "./FacetPicker";
+import { TrackContextMenu } from "./TrackContextMenu";
 import { VirtualTrackList } from "./VirtualTrackList";
 import { usePlayer } from "./usePlayer";
 
@@ -69,6 +73,12 @@ type TransportLayout = "controls-left" | "controls-centered";
 type SeekPreview = {
   time: number;
   position: number;
+};
+type TrackContextMenuState = {
+  track: Track;
+  x: number;
+  y: number;
+  info: TrackContextMenuInfo;
 };
 
 const sortOptions: Array<{ value: SortKey; label: string }> = [
@@ -96,7 +106,8 @@ const defaultApi: PlayerAPI = {
   onMediaAction: () => () => {},
   onFullscreenChange: () => () => {},
   onZoomChange: () => () => {},
-  showTrackContextMenu: () => {},
+  getTrackContextMenuInfo: async () => null,
+  performTrackContextMenuAction: async () => {},
   windowControl: () => {},
   platform: "browser",
 };
@@ -126,7 +137,9 @@ function formatDuration(value: number): string {
 }
 
 function isCaptionPosition(value: unknown): value is CaptionPosition {
-  return typeof value === "string" && positions.includes(value as CaptionPosition);
+  return (
+    typeof value === "string" && positions.includes(value as CaptionPosition)
+  );
 }
 
 export function App() {
@@ -151,10 +164,15 @@ export function App() {
   const [favorites, setFavorites] = useState<Set<string>>(
     () => new Set(readStorage<string[]>("osu-music-favorites", [])),
   );
-  const [captionPosition, setCaptionPosition] = useState<CaptionPosition>(() => {
-    const stored = readStorage("osu-music-now-playing-position", defaultPosition);
-    return isCaptionPosition(stored) ? stored : defaultPosition;
-  });
+  const [captionPosition, setCaptionPosition] = useState<CaptionPosition>(
+    () => {
+      const stored = readStorage(
+        "osu-music-now-playing-position",
+        defaultPosition,
+      );
+      return isCaptionPosition(stored) ? stored : defaultPosition;
+    },
+  );
   const [sidebarHidden, setSidebarHidden] = useState(() =>
     readStorage("osu-music-sidebar-hidden", false),
   );
@@ -183,6 +201,8 @@ export function App() {
   const [seekTooltipPreview, setSeekTooltipPreview] =
     useState<SeekPreview | null>(null);
   const [resizing, setResizing] = useState(false);
+  const [trackContextMenu, setTrackContextMenu] =
+    useState<TrackContextMenuState | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const captionRef = useRef<HTMLDivElement>(null);
@@ -236,7 +256,9 @@ export function App() {
         setRevision((value) => value + 1);
       }
     });
-    void loadLibrary(readStorage<string | undefined>("osu-music-library-path", undefined));
+    void loadLibrary(
+      readStorage<string | undefined>("osu-music-library-path", undefined),
+    );
     return removeProgress;
   }, [loadLibrary]);
 
@@ -320,8 +342,14 @@ export function App() {
   useEffect(() => {
     writeStorage("osu-music-favorites", [...favorites]);
   }, [favorites]);
-  useEffect(() => writeStorage("osu-music-library-width", libraryWidth), [libraryWidth]);
-  useEffect(() => writeStorage("osu-music-sidebar-hidden", sidebarHidden), [sidebarHidden]);
+  useEffect(
+    () => writeStorage("osu-music-library-width", libraryWidth),
+    [libraryWidth],
+  );
+  useEffect(
+    () => writeStorage("osu-music-sidebar-hidden", sidebarHidden),
+    [sidebarHidden],
+  );
   useEffect(
     () => writeStorage("osu-music-transport-layout", transportLayout),
     [transportLayout],
@@ -381,7 +409,12 @@ export function App() {
         api.windowControl("fullscreen");
         return;
       }
-      if (event.key === "Escape" && fullscreen && !settingsOpen && !shortcutsOpen) {
+      if (
+        event.key === "Escape" &&
+        fullscreen &&
+        !settingsOpen &&
+        !shortcutsOpen
+      ) {
         event.preventDefault();
         api.windowControl("fullscreen");
         return;
@@ -451,6 +484,52 @@ export function App() {
     });
   }, []);
 
+  const openTrackContextMenu = useCallback(
+    (track: Track, x: number, y: number) => {
+      setTrackContextMenu({
+        track,
+        x,
+        y,
+        info: {
+          audio: Boolean(track.audioHash),
+          background: Boolean(track.backgroundHash),
+          video: Boolean(track.videoHash),
+          listing: track.onlineId !== undefined,
+        },
+      });
+      void api
+        .getTrackContextMenuInfo(track.id)
+        .then((info) => {
+          if (!info) return;
+          setTrackContextMenu((current) =>
+            current?.track.id === track.id ? { ...current, info } : current,
+          );
+        })
+        .catch(() => {
+          // The menu can still use the metadata already present in the row.
+        });
+    },
+    [],
+  );
+
+  const closeTrackContextMenu = useCallback(() => {
+    setTrackContextMenu(null);
+  }, []);
+
+  const performTrackContextMenuAction = useCallback(
+    (action: TrackContextMenuAction) => {
+      const current = trackContextMenu;
+      if (!current) return;
+      setTrackContextMenu(null);
+      void api
+        .performTrackContextMenuAction(current.track.id, action)
+        .catch(() => {
+          // Native actions are best-effort; closing the menu keeps the UI responsive.
+        });
+    },
+    [trackContextMenu],
+  );
+
   const chooseLibrary = useCallback(async () => {
     const path = await api.chooseLibrary();
     if (path) {
@@ -472,8 +551,14 @@ export function App() {
     if (!stage) return;
     const bounds = stage.getBoundingClientRect();
     if (!bounds.width || !bounds.height) return;
-    const x = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
-    const y = Math.max(0, Math.min(1, (event.clientY - bounds.top) / bounds.height));
+    const x = Math.max(
+      0,
+      Math.min(1, (event.clientX - bounds.left) / bounds.width),
+    );
+    const y = Math.max(
+      0,
+      Math.min(1, (event.clientY - bounds.top) / bounds.height),
+    );
     const nearest = positions.reduce((best, position) => {
       const points: Record<CaptionPosition, [number, number]> = {
         "top-left": [0, 0],
@@ -510,7 +595,8 @@ export function App() {
     const move = (next: globalThis.PointerEvent) => {
       const state = drag.current;
       if (!state || next.pointerId !== state.pointerId) return;
-      state.moved ||= Math.hypot(next.clientX - state.x, next.clientY - state.y) > 4;
+      state.moved ||=
+        Math.hypot(next.clientX - state.x, next.clientY - state.y) > 4;
       if (state.moved) {
         const stage = captionRef.current;
         if (stage) {
@@ -598,7 +684,7 @@ export function App() {
   const previewEnd = Math.max(currentProgress, previewPosition);
   const videoActive = Boolean(
     player.videoUrl &&
-      player.currentTime >= Math.max(0, player.track?.videoOffset ?? 0),
+    player.currentTime >= Math.max(0, player.track?.videoOffset ?? 0),
   );
   const hasFilters = Boolean(
     search || tag || collection || tab === "favorites",
@@ -717,7 +803,9 @@ export function App() {
               event.preventDefault();
               resizeStart.current = {
                 x: event.clientX,
-                width: libraryRef.current?.getBoundingClientRect().width ?? libraryWidth,
+                width:
+                  libraryRef.current?.getBoundingClientRect().width ??
+                  libraryWidth,
               };
               setResizing(true);
             }}
@@ -759,7 +847,10 @@ export function App() {
                   aria-label="Search library"
                 />
                 {searchDraft ? (
-                  <button aria-label="Clear search" onClick={() => setSearchDraft("")}>
+                  <button
+                    aria-label="Clear search"
+                    onClick={() => setSearchDraft("")}
+                  >
                     <X size={15} />
                   </button>
                 ) : (
@@ -767,7 +858,9 @@ export function App() {
                 )}
               </div>
               <button
-                className={"icon-button refresh-button " + (importing ? "spinning" : "")}
+                className={
+                  "icon-button refresh-button " + (importing ? "spinning" : "")
+                }
                 title="Refresh library"
                 aria-label="Refresh library"
                 disabled={importing}
@@ -777,7 +870,11 @@ export function App() {
               </button>
             </div>
 
-            <div className="library-tabs" role="tablist" aria-label="Library view">
+            <div
+              className="library-tabs"
+              role="tablist"
+              aria-label="Library view"
+            >
               <button
                 role="tab"
                 aria-selected={tab === "all"}
@@ -830,7 +927,11 @@ export function App() {
               <div className="sort-controls">
                 <span>Sort by</span>
                 <div className="sort-select">
-                  <select aria-label="Sort songs" value={sort} onChange={changeSort}>
+                  <select
+                    aria-label="Sort songs"
+                    value={sort}
+                    onChange={changeSort}
+                  >
                     {sortOptions.map((option) => (
                       <option key={option.value} value={option.value}>
                         {option.label}
@@ -859,7 +960,10 @@ export function App() {
                 <span>
                   {tag
                     ? "#" + tag
-                    : collection || (tab === "favorites" ? "Your favorites" : "“" + search + "”")}
+                    : collection ||
+                      (tab === "favorites"
+                        ? "Your favorites"
+                        : "“" + search + "”")}
                 </span>
                 <button onClick={clearFilters}>
                   Clear filters <X size={12} />
@@ -882,7 +986,9 @@ export function App() {
                         : "Reading your osu! library…"}
                   </p>
                   {progress.records > 0 && (
-                    <small>{progress.records.toLocaleString()} records discovered</small>
+                    <small>
+                      {progress.records.toLocaleString()} records discovered
+                    </small>
                   )}
                 </div>
               ) : loadError ? (
@@ -890,7 +996,10 @@ export function App() {
                   <CircleAlert size={35} />
                   <h3>Let’s find your music</h3>
                   <p>{loadError}</p>
-                  <button className="primary-button" onClick={() => void chooseLibrary()}>
+                  <button
+                    className="primary-button"
+                    onClick={() => void chooseLibrary()}
+                  >
                     <FolderOpen size={16} /> Choose osu! folder
                   </button>
                   <button
@@ -908,14 +1017,16 @@ export function App() {
                   currentTrackId={player.track?.id}
                   followCurrentTrackIndex={
                     player.shuffle && queueMatches
-                      ? player.queueIndex ?? undefined
+                      ? (player.queueIndex ?? undefined)
                       : undefined
                   }
                   playing={player.playing}
                   favorites={favorites}
-                  onPlay={(track, index) => player.playTrack(track, query, index)}
+                  onPlay={(track, index) =>
+                    player.playTrack(track, query, index)
+                  }
                   onFavorite={toggleFavorite}
-                  onContextMenu={(track) => api.showTrackContextMenu(track.id)}
+                  onContextMenu={openTrackContextMenu}
                   onTotal={setResultTotal}
                   onFirstTrack={cueFirstTrack}
                 />
@@ -927,7 +1038,8 @@ export function App() {
                 <i />
                 {importing
                   ? summary?.trackCount
-                    ? summary.trackCount.toLocaleString() + " songs loaded · Reading library…"
+                    ? summary.trackCount.toLocaleString() +
+                      " songs loaded · Reading library…"
                     : "Connecting to osu!lazer"
                   : resultTotal.toLocaleString() +
                     (hasFilters ? " songs found" : " songs in your library")}
@@ -940,7 +1052,10 @@ export function App() {
       {player.error && (
         <div className="playback-error" role="alert">
           <span>{player.error}</span>
-          <button aria-label="Dismiss playback error" onClick={player.clearError}>
+          <button
+            aria-label="Dismiss playback error"
+            onClick={player.clearError}
+          >
             <X size={16} />
           </button>
         </div>
@@ -951,6 +1066,19 @@ export function App() {
           Zoom {zoomPercent}%
         </div>
       )}
+
+      {trackContextMenu &&
+        createPortal(
+          <TrackContextMenu
+            track={trackContextMenu.track}
+            x={trackContextMenu.x}
+            y={trackContextMenu.y}
+            info={trackContextMenu.info}
+            onAction={performTrackContextMenuAction}
+            onClose={closeTrackContextMenu}
+          />,
+          document.body,
+        )}
 
       <footer
         className={
@@ -971,7 +1099,11 @@ export function App() {
           <span
             className="seek-tooltip seek-current-tooltip"
             aria-hidden="true"
-            style={{ "--seek-tooltip-position": currentProgress + "%" } as CSSProperties}
+            style={
+              {
+                "--seek-tooltip-position": currentProgress + "%",
+              } as CSSProperties
+            }
           >
             {formatDuration(player.currentTime)} / {formatDuration(duration)}
           </span>
@@ -979,7 +1111,11 @@ export function App() {
             <span
               className="seek-tooltip seek-hover-tooltip"
               aria-hidden="true"
-              style={{ "--seek-tooltip-position": tooltipPosition + "%" } as CSSProperties}
+              style={
+                {
+                  "--seek-tooltip-position": tooltipPosition + "%",
+                } as CSSProperties
+              }
             >
               {formatDuration(seekTooltipPreview.time)}
             </span>
@@ -993,7 +1129,11 @@ export function App() {
             value={Math.min(player.currentTime, duration || 1)}
             disabled={!player.track}
             aria-label="Seek"
-            aria-valuetext={formatDuration(player.currentTime) + " of " + formatDuration(duration)}
+            aria-valuetext={
+              formatDuration(player.currentTime) +
+              " of " +
+              formatDuration(duration)
+            }
             style={
               {
                 "--range-progress": currentProgress + "%",
@@ -1009,7 +1149,9 @@ export function App() {
 
         {transportLayout !== "controls-centered" && (
           <button
-            className={"icon-button shuffle-button " + (player.shuffle ? "active" : "")}
+            className={
+              "icon-button shuffle-button " + (player.shuffle ? "active" : "")
+            }
             aria-label="Shuffle"
             aria-pressed={player.shuffle}
             title={player.shuffle ? "Turn off shuffle" : "Turn on shuffle"}
@@ -1021,7 +1163,9 @@ export function App() {
         <div className="transport-buttons">
           {transportLayout === "controls-centered" && (
             <button
-              className={"icon-button shuffle-button " + (player.shuffle ? "active" : "")}
+              className={
+                "icon-button shuffle-button " + (player.shuffle ? "active" : "")
+              }
               aria-label="Shuffle"
               aria-pressed={player.shuffle}
               title={player.shuffle ? "Turn off shuffle" : "Turn on shuffle"}
@@ -1074,7 +1218,9 @@ export function App() {
           <button
             className={
               "icon-button transport-heart " +
-              (player.track && favorites.has(player.track.id) ? "is-favorite" : "")
+              (player.track && favorites.has(player.track.id)
+                ? "is-favorite"
+                : "")
             }
             disabled={!player.track}
             aria-label={
@@ -1113,11 +1259,19 @@ export function App() {
             <Settings2 size={17} />
           </button>
           <button
-            className={"icon-button sidebar-toggle " + (sidebarHidden ? "" : "active")}
-            aria-label={sidebarHidden ? "Show library sidebar" : "Hide library sidebar"}
+            className={
+              "icon-button sidebar-toggle " + (sidebarHidden ? "" : "active")
+            }
+            aria-label={
+              sidebarHidden ? "Show library sidebar" : "Hide library sidebar"
+            }
             onClick={() => setSidebarHidden((value) => !value)}
           >
-            {sidebarHidden ? <PanelRightOpen size={19} /> : <PanelRightClose size={19} />}
+            {sidebarHidden ? (
+              <PanelRightOpen size={19} />
+            ) : (
+              <PanelRightClose size={19} />
+            )}
           </button>
           <button
             className="icon-button"
@@ -1151,7 +1305,9 @@ export function App() {
           <button
             className="icon-button fullscreen-toggle"
             aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-            title={fullscreen ? "Exit fullscreen (Esc)" : "Fullscreen view (F11)"}
+            title={
+              fullscreen ? "Exit fullscreen (Esc)" : "Fullscreen view (F11)"
+            }
             onClick={() => api.windowControl("fullscreen")}
           >
             {fullscreen ? <Minimize2 size={19} /> : <Maximize2 size={19} />}
@@ -1176,7 +1332,9 @@ export function App() {
         <div className="dialog-heading">
           <div>
             <span className="eyebrow">MAKE YOURSELF AT HOME</span>
-            <h2>{shortcutsOpen ? "Find your flow." : "Your music, your space."}</h2>
+            <h2>
+              {shortcutsOpen ? "Find your flow." : "Your music, your space."}
+            </h2>
           </div>
           <button
             className="icon-button"
@@ -1220,9 +1378,15 @@ export function App() {
               <p className="install-path">
                 {summary?.installPath || "Default osu!lazer installation"}
               </p>
-              <p>Choose the osu!lazer folder that contains your library and files.</p>
+              <p>
+                Choose the osu!lazer folder that contains your library and
+                files.
+              </p>
               <div className="settings-actions">
-                <button className="primary-button" onClick={() => void chooseLibrary()}>
+                <button
+                  className="primary-button"
+                  onClick={() => void chooseLibrary()}
+                >
                   <FolderOpen size={15} /> Choose folder
                 </button>
                 <button
@@ -1241,7 +1405,10 @@ export function App() {
               <span className="settings-label">
                 <SlidersHorizontal size={16} /> BOTTOM BAR LAYOUT
               </span>
-              <div className="transport-layout-options" aria-label="Bottom bar layout">
+              <div
+                className="transport-layout-options"
+                aria-label="Bottom bar layout"
+              >
                 <button
                   type="button"
                   className={
@@ -1270,10 +1437,12 @@ export function App() {
             </div>
             <div className="settings-stats">
               <span>
-                <strong>{summary?.trackCount.toLocaleString() ?? "—"}</strong> songs
+                <strong>{summary?.trackCount.toLocaleString() ?? "—"}</strong>{" "}
+                songs
               </span>
               <span>
-                <strong>{summary?.beatmapCount.toLocaleString() ?? "—"}</strong> beatmaps
+                <strong>{summary?.beatmapCount.toLocaleString() ?? "—"}</strong>{" "}
+                beatmaps
               </span>
               <span>
                 <strong>{summary?.collectionCount ?? "—"}</strong> collections
@@ -1282,8 +1451,8 @@ export function App() {
             <div className="settings-note">
               <Info size={17} />
               <span>
-                Your osu! library is only read. Favorites and player preferences are
-                saved separately in osu! music.
+                Your osu! library is only read. Favorites and player preferences
+                are saved separately in osu! music.
               </span>
             </div>
           </>
@@ -1294,7 +1463,6 @@ export function App() {
           <Sparkles size={15} />
         </div>
       </dialog>
-
     </div>
   );
 }

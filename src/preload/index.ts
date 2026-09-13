@@ -1,5 +1,10 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { LibraryProgress, MediaAction, PlayerAPI } from "../shared/types";
+import type {
+  LibraryProgress,
+  MediaAction,
+  PlayerAPI,
+  TrackContextMenuAction,
+} from "../shared/types";
 
 const api: PlayerAPI = {
   loadLibrary: (installPath) => ipcRenderer.invoke("library:load", installPath),
@@ -71,9 +76,10 @@ const api: PlayerAPI = {
       ipcRenderer.removeListener("window:zoom", callback);
     };
   },
-  showTrackContextMenu: (trackId) => {
-    ipcRenderer.send("track:context-menu", trackId);
-  },
+  getTrackContextMenuInfo: (trackId) =>
+    ipcRenderer.invoke("track:context-info", trackId),
+  performTrackContextMenuAction: (trackId, action: TrackContextMenuAction) =>
+    ipcRenderer.invoke("track:context-action", trackId, action),
   windowControl: (action) => {
     ipcRenderer.send("window:control", action);
   },

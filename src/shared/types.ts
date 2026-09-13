@@ -67,6 +67,31 @@ export interface LibraryPage {
   offset: number;
 }
 
+export interface TrackContextMenuInfo {
+  audio: boolean;
+  background: boolean;
+  video: boolean;
+  listing: boolean;
+}
+
+export type TrackContextMenuAction =
+  | "copy-title"
+  | "copy-title-unicode"
+  | "copy-artist"
+  | "copy-artist-unicode"
+  | "copy-audio"
+  | "copy-audio-path"
+  | "copy-background"
+  | "copy-background-path"
+  | "copy-video"
+  | "copy-video-path"
+  | "copy-online-id"
+  | "copy-md5"
+  | "open-listing"
+  | "open-audio"
+  | "open-background"
+  | "open-video";
+
 export type LibraryProgress =
   | { phase: "downloading" | "reading" | "indexing"; records: number }
   | {
@@ -93,7 +118,13 @@ export interface PlayerAPI {
   onMediaAction: (listener: (action: MediaAction) => void) => () => void;
   onFullscreenChange: (listener: (active: boolean) => void) => () => void;
   onZoomChange: (listener: (percent: number) => void) => () => void;
-  showTrackContextMenu: (trackId: string) => void;
+  getTrackContextMenuInfo: (
+    trackId: string,
+  ) => Promise<TrackContextMenuInfo | null>;
+  performTrackContextMenuAction: (
+    trackId: string,
+    action: TrackContextMenuAction,
+  ) => Promise<void>;
   windowControl: (action: "minimize" | "maximize" | "fullscreen" | "close") => void;
   platform: string;
 }

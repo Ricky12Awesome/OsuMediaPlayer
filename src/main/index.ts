@@ -12,7 +12,13 @@ import {
 } from "electron";
 import { readFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
-import type { LibraryQuery, MediaAction, Track } from "../shared/types";
+import type {
+  LibraryQuery,
+  MediaAction,
+  Track,
+  TrackContextMenuAction,
+  TrackContextMenuInfo,
+} from "../shared/types";
 import { LibraryIndex, loadLibraryFromOfu } from "./library";
 import { ensureOfu } from "./ofu";
 import {
@@ -164,17 +170,32 @@ function createWindow(): void {
 
 type TrackAssetKind = "audio" | "background" | "video";
 
-function copyMenuItem(
-  label: string,
-  value: string | undefined,
-): Electron.MenuItemConstructorOptions {
-  return {
-    label,
-    enabled: Boolean(value),
-    click: () => {
-      if (value) clipboard.writeText(value);
-    },
-  };
+const trackContextMenuActions = new Set<TrackContextMenuAction>([
+  "copy-title",
+  "copy-title-unicode",
+  "copy-artist",
+  "copy-artist-unicode",
+  "copy-audio",
+  "copy-audio-path",
+  "copy-background",
+  "copy-background-path",
+  "copy-video",
+  "copy-video-path",
+  "copy-online-id",
+  "copy-md5",
+  "open-listing",
+  "open-audio",
+  "open-background",
+  "open-video",
+]);
+
+function isTrackContextMenuAction(
+  value: unknown,
+): value is TrackContextMenuAction {
+  return (
+    typeof value === "string" &&
+    trackContextMenuActions.has(value as TrackContextMenuAction)
+  );
 }
 
 function assetHashForTrack(
@@ -210,19 +231,6 @@ async function copyAssetData(asset: ResolvedMediaFile): Promise<void> {
   ]);
 }
 
-function copyAssetDataItem(
-  label: string,
-  asset: ResolvedMediaFile | null,
-): Electron.MenuItemConstructorOptions {
-  return {
-    label,
-    enabled: Boolean(asset),
-    click: () => {
-      if (asset) void copyAssetData(asset).catch(() => {});
-    },
-  };
-}
-
 function openAsset(asset: ResolvedMediaFile | null): void {
   if (!asset) return;
   void shell.openPath(asset.filename).catch(() => {
@@ -230,73 +238,52 @@ function openAsset(asset: ResolvedMediaFile | null): void {
   });
 }
 
-async function showTrackContextMenu(track: Track): Promise<void> {
-  const targetWindow = window;
-  const index = library;
-  if (!targetWindow || targetWindow.isDestroyed() || !index) return;
-
+async function getTrackContextMenuInfo(
+  index: LibraryIndex,
+  track: Track,
+): Promise<TrackContextMenuInfo> {
   const [audio, background, video] = await Promise.all([
     resolveTrackAsset(index, track, "audio"),
     resolveTrackAsset(index, track, "background"),
     resolveTrackAsset(index, track, "video"),
   ]);
-  if (targetWindow.isDestroyed()) return;
+  return {
+    audio: Boolean(audio),
+    background: Boolean(background),
+    video: Boolean(video),
+    listing: track.onlineId !== undefined,
+  };
+}
 
-  const menu = Menu.buildFromTemplate([
-    {
-      label: "Copy",
-      submenu: [
-        copyMenuItem("Title", track.title),
-        copyMenuItem("Title Unicode", track.titleUnicode),
-        copyMenuItem("Artist", track.artist),
-        copyMenuItem("Artist Unicode", track.artistUnicode),
-        copyAssetDataItem("Audio", audio),
-        copyMenuItem("Audio path", audio?.filename),
-        copyAssetDataItem("Background", background),
-        copyMenuItem("Background path", background?.filename),
-        copyAssetDataItem("Video", video),
-        copyMenuItem("Video path", video?.filename),
-        copyMenuItem(
-          "Online Id",
-          track.onlineId === undefined ? undefined : String(track.onlineId),
-        ),
-        copyMenuItem("MD5 Hash", track.md5Hash),
-      ],
-    },
-    {
-      label: "Open",
-      submenu: [
-        {
-          label: "Listing",
-          enabled: track.onlineId !== undefined,
-          click: () => {
-            if (track.onlineId === undefined) return;
-            void shell
-              .openExternal(`https://osu.ppy.sh/beatmapsets/${track.onlineId}`)
-              .catch(() => {
-                /* The default browser may be unavailable while closing. */
-              });
-          },
-        },
-        {
-          label: "Audio",
-          enabled: Boolean(audio),
-          click: () => openAsset(audio),
-        },
-        {
-          label: "Background",
-          enabled: Boolean(background),
-          click: () => openAsset(background),
-        },
-        {
-          label: "Video",
-          enabled: Boolean(video),
-          click: () => openAsset(video),
-        },
-      ],
-    },
-  ]);
-  menu.popup({ window: targetWindow });
+function copyTextForAction(
+  track: Track,
+  action: TrackContextMenuAction,
+): string | undefined {
+  switch (action) {
+    case "copy-title":
+      return track.title;
+    case "copy-title-unicode":
+      return track.titleUnicode;
+    case "copy-artist":
+      return track.artist;
+    case "copy-artist-unicode":
+      return track.artistUnicode;
+    case "copy-online-id":
+      return track.onlineId === undefined ? undefined : String(track.onlineId);
+    case "copy-md5":
+      return track.md5Hash;
+    default:
+      return undefined;
+  }
+}
+
+function assetKindForAction(
+  action: TrackContextMenuAction,
+): TrackAssetKind | undefined {
+  if (action.includes("audio")) return "audio";
+  if (action.includes("background")) return "background";
+  if (action.includes("video")) return "video";
+  return undefined;
 }
 
 function setupIPC(): void {
@@ -389,11 +376,51 @@ function setupIPC(): void {
     });
     return result.canceled ? null : (result.filePaths[0] ?? null);
   });
-  ipcMain.on("track:context-menu", (event, id: unknown) => {
-    if (!isTrusted(event) || typeof id !== "string") return;
-    const track = library?.getTrack(id);
-    if (track) void showTrackContextMenu(track);
+  ipcMain.handle("track:context-info", async (event, id: unknown) => {
+    requireTrusted(event);
+    if (typeof id !== "string" || !library) return null;
+    const track = library.getTrack(id);
+    return track ? getTrackContextMenuInfo(library, track) : null;
   });
+  ipcMain.handle(
+    "track:context-action",
+    async (event, id: unknown, action: unknown) => {
+      requireTrusted(event);
+      if (
+        typeof id !== "string" ||
+        !library ||
+        !isTrackContextMenuAction(action)
+      )
+        return;
+      const track = library.getTrack(id);
+      if (!track) return;
+
+      if (action === "open-listing") {
+        if (track.onlineId === undefined) return;
+        await shell.openExternal(
+          `https://osu.ppy.sh/beatmapsets/${track.onlineId}`,
+        );
+        return;
+      }
+
+      const kind = assetKindForAction(action);
+      if (!kind) {
+        const value = copyTextForAction(track, action);
+        if (value !== undefined) await clipboard.writeText(value);
+        return;
+      }
+
+      const asset = await resolveTrackAsset(library, track, kind);
+      if (!asset) return;
+      if (action.endsWith("-path")) {
+        await clipboard.writeText(asset.filename);
+      } else if (action.startsWith("copy-")) {
+        await copyAssetData(asset);
+      } else {
+        openAsset(asset);
+      }
+    },
+  );
   ipcMain.on("window:control", (event, action: unknown) => {
     if (!isTrusted(event) || !window) return;
     if (action === "minimize") window.minimize();
