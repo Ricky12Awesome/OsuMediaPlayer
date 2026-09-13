@@ -28,6 +28,8 @@ import {
   Pause,
   Play,
   RefreshCw,
+  Repeat,
+  Repeat1,
   Search,
   Settings2,
   Shuffle,
@@ -1196,6 +1198,34 @@ export function App() {
             onClick={() => void player.next()}
           >
             <SkipForward size={20} fill="currentColor" />
+          </button>
+          <button
+            className={
+              "icon-button repeat-button " +
+              (player.repeat !== "off" ? "active" : "")
+            }
+            aria-label={
+              player.repeat === "one"
+                ? "Repeat one"
+                : player.repeat === "all"
+                  ? "Repeat all"
+                  : "Repeat off"
+            }
+            aria-pressed={player.repeat !== "off"}
+            title={
+              player.repeat === "one"
+                ? "Repeat one"
+                : player.repeat === "all"
+                  ? "Repeat all"
+                  : "Repeat off"
+            }
+            onClick={player.cycleRepeat}
+          >
+            {player.repeat === "one" ? (
+              <Repeat1 size={17} />
+            ) : (
+              <Repeat size={17} />
+            )}
           </button>
         </div>
 

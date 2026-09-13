@@ -202,10 +202,6 @@
   .shuffle-button svg {
     width: 17px;
   }
-  .transport-controls-centered .transport-buttons:after {
-    flex-basis: 22px;
-    width: 22px;
-  }
   .transport-buttons .skip-button > svg {
     transform: translate(-2px);
   }
