@@ -525,6 +525,24 @@ export function App() {
         player.toggle();
         return;
       }
+      if (
+        !settingsOpen &&
+        !shortcutsOpen &&
+        !target?.closest(".facet-picker, .sort-picker") &&
+        !target?.matches("input[type='range']") &&
+        (event.key === "ArrowUp" || event.key === "ArrowDown") &&
+        !event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        trackListKeyboardRef.current
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        trackListKeyboardRef.current.moveAndPlay(
+          event.key === "ArrowUp" ? -1 : 1,
+        );
+        return;
+      }
       if (settingsOpen || shortcutsOpen || editing) return;
       if (
         event.key === "F2" &&
@@ -1172,9 +1190,7 @@ export function App() {
                   revision={revision}
                   currentTrackId={player.track?.id}
                   followCurrentTrackIndex={
-                    player.shuffle && queueMatches
-                      ? (player.queueIndex ?? undefined)
-                      : undefined
+                    queueMatches ? (player.queueIndex ?? undefined) : undefined
                   }
                   playing={player.playing}
                   favorites={favorites}

@@ -365,7 +365,7 @@ export function VirtualTrackList({
         Math.min(total - 1, selectedIndex.current + direction),
       );
       focusList();
-      select(next);
+      select(next, true);
       choose(next);
     },
     [choose, focusList, select, total],
@@ -418,7 +418,7 @@ export function VirtualTrackList({
 
     event.preventDefault();
     event.stopPropagation();
-    select(next);
+    select(next, event.key === "ArrowDown" || event.key === "ArrowUp");
     if (event.key === "ArrowDown" || event.key === "ArrowUp")
       keyboardNavigation.current = true;
   };
