@@ -465,11 +465,12 @@ export function App() {
 
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
+      const target = event.target instanceof HTMLElement ? event.target : null;
       const editing =
         target &&
         (["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(target.tagName) ||
           target.isContentEditable);
+      const inTransport = Boolean(target?.closest(".transport"));
       if (event.key === "F11") {
         event.preventDefault();
         api.windowControl("fullscreen");
@@ -496,6 +497,32 @@ export function App() {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();
         setSidebarHidden((value) => !value);
+        return;
+      }
+      if (
+        !settingsOpen &&
+        !shortcutsOpen &&
+        event.key === "Tab" &&
+        !event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey
+      ) {
+        event.preventDefault();
+        target?.blur();
+        setShowNowPlayingTitleArtist((value) => !value);
+        return;
+      }
+      if (
+        inTransport &&
+        event.code === "Space" &&
+        !event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.shiftKey
+      ) {
+        event.preventDefault();
+        target?.blur();
+        player.toggle();
         return;
       }
       if (settingsOpen || shortcutsOpen || editing) return;
@@ -541,14 +568,6 @@ export function App() {
       ) {
         event.preventDefault();
         void player.next();
-      } else if (
-        !event.altKey &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        event.key === "Tab"
-      ) {
-        event.preventDefault();
-        setShowNowPlayingTitleArtist((value) => !value);
       } else if (event.key.toLowerCase() === "m") player.toggleMute();
       else if (event.key === "?") setShortcutsOpen(true);
     };
