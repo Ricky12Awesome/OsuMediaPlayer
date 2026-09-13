@@ -1,6 +1,6 @@
 {
   "name": "osu-media-player",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
   "description": "A osu!lazer music player",
   "author": "Ricky12Awesome",
@@ -44,6 +44,7 @@
     "directories": {
       "output": "release"
     },
+    "artifactName": "${productName}-${os}-${arch}.${ext}",
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
@@ -51,6 +52,7 @@
     ],
     "afterPack": "dist-electron/bundle-ofu.cjs",
     "linux": {
+      "artifactName": "${productName}-${os}-x64.${ext}",
       "target": [
         {
           "target": "AppImage",
