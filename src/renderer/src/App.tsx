@@ -56,6 +56,7 @@ import type {
 } from "../../shared/types";
 import { FacetPicker } from "./FacetPicker";
 import { SortPicker } from "./SortPicker";
+import { TrackArt } from "./TrackArt";
 import { TrackContextMenu } from "./TrackContextMenu";
 import { VirtualTrackList } from "./VirtualTrackList";
 import { usePlayer } from "./usePlayer";
@@ -1244,6 +1245,11 @@ export function App() {
         </div>
 
         <div className="transport-track">
+          <TrackArt
+            className="transport-track-art"
+            track={player.track}
+            playing={false}
+          />
           <div className="transport-track-text">
             <strong title={player.track?.title}>
               {player.track?.title || "Your soundtrack starts here"}

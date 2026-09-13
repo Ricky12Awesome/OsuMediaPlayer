@@ -17,6 +17,7 @@ import {
   SearchX,
 } from "lucide-react";
 import type { LibraryQuery, PlayerAPI, Track } from "../../shared/types";
+import { TrackArt } from "./TrackArt";
 
 const pageSize = 64;
 const pageCacheLimit = 8;
@@ -27,38 +28,6 @@ const rowHeight = 86;
 function formatDuration(value: number): string {
   const seconds = Math.max(0, Math.round(Number.isFinite(value) ? value : 0));
   return Math.floor(seconds / 60) + ":" + String(seconds % 60).padStart(2, "0");
-}
-
-function TrackArt({ track, playing }: { track: Track; playing: boolean }) {
-  const [failedArtwork, setFailedArtwork] = useState<string | undefined>();
-  const hasArtwork =
-    Boolean(track.artworkUrl) && failedArtwork !== track.artworkUrl;
-
-  return (
-    <div
-      className={"track-art" + (hasArtwork ? "" : " art-fallback")}
-      aria-hidden="true"
-    >
-      {hasArtwork ? (
-        <img
-          src={track.artworkUrl}
-          alt=""
-          loading="lazy"
-          decoding="async"
-          onError={() => setFailedArtwork(track.artworkUrl)}
-        />
-      ) : (
-        <Music2 size={22} />
-      )}
-      {playing && (
-        <span className="playing-bars">
-          <span />
-          <span />
-          <span />
-        </span>
-      )}
-    </div>
-  );
 }
 
 type LibraryCache = {

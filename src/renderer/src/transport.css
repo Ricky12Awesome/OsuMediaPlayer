@@ -57,6 +57,15 @@
   display: flex;
   overflow: hidden;
 }
+.transport-track .track-art {
+  width: 38px;
+  height: 38px;
+  border-radius: 6px;
+}
+.transport-track .track-art svg {
+  width: 18px;
+  height: 18px;
+}
 .transport-controls-centered .transport-track {
   grid-area: 1/1;
   justify-content: flex-start;
