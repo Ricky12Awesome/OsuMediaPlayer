@@ -7,17 +7,16 @@ This project is still in early stages and will have bugs
 ## Current Features
 - System Media Controls 
 - Background art of current song (if map has one)
-- Optional dark theme tinted from the current song's background art
 - Video playback (if map supports it)
+- Dynamic Theming 
 - Search (collections, tags, etc)
-- Shuffle
+- Shuffle and Repeat
 - Fullscreen mode
 
 ## Planned Features
 these are features I want to add in the future
 
 - Audio Visualizer
-- Dynamic Theming based on what's currently playing
 - Storyboards (might be difficult to do)
 
 ## Development
