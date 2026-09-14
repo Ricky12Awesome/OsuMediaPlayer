@@ -12,11 +12,12 @@ This project is still in early stages and will have bugs
 - Search (collections, tags, etc)
 - Shuffle and Repeat
 - Fullscreen mode
+- Audio Visualzier (WIP, will probably be rewritten by hand)
 
 ## Planned Features
 these are features I want to add in the future
 
-- Audio Visualizer
+- Custom Audio Visualizers (API)
 - Storyboards (might be difficult to do)
 
 ## Development
