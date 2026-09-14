@@ -1,0 +1,179 @@
+import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { join } from "node:path";
+import test from "node:test";
+import { build } from "esbuild";
+import Realm from "realm";
+import { Schema } from "../src/shared/client-model";
+import { LibraryIndex, loadLibraryFromRealm } from "../src/main/library";
+import type { loadLibraryInWorker } from "../src/main/library-loader";
+import type { SortKey } from "../src/shared/types";
+
+test("worker imports Realm and transfers every sort order; errors and cancellation reject", async () => {
+  const directory = await mkdtemp(join(process.cwd(), ".worker-test-"));
+  try {
+    await build({
+      entryPoints: ["src/main/library-worker.ts", "src/main/library-loader.ts"],
+      outdir: directory,
+      outExtension: { ".js": ".cjs" },
+      bundle: true,
+      platform: "node",
+      format: "cjs",
+      external: ["realm"],
+    });
+    const load: typeof loadLibraryInWorker = createRequire(import.meta.url)(
+      join(directory, "library-loader.cjs"),
+    ).loadLibraryInWorker;
+    const fixture = new Realm({
+      path: join(directory, "client.realm"),
+      schema: Schema,
+      schemaVersion: 52,
+    });
+    fixture.write(() => {
+      for (let i = 0; i < 3; i++) {
+        const set = fixture.create("BeatmapSet", {
+          ID: new Realm.BSON.UUID(),
+          OnlineID: i + 1,
+          DateAdded: new Date(),
+          Status: 0,
+          DeletePending: false,
+          Protected: false,
+          Files: [
+            { Filename: "song.mp3", File: { Hash: String(i + 1).repeat(64) } },
+          ],
+          Beatmaps: [
+            {
+              ID: new Realm.BSON.UUID(),
+              MD5Hash: String(i + 1).repeat(32),
+              Status: 0,
+              OnlineID: i + 1,
+              Hidden: false,
+              EndTimeObjectCount: 0,
+              TotalObjectCount: 0,
+              BeatDivisor: 4,
+              Length: (3 - i) * 60000,
+              BPM: 100 + i,
+              StarRating: 5 - i,
+              LastLocalUpdate: new Date(2025, 0, i + 1),
+              Metadata: {
+                PreviewTime: 0,
+                Title: ["Zulu", "Alpha", "Middle"][i],
+                Artist: ["B", "C", "A"][i],
+                AudioFile: "song.mp3",
+                Tags: ["rock", "pop", "jazz"][i],
+              },
+            },
+          ],
+        }) as unknown as { Beatmaps: { BeatmapSet: unknown }[] };
+        set.Beatmaps[0].BeatmapSet = set;
+      }
+    });
+    fixture.close();
+    const direct = await loadLibraryFromRealm(directory);
+    try {
+      const progress: unknown[] = [];
+      const batches: { index: LibraryIndex; indexingStarted: boolean }[] = [];
+      let indexingStarted = false;
+      const loaded = await load(
+        directory,
+        (value) => {
+          progress.push(value);
+          indexingStarted ||= value.phase === "indexing";
+        },
+        undefined,
+        (index) =>
+          batches.push({
+            index: LibraryIndex.fromSnapshot(structuredClone(index.snapshot())),
+            indexingStarted,
+          }),
+      );
+      assert.ok(batches.length >= 2);
+      assert.equal(batches[0].index.summary.trackCount, 1);
+      assert.equal(batches[0].index.query().total, 1);
+      assert.equal(batches[0].indexingStarted, false);
+      assert.deepEqual(batches.at(-1)!.index.summary, loaded.summary);
+      assert.deepEqual(batches.at(-1)!.index.query(), loaded.query());
+      assert.equal(loaded.summary.trackCount, 3);
+      assert.ok(progress.length);
+      assert.equal(loaded.snapshot().orders.size, 16);
+      for (const sort of [
+        "title",
+        "artist",
+        "duration",
+        "bpm",
+        "added",
+        "stars",
+        "collection",
+        "tags",
+      ] as SortKey[]) {
+        for (const descending of [false, true]) {
+          assert.deepEqual(
+            loaded.query({ sort, descending }),
+            direct.query({ sort, descending }),
+          );
+          assert.deepEqual(
+            loaded.query({ sort, descending, tags: ["rock"] }),
+            direct.query({ sort, descending, tags: ["rock"] }),
+          );
+        }
+      }
+      assert.deepEqual(loaded.assets, direct.assets);
+      assert.deepEqual(
+        loaded.getTrack(loaded.query().items[0].id),
+        direct.query().items[0],
+      );
+    } finally {
+      direct.close();
+    }
+    // Cancellation during reading and sorting must wait for graceful worker exit.
+    for (const phase of ["reading", "indexing"] as const) {
+      const controller = new AbortController();
+      const cancel = () =>
+        controller.abort(new Error(`Cancelled during ${phase}`));
+      await assert.rejects(
+        load(
+          directory,
+          (value) => {
+            if (phase === "indexing" && value.phase === "indexing") cancel();
+          },
+          controller.signal,
+          () => {
+            if (phase === "reading") cancel();
+          },
+        ),
+        new RegExp(`Cancelled during ${phase}`),
+      );
+      // Reopening immediately after rejection verifies the worker released Realm.
+      const reopened = await loadLibraryFromRealm(directory);
+      reopened.close();
+    }
+    const sorting = await loadLibraryFromRealm(directory);
+    try {
+      let checks = 0;
+      await assert.rejects(
+        () =>
+          sorting.prepareSortOrders({
+            throwIfAborted() {
+              if (++checks === 5) throw new Error("Interrupted sort traversal");
+            },
+          }),
+        /Interrupted sort traversal/,
+      );
+    } finally {
+      sorting.close();
+    }
+    await assert.rejects(load(join(directory, "missing")));
+    const controller = new AbortController();
+    const pending = load(directory, undefined, controller.signal);
+    controller.abort(new Error("Cancelled test import"));
+    await assert.rejects(pending, /Cancelled test import/);
+    await assert.rejects(
+      load(directory, undefined, controller.signal),
+      /Cancelled test import/,
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+    Realm.shutdown();
+  }
+});

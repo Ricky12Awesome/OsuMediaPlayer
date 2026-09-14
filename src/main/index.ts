@@ -19,7 +19,8 @@ import type {
   TrackContextMenuAction,
   TrackContextMenuInfo,
 } from "../shared/types";
-import { LibraryIndex, loadLibraryFromRealm } from "./library";
+import { LibraryIndex } from "./library";
+import { loadLibraryInWorker, waitForLibraryWorkers } from "./library-loader";
 import {
   mimeForFilename,
   resolveMediaFile,
@@ -293,6 +294,7 @@ function assetKindForAction(
 function setupIPC(): void {
   ipcMain.handle("library:load", async (event, requestedPath: unknown) => {
     requireTrusted(event);
+    if (quitting) throw new Error("The player is closing.");
     if (
       requestedPath !== undefined &&
       (typeof requestedPath !== "string" || !isAbsolute(requestedPath))
@@ -308,7 +310,7 @@ function setupIPC(): void {
     importController = new AbortController();
     pendingPath = installPath;
     const previousLibrary = library;
-    pendingLoad = loadLibraryFromRealm(
+    pendingLoad = loadLibraryInWorker(
       installPath,
       (progress) => {
         if (window && !window.isDestroyed())
@@ -316,7 +318,7 @@ function setupIPC(): void {
       },
       importController!.signal,
       (index) => {
-        // Keep the previous index alive until the new Realm has finished loading.
+        // Keep the previous library available for rollback if streaming fails.
         // If loading is cancelled, the callback can then restore it.
         library = index;
         if (window && !window.isDestroyed())
@@ -338,8 +340,7 @@ function setupIPC(): void {
       replaceLibrary(loaded);
       return loaded.summary;
     } catch (error) {
-      // loadLibraryFromRealm closes its Realm when it fails or is cancelled.
-      // Do not leave IPC queries pointed at a closed preview index.
+      // Restore the previous library if the new import fails or is cancelled.
       if (previousLibrary) library = previousLibrary;
       else library = null;
       throw error;
@@ -513,11 +514,21 @@ void app.whenReady().then(() => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
-app.on("before-quit", () => {
+let quitReady = false;
+let quitting = false;
+app.on("before-quit", (event) => {
+  if (quitReady) return;
+  event.preventDefault();
+  if (quitting) return;
+  quitting = true;
   importController?.abort();
   videoTranscoder?.dispose();
-  library?.close();
-  library = null;
+  void waitForLibraryWorkers().then(() => {
+    library?.close();
+    library = null;
+    quitReady = true;
+    app.quit();
+  });
 });
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();

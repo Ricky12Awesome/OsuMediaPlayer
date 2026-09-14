@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/*.test.ts",
     "test:e2e": "npm run build && node tests/electron.e2e.mjs",
+    "test:streaming": "npm run build && node --import tsx tests/library-streaming.e2e.ts",
     "format": "prettier --write src tests scripts *.json *.ts README.md",
     "package": "npm run build && electron-builder"
   },
