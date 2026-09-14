@@ -6,8 +6,8 @@
   pointer-events: none;
   transform: translateX(-50%);
   color: #f8e9f4;
-  background: #2a2032e8;
-  border: 1px solid #ffffff18;
+  background: var(--panel-muted);
+  border: 1px solid var(--border);
   border-radius: 999px;
   padding: 8px 12px;
   font-size: 11px;

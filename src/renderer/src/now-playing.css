@@ -2,7 +2,7 @@
 
 .now-playing-panel {
   isolation: isolate;
-  background: #19141f;
+  background: var(--now-playing-background);
   flex-direction: column;
   min-width: 0;
   min-height: 0;
@@ -18,15 +18,21 @@
 }
 .artwork-stage {
   isolation: isolate;
-  background:
-    radial-gradient(at 67% 17%, #8a4a79 0%, #0000 60%),
-    radial-gradient(at 13% 67%, #524b83 0%, #0000 60%), #292339;
+  background: var(--artwork-background);
   border: 0;
   border-radius: 0;
   position: absolute;
   inset: 0;
   overflow: hidden;
   box-shadow: 0 12px 40px #00000020;
+}
+.artwork-stage::after {
+  content: "";
+  z-index: -2;
+  pointer-events: none;
+  background: var(--artwork-overlay);
+  position: absolute;
+  inset: 0;
 }
 .hero-background {
   object-fit: cover;

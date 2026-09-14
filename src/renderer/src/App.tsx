@@ -29,6 +29,7 @@ import {
   PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
+  Palette,
   Pause,
   Play,
   RefreshCw,
@@ -61,6 +62,7 @@ import { FacetPicker } from "./FacetPicker";
 import { SortPicker } from "./SortPicker";
 import { TrackArt } from "./TrackArt";
 import { TrackContextMenu } from "./TrackContextMenu";
+import { extractArtworkTheme, type ArtworkTheme } from "./artwork-theme";
 import {
   VirtualTrackList,
   type VirtualTrackListKeyboardControls,
@@ -211,6 +213,13 @@ export function App() {
   const [showNowPlayingTitleArtist, setShowNowPlayingTitleArtist] = useState(
     () => readStorage("osu-music-show-now-playing-title-artist", true),
   );
+  const [artworkThemeEnabled, setArtworkThemeEnabled] = useState(() =>
+    readStorage("osu-music-artwork-theme", true),
+  );
+  const [artworkTheme, setArtworkTheme] = useState<{
+    url: string;
+    theme: ArtworkTheme;
+  } | null>(null);
   const [libraryWidth, setLibraryWidth] = useState(() => {
     const value = readStorage("osu-music-library-width", 430);
     return Number.isFinite(value) ? Math.min(720, Math.max(320, value)) : 430;
@@ -404,9 +413,66 @@ export function App() {
     [showNowPlayingTitleArtist],
   );
   useEffect(
+    () => writeStorage("osu-music-artwork-theme", artworkThemeEnabled),
+    [artworkThemeEnabled],
+  );
+  useEffect(
     () => writeStorage("osu-music-now-playing-position", captionPosition),
     [captionPosition],
   );
+
+  useEffect(() => {
+    const artworkUrl = player.track?.artworkUrl;
+    if (!artworkThemeEnabled || !artworkUrl) {
+      setArtworkTheme(null);
+      return;
+    }
+
+    let cancelled = false;
+    const image = new Image();
+    image.crossOrigin = "anonymous";
+    const applyTheme = () => {
+      if (cancelled) return;
+      const theme = extractArtworkTheme(image);
+      setArtworkTheme(theme ? { url: artworkUrl, theme } : null);
+    };
+    image.onload = applyTheme;
+    image.onerror = () => {
+      if (!cancelled) setArtworkTheme(null);
+    };
+    image.src = artworkUrl;
+
+    return () => {
+      cancelled = true;
+      image.onload = null;
+      image.onerror = null;
+    };
+  }, [artworkThemeEnabled, player.track?.artworkUrl]);
+
+  const activeArtworkTheme =
+    artworkThemeEnabled &&
+    artworkTheme &&
+    artworkTheme.url === player.track?.artworkUrl
+      ? artworkTheme.theme
+      : null;
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const variables = activeArtworkTheme?.variables ?? {};
+    const previous = new Map<string, string>();
+    const entries = Object.entries(variables);
+    for (const [key, value] of entries) {
+      previous.set(key, root.style.getPropertyValue(key));
+      root.style.setProperty(key, value);
+    }
+    return () => {
+      for (const [key] of entries) {
+        const value = previous.get(key);
+        if (value) root.style.setProperty(key, value);
+        else root.style.removeProperty(key);
+      }
+    };
+  }, [activeArtworkTheme]);
 
   useEffect(
     () => () => {
@@ -876,10 +942,12 @@ export function App() {
     <div
       className={
         "app-shell " +
+        (activeArtworkTheme ? "dynamic-theme " : "") +
         (player.playing ? "is-playing " : "") +
         (fullscreen ? "is-fullscreen " : "") +
         (controlsVisible ? "fullscreen-controls-visible" : "")
       }
+      style={activeArtworkTheme?.variables as CSSProperties | undefined}
       onPointerLeave={() => fullscreen && setControlsVisible(false)}
     >
       <div className="workspace">
@@ -1679,6 +1747,30 @@ export function App() {
                   <span>Track details left</span>
                 </button>
               </div>
+            </div>
+            <div className="settings-block artwork-theme-setting">
+              <span className="settings-label">
+                <Palette size={16} /> APPEARANCE
+              </span>
+              <button
+                type="button"
+                className={
+                  "settings-toggle " + (artworkThemeEnabled ? "active" : "")
+                }
+                aria-pressed={artworkThemeEnabled}
+                onClick={() => setArtworkThemeEnabled((value) => !value)}
+              >
+                <span className="settings-toggle-copy">
+                  <strong>Match artwork colors</strong>
+                  <span>
+                    Keep the player dark while tinting it from the current
+                    song&apos;s background art
+                  </span>
+                </span>
+                <span className="settings-toggle-status">
+                  {artworkThemeEnabled ? "On" : "Off"}
+                </span>
+              </button>
             </div>
             <div className="settings-block now-playing-display-setting">
               <span className="settings-label">

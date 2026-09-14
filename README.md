@@ -7,6 +7,7 @@ This project is still in early stages and will have bugs
 ## Current Features
 - System Media Controls 
 - Background art of current song (if map has one)
+- Optional dark theme tinted from the current song's background art
 - Video playback (if map supports it)
 - Search (collections, tags, etc)
 - Shuffle

@@ -35,8 +35,8 @@
       to right,
       transparent 0%,
       transparent var(--range-preview-start),
-      #ffb3d5 var(--range-preview-start),
-      #ffb3d5 var(--range-preview-end),
+      var(--pink-pale) var(--range-preview-start),
+      var(--pink-pale) var(--range-preview-end),
       transparent var(--range-preview-end),
       transparent 100%
     ),
@@ -44,7 +44,7 @@
       to right,
       var(--pink) 0%,
       var(--pink) var(--range-progress),
-      #44364d var(--range-progress),
-      #44364d 100%
+      var(--range-track) var(--range-progress),
+      var(--range-track) 100%
     );
 }
