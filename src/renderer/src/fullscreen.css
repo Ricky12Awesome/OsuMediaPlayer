@@ -42,7 +42,7 @@
 }
 .is-fullscreen .hero-video {
   object-fit: contain;
-  background: #08060b;
+  background: var(--app-background);
 }
 .is-fullscreen .hero-video.is-active {
   opacity: 1;
@@ -80,8 +80,8 @@
 }
 .is-fullscreen .transport {
   box-shadow: none;
-  background: #171020;
-  border-top-color: #ffffff09;
+  background: var(--transport-background);
+  border-top-color: var(--border);
   transition:
     transform 0.24s,
     opacity 0.2s;

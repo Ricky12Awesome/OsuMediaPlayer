@@ -42,8 +42,8 @@
   z-index: 40;
   color: #e9ddec;
   isolation: isolate;
-  background: linear-gradient(145deg, #282032, #211b29);
-  border: 1px solid #ffffff18;
+  background: linear-gradient(145deg, var(--panel-option), var(--panel-raised));
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 6px;
   position: fixed;
@@ -79,15 +79,15 @@
   overflow: hidden;
 }
 .sort-picker-option > svg {
-  color: #f6a;
+  color: var(--pink);
   flex-shrink: 0;
 }
 .sort-picker-option:hover,
 .sort-picker-option.is-active {
-  color: #f8d6e8;
-  background: #ff66aa15;
+  color: var(--pink-pale);
+  background: rgb(var(--pink-rgb) / 0.08);
 }
 .sort-picker-option[aria-selected="true"] {
-  color: #ff9aca;
-  background: #ff66aa0d;
+  color: var(--pink-bright);
+  background: rgb(var(--pink-rgb) / 0.05);
 }

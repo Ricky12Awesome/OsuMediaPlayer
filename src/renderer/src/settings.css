@@ -2,8 +2,8 @@
 
 .settings-dialog {
   color: #eaddf0;
-  background: #211b29;
-  border: 1px solid #ffffff12;
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
   border-radius: 16px;
   width: min(470px, 100vw - 32px);
   max-height: 90dvh;
@@ -46,8 +46,8 @@
 .settings-block > p.install-path {
   color: #d5bbdf;
   overflow-wrap: anywhere;
-  background: #15101c;
-  border: 1px solid #ffffff06;
+  background: var(--panel-deep);
+  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 12px;
   font-family: monospace;
@@ -69,8 +69,8 @@
 .transport-layout-option {
   color: #927e9e;
   text-align: left;
-  background: #15101c;
-  border: 1px solid #ffffff0d;
+  background: var(--panel-deep);
+  border: 1px solid var(--border);
   border-radius: 7px;
   flex-direction: column;
   gap: 4px;
@@ -88,26 +88,27 @@
   font-size: 9px;
 }
 .transport-layout-option:hover {
-  background: #ffffff0a;
+  background: rgb(255 255 255 / 0.04);
 }
 .transport-layout-option.active {
-  background: #f6a1;
-  border-color: #f6a6;
+  background: rgb(var(--pink-rgb) / 0.1);
+  border-color: var(--pink);
 }
 .transport-layout-option.active strong {
-  color: #ffd0e5;
+  color: var(--pink-text);
 }
 .transport-layout-option.active span {
-  color: #e7a6c5;
+  color: var(--pink-text);
 }
+.artwork-theme-setting,
 .now-playing-display-setting {
   margin-top: 24px;
 }
 .settings-toggle {
   color: #927e9e;
   text-align: left;
-  background: #15101c;
-  border: 1px solid #ffffff0d;
+  background: var(--panel-deep);
+  border: 1px solid var(--border);
   border-radius: 7px;
   justify-content: space-between;
   align-items: center;
@@ -119,11 +120,11 @@
   display: flex;
 }
 .settings-toggle:hover {
-  background: #ffffff0a;
+  background: rgb(255 255 255 / 0.04);
 }
 .settings-toggle.active {
-  background: #f6a1;
-  border-color: #f6a6;
+  background: rgb(var(--pink-rgb) / 0.1);
+  border-color: var(--pink);
 }
 .settings-toggle-copy {
   flex-direction: column;
@@ -148,7 +149,7 @@
 }
 .settings-toggle.active .settings-toggle-copy strong,
 .settings-toggle.active .settings-toggle-status {
-  color: #ffd0e5;
+  color: var(--pink-text);
 }
 .settings-stats {
   border-top: 1px solid var(--border);

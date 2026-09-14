@@ -6,10 +6,41 @@
   text-rendering: optimizelegibility;
   -webkit-font-smoothing: antialiased;
   --pink: #f6a;
+  --pink-rgb: 255 102 170;
+  --pink-bright: #ff85bb;
+  --pink-pale: #ffb3d5;
+  --pink-text: #ffd0e5;
+  --pink-foreground: #fff;
+  --button-foreground: #2c1424;
   --muted: #8d879b;
   --panel: #201d29;
+  --panel-raised: #211b29;
+  --panel-deep: #15101c;
+  --panel-subtle: #221e2b;
+  --panel-option: #28232f;
+  --panel-muted: #2a2032;
+  --error-background: #42283a;
+  --panel-row: #211c280a;
+  --panel-hover: #27202f;
+  --panel-selected: #2b2235;
+  --panel-current: linear-gradient(100deg, #ff66aa1b, #ff66aa0a);
+  --track-art-background: linear-gradient(145deg, #644b78, #31283a);
+  --placeholder-art-background: #28202f;
+  --placeholder-title-background: #302536;
+  --placeholder-artist-background: #2b2231;
   --border: #ffffff0d;
-  background: #15131c;
+  --app-background: #15131c;
+  --now-playing-background: #19141f;
+  --library-background: #1d1925f7;
+  --transport-background: #211b29;
+  --range-track: #44364d;
+  --scrollbar: #49414f;
+  --selection: #f6a6;
+  --artwork-background:
+    radial-gradient(at 67% 17%, #8a4a79 0%, #0000 60%),
+    radial-gradient(at 13% 67%, #524b83 0%, #0000 60%), #292339;
+  --artwork-overlay: linear-gradient(180deg, #0000, #0000);
+  background: var(--app-background);
   font-family:
     Nunito Sans,
     sans-serif;
@@ -70,14 +101,14 @@ a {
   color: inherit;
 }
 ::selection {
-  background: #f6a6;
+  background: var(--selection);
 }
 ::-webkit-scrollbar {
   width: 5px;
   height: 5px;
 }
 ::-webkit-scrollbar-thumb {
-  background: #49414f;
+  background: var(--scrollbar);
   border-radius: 8px;
 }
 ::-webkit-scrollbar-track {
@@ -91,7 +122,7 @@ select {
   cursor: pointer;
 }
 select option {
-  background: #28232f;
+  background: var(--panel-option);
 }
 input[type="range"] {
   cursor: pointer;

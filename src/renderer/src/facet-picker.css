@@ -29,7 +29,7 @@
   color: #ead7e9;
 }
 .facet-picker-trigger.has-value {
-  color: #f2a4ca;
+  color: var(--pink-text);
 }
 .facet-picker-trigger > svg {
   flex-shrink: 0;
@@ -52,7 +52,7 @@
 .facet-picker-count {
   color: #cfa4c0;
   font-variant-numeric: tabular-nums;
-  background: #ff66aa12;
+  background: rgb(var(--pink-rgb) / 0.07);
   border-radius: 4px;
   flex-shrink: 0;
   padding: 1px 4px;
@@ -62,8 +62,8 @@
   z-index: 40;
   color: #e9ddec;
   isolation: isolate;
-  background: #211b29;
-  border: 1px solid #ffffff16;
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 9px;
   font-family:
@@ -74,8 +74,8 @@
 }
 .facet-picker-search {
   color: #8e729d;
-  background: #17121e;
-  border: 1px solid #ffffff0b;
+  background: var(--panel-deep);
+  border: 1px solid var(--border);
   border-radius: 5px;
   align-items: center;
   gap: 7px;
@@ -85,7 +85,7 @@
   display: flex;
 }
 .facet-picker-search:focus-within {
-  border-color: #f6a5;
+  border-color: var(--pink);
 }
 .facet-picker-search > svg {
   flex-shrink: 0;
@@ -145,15 +145,15 @@
   font-size: 9px;
 }
 .facet-picker-option > svg {
-  color: #f6a;
+  color: var(--pink);
   flex-shrink: 0;
 }
 .facet-picker-option.is-active {
-  color: #f8d6e8;
-  background: #ff66aa15;
+  color: var(--pink-pale);
+  background: rgb(var(--pink-rgb) / 0.08);
 }
 .facet-picker-option[aria-selected="true"] {
-  color: #ff9aca;
+  color: var(--pink-bright);
 }
 .facet-picker-all {
   border-bottom: 1px solid #ffffff08;
