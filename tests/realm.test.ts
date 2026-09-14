@@ -131,6 +131,16 @@ test("imports linked Realm records read-only, including collections and dates", 
     await assert.rejects(
       loadLibraryFromRealm(directory, undefined, AbortSignal.abort()),
     );
+    const controller = new AbortController();
+    await assert.rejects(
+      loadLibraryFromRealm(
+        directory,
+        () => controller.abort(),
+        controller.signal,
+      ),
+      { name: "AbortError" },
+    );
+    // Cancellation releases Realm too, allowing a subsequent import.
     assert.equal((await loadLibraryFromRealm(directory)).summary.trackCount, 1);
   } finally {
     await rm(directory, { recursive: true, force: true });

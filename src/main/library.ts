@@ -23,13 +23,11 @@ import {
   type MediaAsset,
 } from "./media";
 
-type RecordData = Record<string, unknown>;
 interface RawSet {
   identity: string;
   onlineId: number;
   files: Map<string, { hash: string; filename: string }>;
   beatmapDirectories: Map<string, string>;
-  beatmaps: string[];
 }
 interface IndexedTrack {
   track: Track;
@@ -55,10 +53,6 @@ const string = (value: unknown): string =>
   typeof value === "string" ? value : "";
 const number = (value: unknown): number =>
   typeof value === "number" && Number.isFinite(value) ? value : 0;
-const record = (value: unknown): RecordData =>
-  value && typeof value === "object" && !Array.isArray(value)
-    ? (value as RecordData)
-    : {};
 const strings = (value: unknown): string[] =>
   Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string")
@@ -280,38 +274,12 @@ export async function loadLibraryFromRealm(
     disableFormatUpgrade: true,
   });
   try {
-    const sets: RawSet[] = [];
-    const maps: RecordData[] = [];
     const collectionsByHash = new Map<string, Set<string>>();
     const collectionNames = new Set<string>();
-    let records = 0;
-    let lastProgress = 0;
-    let nextSnapshot = 0;
-    const progress = async () => {
-      signal?.throwIfAborted();
-      if (Date.now() - lastProgress < 120) return;
-      onProgress?.({ phase: "reading", records });
-      lastProgress = Date.now();
-      if (onSnapshot && maps.length && Date.now() >= nextSnapshot) {
-        const started = Date.now();
-        onSnapshot(
-          await buildIndex(
-            installPath,
-            maps,
-            sets,
-            collectionsByHash,
-            collectionNames,
-            false,
-          ),
-        );
-        nextSnapshot = Date.now() + Math.max(500, (Date.now() - started) * 10);
-      }
-      await new Promise<void>((resolve) => setImmediate(resolve));
-      signal?.throwIfAborted();
-    };
     for (const collection of realm.objects<BeatmapCollection>(
       "BeatmapCollection",
     )) {
+      signal?.throwIfAborted();
       const name = collection.Name?.trim();
       if (name) {
         collectionNames.add(name);
@@ -323,106 +291,67 @@ export async function loadLibraryFromRealm(
           collectionsByHash.set(key, names);
         }
       }
-      records++;
-      await progress();
     }
-    for (const set of realm.objects<BeatmapSet>("BeatmapSet")) {
-      if (set.DeletePending) continue;
-      const files = new Map<string, { hash: string; filename: string }>();
-      const beatmapDirectories = new Map<string, string>();
-      for (const usage of set.Files) {
-        const filename = usage.Filename;
-        const hash = usage.File?.Hash?.toLowerCase();
-        if (!filename || !hash || !isAssetHash(hash)) continue;
-        files.set(filenameKey(filename), { hash, filename });
-        if (filename.toLowerCase().endsWith(".osu"))
-          beatmapDirectories.set(hash, posix.dirname(filenameKey(filename)));
+    // Filter in Realm and traverse its links directly, without a detached copy of every difficulty.
+    function* beatmaps(): Generator<{ map: Beatmap; set: RawSet }> {
+      for (const source of realm
+        .objects<BeatmapSet>("BeatmapSet")
+        .filtered("DeletePending == false")) {
+        const files = new Map<string, { hash: string; filename: string }>();
+        const beatmapDirectories = new Map<string, string>();
+        for (const usage of source.Files) {
+          const filename = usage.Filename;
+          const hash = usage.File?.Hash?.toLowerCase();
+          if (!filename || !hash || !isAssetHash(hash)) continue;
+          files.set(filenameKey(filename), { hash, filename });
+          if (filename.toLowerCase().endsWith(".osu"))
+            beatmapDirectories.set(hash, posix.dirname(filenameKey(filename)));
+        }
+        const onlineId = source.OnlineID;
+        const linkedMaps = source.Beatmaps;
+        // Keep existing local track IDs so saved favorites remain valid.
+        const identity =
+          onlineId > 0
+            ? String(onlineId)
+            : `local-${createHash("sha256")
+                .update(
+                  JSON.stringify([
+                    Array.from(
+                      linkedMaps,
+                      (map) => map.MD5Hash?.toLowerCase() ?? "",
+                    ).sort(),
+                    [...files.values()].map((file) => file.hash).sort(),
+                  ]),
+                )
+                .digest("hex")
+                .slice(0, 20)}`;
+        const set = { identity, onlineId, files, beatmapDirectories };
+        for (const map of linkedMaps) yield { map, set };
       }
-      const beatmaps = Array.from(
-        set.Beatmaps,
-        (map) => map.MD5Hash?.toLowerCase() ?? "",
-      );
-      const onlineId = set.OnlineID;
-      const identity =
-        onlineId > 0
-          ? String(onlineId)
-          : `local-${createHash("sha256")
-              .update(
-                JSON.stringify([
-                  [...beatmaps].sort(),
-                  [...files.values()].map((file) => file.hash).sort(),
-                ]),
-              )
-              .digest("hex")
-              .slice(0, 20)}`;
-      sets.push({ identity, onlineId, files, beatmapDirectories, beatmaps });
-      for (const map of set.Beatmaps) {
-        maps.push({ ...detachBeatmap(map), SetIdentity: identity });
-        records++;
-        await progress();
-      }
-      records++;
-      await progress();
     }
-    signal?.throwIfAborted();
-    onProgress?.({ phase: "indexing", records });
-    const index = await buildIndex(
+    return await buildIndex(
       installPath,
-      maps,
-      sets,
+      beatmaps(),
       collectionsByHash,
       collectionNames,
+      onProgress,
+      signal,
+      onSnapshot,
     );
-    signal?.throwIfAborted();
-    return index;
   } finally {
     realm.close();
   }
 }
 
-function detachBeatmap(map: Beatmap): RecordData {
-  const metadata = map.Metadata;
-  return {
-    MD5Hash: map.MD5Hash,
-    OnlineMD5Hash: map.OnlineMD5Hash,
-    Hash: map.Hash,
-    BeatmapSet: map.BeatmapSet?.OnlineID,
-    Length: map.Length,
-    BPM: map.BPM,
-    StarRating: map.StarRating,
-    LastLocalUpdate: map.LastLocalUpdate?.toISOString(),
-    LastOnlineUpdate: map.LastOnlineUpdate?.toISOString(),
-    Metadata: metadata
-      ? {
-          Title: metadata.Title,
-          TitleUnicode: metadata.TitleUnicode,
-          Artist: metadata.Artist,
-          ArtistUnicode: metadata.ArtistUnicode,
-          Source: metadata.Source,
-          Tags: metadata.Tags,
-          UserTags: Array.from(metadata.UserTags),
-          AudioFile: metadata.AudioFile,
-          BackgroundFile: metadata.BackgroundFile,
-        }
-      : {},
-  };
-}
-
 async function buildIndex(
   installPath: string,
-  maps: RecordData[],
-  sets: RawSet[],
+  maps: Iterable<{ map: Beatmap; set: RawSet }>,
   collectionsByHash: Map<string, Set<string>>,
   collectionNames: Set<string>,
-  resolveVideos = true,
+  onProgress?: (progress: LibraryProgress) => void,
+  signal?: AbortSignal,
+  onSnapshot?: (index: LibraryIndex) => void,
 ): Promise<LibraryIndex> {
-  const setsByIdentity = new Map(sets.map((set) => [set.identity, set]));
-  const setsByHash = new Map<string, RawSet>();
-  const setsByOnlineId = new Map<number, RawSet>();
-  for (const set of sets) {
-    for (const hash of set.beatmaps) setsByHash.set(hash, set);
-    if (set.onlineId > 0) setsByOnlineId.set(set.onlineId, set);
-  }
   const tracks = new Map<string, Track>();
   const assets = new Map<string, MediaAsset>();
   const pendingVideos: {
@@ -433,16 +362,46 @@ async function buildIndex(
     fallback: MediaAsset;
   }[] = [];
   let skippedCount = 0;
-  for (const map of maps) {
+  let beatmapCount = 0;
+  let lastYield = performance.now();
+  let publishedPreview = false;
+  for (const { map, set } of maps) {
+    beatmapCount++;
+    if (beatmapCount % 64 === 0 && performance.now() - lastYield >= 16) {
+      signal?.throwIfAborted();
+      onProgress?.({ phase: "reading", records: beatmapCount });
+      // One bounded preview; never rebuild the growing library on every progress update.
+      if (onSnapshot && !publishedPreview && tracks.size) {
+        onSnapshot(
+          finishIndex(
+            new Map(
+              [...tracks].map(([id, track]) => [
+                id,
+                {
+                  ...track,
+                  tags: [...track.tags],
+                  collections: [...track.collections],
+                },
+              ]),
+            ),
+            new Map(assets),
+            installPath,
+            beatmapCount,
+            skippedCount,
+            collectionNames,
+          ),
+        );
+        publishedPreview = true;
+      }
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      signal?.throwIfAborted();
+      lastYield = performance.now();
+    }
     const hashes = [
       string(map.MD5Hash).toLowerCase(),
       string(map.OnlineMD5Hash).toLowerCase(),
     ];
-    const set =
-      setsByIdentity.get(string(map.SetIdentity)) ??
-      hashes.map((hash) => setsByHash.get(hash)).find(Boolean) ??
-      setsByOnlineId.get(number(map.BeatmapSet));
-    const metadata = record(map.Metadata);
+    const metadata = map.Metadata;
     const directory =
       set?.beatmapDirectories.get(string(map.Hash).toLowerCase()) ?? ".";
     const findAsset = (filename: unknown) =>
@@ -451,18 +410,13 @@ async function buildIndex(
           posix.join(directory, string(filename).replaceAll("\\", "/")),
         ),
       ) ?? set?.files.get(filenameKey(string(filename)));
-    const audio = findAsset(metadata.AudioFile);
-    if (!set || !audio) {
+    const audio = findAsset(metadata?.AudioFile);
+    if (!metadata || !audio) {
       skippedCount++;
       continue;
     }
     const artwork = findAsset(metadata.BackgroundFile);
-    const onlineId =
-      set.onlineId > 0
-        ? set.onlineId
-        : number(map.BeatmapSet) > 0
-          ? number(map.BeatmapSet)
-          : undefined;
+    const onlineId = set.onlineId > 0 ? set.onlineId : undefined;
     const md5Hash =
       string(map.MD5Hash).toLowerCase() ||
       string(map.OnlineMD5Hash).toLowerCase() ||
@@ -476,7 +430,10 @@ async function buildIndex(
     const id = `${set.identity}-${audio.hash}`;
     const tags = [
       ...new Set(
-        [...string(metadata.Tags).split(/\s+/), ...strings(metadata.UserTags)]
+        [
+          ...string(metadata.Tags).split(/\s+/),
+          ...Array.from(metadata.UserTags, (value) => value ?? ""),
+        ]
           .map((value) => value.trim().toLocaleLowerCase())
           .filter(Boolean),
       ),
@@ -486,9 +443,8 @@ async function buildIndex(
         hashes.flatMap((hash) => [...(collectionsByHash.get(hash) ?? [])]),
       ),
     ];
-    const timestamp = Date.parse(
-      string(map.LastLocalUpdate) || string(map.LastOnlineUpdate),
-    );
+    const timestamp =
+      (map.LastLocalUpdate ?? map.LastOnlineUpdate)?.getTime() ?? 0;
     const addedAt = Number.isFinite(timestamp) ? Math.max(0, timestamp) : 0;
     const current = tracks.get(id);
     if (current) {
@@ -534,7 +490,7 @@ async function buildIndex(
       const videos = [...set.files.entries()].filter(([, file]) =>
         isVideoFilename(file.filename),
       );
-      if (resolveVideos && videos.length) {
+      if (videos.length) {
         const localPrefix = directory === "." ? "" : `${directory}/`;
         const fallback =
           videos.find(([path]) => posix.dirname(path) === directory)?.[1] ??
@@ -550,10 +506,13 @@ async function buildIndex(
       }
     }
   }
+  signal?.throwIfAborted();
+  onProgress?.({ phase: "indexing", records: beatmapCount });
   const eventCache = new Map<string, Promise<BeatmapVideoEvent | null>>();
   let nextVideo = 0;
   const resolveVideo = async () => {
     while (nextVideo < pendingVideos.length) {
+      signal?.throwIfAborted();
       const pending = pendingVideos[nextVideo++];
       const cacheKey = pending.beatmapHash;
       let eventPromise = eventCache.get(cacheKey);
@@ -582,6 +541,25 @@ async function buildIndex(
       resolveVideo(),
     ),
   );
+  signal?.throwIfAborted();
+  return finishIndex(
+    tracks,
+    assets,
+    installPath,
+    beatmapCount,
+    skippedCount,
+    collectionNames,
+  );
+}
+
+function finishIndex(
+  tracks: Map<string, Track>,
+  assets: Map<string, MediaAsset>,
+  installPath: string,
+  beatmapCount: number,
+  skippedCount: number,
+  collectionNames: Set<string>,
+): LibraryIndex {
   const collectionCounts = new Map(
     [...collectionNames].map((name) => [name, 0]),
   );
@@ -598,7 +576,7 @@ async function buildIndex(
     [...values].map(([name, count]) => ({ name, count }));
   return new LibraryIndex([...tracks.values()], assets, {
     trackCount: tracks.size,
-    beatmapCount: maps.length,
+    beatmapCount,
     collectionCount: collectionNames.size,
     collections: facets(collectionCounts).sort((a, b) =>
       collator.compare(a.name, b.name),
