@@ -15,6 +15,7 @@ import type {
   LibrarySummary,
   SortKey,
   Track,
+  TrackLocation,
 } from "../shared/types";
 import {
   assetUrl,
@@ -477,6 +478,26 @@ export class LibraryIndex {
 
   getTrack(id: string): Track | null {
     return this.byId.get(id) ?? null;
+  }
+
+  getTrackLocation(id: string, input: LibraryQuery = {}): TrackLocation | null {
+    if (!this.byId.has(id)) return null;
+    const limit = 250;
+    let offset = 0;
+    while (true) {
+      const page = this.query({ ...input, offset, limit });
+      const itemIndex = page.items.findIndex((track) => track.id === id);
+      if (itemIndex >= 0) {
+        return {
+          track: page.items[itemIndex],
+          index: page.offset + itemIndex,
+        };
+      }
+
+      const nextOffset = page.offset + page.items.length;
+      if (page.items.length === 0 || nextOffset >= page.total) return null;
+      offset = nextOffset;
+    }
   }
 
   query(input: LibraryQuery = {}): LibraryPage {

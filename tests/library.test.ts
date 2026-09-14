@@ -60,6 +60,15 @@ test("library queries search, filter, sort, and paginate tracks", () => {
       .items.map((track) => track.id),
     ["3"],
   );
+  assert.deepEqual(index.getTrackLocation("2"), {
+    track: index.getTrack("2"),
+    index: 1,
+  });
+  assert.equal(
+    index.getTrackLocation("1", { sort: "title", descending: true })?.index,
+    2,
+  );
+  assert.equal(index.getTrackLocation("2", { search: "alpha" }), null);
 });
 
 test("streamed batches update existing difficulties and invalidate query and facet caches", () => {

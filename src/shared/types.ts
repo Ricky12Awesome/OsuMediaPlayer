@@ -68,6 +68,11 @@ export interface LibraryPage {
   offset: number;
 }
 
+export interface TrackLocation {
+  track: Track;
+  index: number;
+}
+
 export interface TrackContextMenuInfo {
   audio: boolean;
   background: boolean;
@@ -113,6 +118,10 @@ export interface PlayerAPI {
   loadLibrary: (installPath?: string) => Promise<LibrarySummary>;
   queryLibrary: (query?: LibraryQuery) => Promise<LibraryPage>;
   getTrack: (id: string) => Promise<Track | null>;
+  getTrackLocation?: (
+    id: string,
+    query?: LibraryQuery,
+  ) => Promise<TrackLocation | null>;
   prepareVideo: (trackId: string) => Promise<string | null>;
   chooseLibrary: () => Promise<string | null>;
   onLibraryProgress: (listener: (progress: LibraryProgress) => void) => () => void;

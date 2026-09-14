@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
+  LibraryQuery,
   LibraryProgress,
   MediaAction,
   PlayerAPI,
@@ -10,6 +11,8 @@ const api: PlayerAPI = {
   loadLibrary: (installPath) => ipcRenderer.invoke("library:load", installPath),
   queryLibrary: (query) => ipcRenderer.invoke("library:query", query),
   getTrack: (id) => ipcRenderer.invoke("library:track", id),
+  getTrackLocation: (id, query?: LibraryQuery) =>
+    ipcRenderer.invoke("library:track-location", id, query),
   prepareVideo: (trackId) => ipcRenderer.invoke("video:prepare", trackId),
   chooseLibrary: () => ipcRenderer.invoke("library:choose"),
   onLibraryProgress: (listener) => {

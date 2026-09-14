@@ -111,6 +111,10 @@ const sortOptions: Array<{ value: SortKey; label: string }> = [
   { value: "tags", label: "Tags" },
 ];
 
+const lastPlayedTrackKey = "osu-music-last-played-track";
+const sortKey = "osu-music-sort";
+const sortDescendingKey = "osu-music-sort-descending";
+
 const defaultApi: PlayerAPI = {
   loadLibrary: async () => {
     throw new Error(
@@ -150,6 +154,18 @@ function writeStorage(key: string, value: unknown): void {
   }
 }
 
+function removeStorage(key: string): void {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // Preferences are optional.
+  }
+}
+
+function isSortKey(value: unknown): value is SortKey {
+  return sortOptions.some((option) => option.value === value);
+}
+
 function formatDuration(value: number): string {
   const seconds = Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0;
   return Math.floor(seconds / 60) + ":" + String(seconds % 60).padStart(2, "0");
@@ -179,8 +195,13 @@ export function App() {
   const [tab, setTab] = useState<LibraryTab>("all");
   const [collection, setCollection] = useState("");
   const [tags, setTags] = useState<string[]>([]);
-  const [sort, setSort] = useState<SortKey>("title");
-  const [descending, setDescending] = useState(false);
+  const [sort, setSort] = useState<SortKey>(() => {
+    const stored = readStorage<unknown>(sortKey, "title");
+    return isSortKey(stored) ? stored : "title";
+  });
+  const [descending, setDescending] = useState(
+    () => readStorage<unknown>(sortDescendingKey, false) === true,
+  );
   const [favorites, setFavorites] = useState<Set<string>>(
     () => new Set(readStorage<string[]>("osu-music-favorites", [])),
   );
@@ -260,6 +281,7 @@ export function App() {
   const seekPreviewClearTimer = useRef<number | null>(null);
   const resizeStart = useRef<{ x: number; width: number } | null>(null);
   const trackInitialized = useRef(false);
+  const initialTrackRestore = useRef(0);
   const drag = useRef<{
     pointerId: number;
     offsetX: number;
@@ -269,10 +291,9 @@ export function App() {
     y: number;
   } | null>(null);
 
-  trackInitialized.current = Boolean(player.track);
-
   const loadLibrary = useCallback(
     async (installPath?: string) => {
+      initialTrackRestore.current += 1;
       trackInitialized.current = false;
       player.reset();
       setSummary(null);
@@ -433,6 +454,13 @@ export function App() {
     () => writeStorage("osu-music-now-playing-position", captionPosition),
     [captionPosition],
   );
+  useEffect(() => writeStorage(sortKey, sort), [sort]);
+  useEffect(() => writeStorage(sortDescendingKey, descending), [descending]);
+
+  useEffect(() => {
+    if (player.playing && player.track)
+      writeStorage(lastPlayedTrackKey, player.track.id);
+  }, [player.playing, player.track]);
 
   useEffect(() => {
     const artworkUrl = player.track?.artworkUrl;
@@ -706,6 +734,15 @@ export function App() {
     }),
     [collection, descending, favorites, search, sort, tab, tags],
   );
+  const queryKey = useMemo(() => JSON.stringify(query), [query]);
+  const queryKeyRef = useRef(queryKey);
+  if (queryKeyRef.current !== queryKey) {
+    if (!player.track) {
+      trackInitialized.current = false;
+      initialTrackRestore.current += 1;
+    }
+    queryKeyRef.current = queryKey;
+  }
   const queueMatches = useMemo(
     () => JSON.stringify(player.queueQuery) === JSON.stringify(query),
     [player.queueQuery, query],
@@ -713,11 +750,55 @@ export function App() {
 
   const cueFirstTrack = useCallback(
     (track: Track) => {
-      if (trackInitialized.current) return;
+      // Wait for the complete import. A streamed first page may not contain
+      // the saved track yet and would otherwise make it look deleted.
+      if (importing || trackInitialized.current) return;
       trackInitialized.current = true;
-      player.cueTrack(track, query, 0);
+      const request = ++initialTrackRestore.current;
+      const savedId = readStorage<unknown>(lastPlayedTrackKey, null);
+      if (typeof savedId !== "string" || !savedId) {
+        player.cueTrack(track, query, 0);
+        return;
+      }
+
+      const restore = api.getTrackLocation
+        ? api.getTrackLocation(savedId, query)
+        : api.getTrack(savedId).then((savedTrack) =>
+            savedTrack ? { track: savedTrack, index: 0 } : null,
+          );
+      void restore
+        .then((location) => {
+          if (
+            request !== initialTrackRestore.current ||
+            queryKey !== queryKeyRef.current
+          )
+            return;
+          if (!location) {
+            removeStorage(lastPlayedTrackKey);
+            player.cueTrack(track, query, 0);
+            return;
+          }
+          player.cueTrack(location.track, query, location.index);
+        })
+        .catch(() => {
+          if (
+            request === initialTrackRestore.current &&
+            queryKey === queryKeyRef.current
+          )
+            player.cueTrack(track, query, 0);
+        });
     },
-    [player.cueTrack, query],
+    [api, importing, player.cueTrack, query],
+  );
+
+  const playTrack = useCallback(
+    (track: Track, index: number) => {
+      initialTrackRestore.current += 1;
+      trackInitialized.current = true;
+      writeStorage(lastPlayedTrackKey, track.id);
+      player.playTrack(track, query, index);
+    },
+    [player.playTrack, query],
   );
 
   const toggleFavorite = useCallback((track: Track) => {
@@ -1304,9 +1385,7 @@ export function App() {
                   }
                   playing={player.playing}
                   favorites={favorites}
-                  onPlay={(track, index) =>
-                    player.playTrack(track, query, index)
-                  }
+                  onPlay={playTrack}
                   onFavorite={toggleFavorite}
                   onContextMenu={openTrackContextMenu}
                   onTotal={setResultTotal}
