@@ -14,13 +14,14 @@ import { readFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import type {
   LibraryQuery,
+  LibrarySummary,
   MediaAction,
   Track,
   TrackContextMenuAction,
   TrackContextMenuInfo,
 } from "../shared/types";
-import { LibraryIndex, loadLibraryFromOfu } from "./library";
-import { ensureOfu } from "./ofu";
+import { LibraryIndex } from "./library";
+import { loadLibraryInWorker, waitForLibraryWorkers } from "./library-loader";
 import {
   mimeForFilename,
   resolveMediaFile,
@@ -66,9 +67,14 @@ let videoTranscoder: VideoTranscoder | null = null;
 let zoomStatusMenuItem: Electron.MenuItem | null = null;
 const rendererUrl = process.env.ELECTRON_RENDERER_URL;
 const zoomStages = [
-  25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400,
-  500,
+  25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400, 500,
 ] as const;
+
+function replaceLibrary(next: LibraryIndex): void {
+  if (library && library !== next && !library.sharesRealm(next))
+    library.close();
+  library = next;
+}
 
 function currentZoomPercent(): number {
   if (!window || window.isDestroyed()) return 100;
@@ -126,6 +132,27 @@ function isTrusted(
 function requireTrusted(event: Electron.IpcMainInvokeEvent): void {
   if (!isTrusted(event))
     throw new Error("This request did not come from the player window.");
+}
+
+function isAbortError(error: unknown): boolean {
+  return (
+    (error instanceof DOMException && error.name === "AbortError") ||
+    (error instanceof Error &&
+      (error.name === "AbortError" ||
+        /\babort(?:ed|ing)?\b/i.test(error.message)))
+  );
+}
+
+function cancelledLibrarySummary(installPath?: string): LibrarySummary {
+  return {
+    trackCount: 0,
+    beatmapCount: 0,
+    collectionCount: 0,
+    collections: [],
+    tags: [],
+    installPath: installPath ?? "",
+    skippedCount: 0,
+  };
 }
 
 function createWindow(): void {
@@ -289,6 +316,7 @@ function assetKindForAction(
 function setupIPC(): void {
   ipcMain.handle("library:load", async (event, requestedPath: unknown) => {
     requireTrusted(event);
+    if (quitting) throw new Error("The player is closing.");
     if (
       requestedPath !== undefined &&
       (typeof requestedPath !== "string" || !isAbsolute(requestedPath))
@@ -296,46 +324,64 @@ function setupIPC(): void {
       throw new Error("Choose an absolute osu!lazer directory path.");
     const installPath = requestedPath as string | undefined;
     if (pendingLoad) {
-      if (pendingPath === installPath) return (await pendingLoad).summary;
+      if (pendingPath === installPath) {
+        try {
+          return (await pendingLoad).summary;
+        } catch (error) {
+          // A duplicate request shares the original import promise. Handle its
+          // expected shutdown cancellation the same way as the original call.
+          if (quitting && isAbortError(error))
+            return library?.summary ?? cancelledLibrarySummary(installPath);
+          throw error;
+        }
+      }
       throw new Error(
         "A library import is already running. Wait for it to finish, then choose another folder.",
       );
     }
     importController = new AbortController();
     pendingPath = installPath;
-    pendingLoad = ensureOfu(join(app.getPath("userData"), "ofu"), {
-      bundledDirectory: app.isPackaged
-        ? join(process.resourcesPath, "ofu")
-        : undefined,
-      signal: importController.signal,
-      onDownload: () =>
-        window?.webContents.send("library:progress", {
-          phase: "downloading",
-          records: 0,
-        }),
-    }).then((executable) =>
-      loadLibraryFromOfu(
-        executable,
-        installPath,
-        (progress) => {
-          if (window && !window.isDestroyed())
-            window.webContents.send("library:progress", progress);
-        },
-        importController!.signal,
-        (index) => {
-          library = index;
-          if (window && !window.isDestroyed())
-            window.webContents.send("library:progress", {
-              phase: "reading",
-              records: index.summary.beatmapCount,
-              summary: index.summary,
-            });
-        },
-      ),
+    const previousLibrary = library;
+    pendingLoad = loadLibraryInWorker(
+      installPath,
+      (progress) => {
+        if (window && !window.isDestroyed())
+          window.webContents.send("library:progress", progress);
+      },
+      importController!.signal,
+      (index) => {
+        // Keep the previous library available for rollback if streaming fails.
+        // If loading is cancelled, the callback can then restore it.
+        library = index;
+        if (window && !window.isDestroyed())
+          window.webContents.send("library:progress", {
+            phase: "reading",
+            records: index.summary.beatmapCount,
+            summary: index.summary,
+          });
+      },
+      join(app.getPath("userData"), "library-cache"),
     );
     try {
-      library = await pendingLoad;
-      return library.summary;
+      const loaded = await pendingLoad;
+      if (
+        previousLibrary &&
+        previousLibrary !== loaded &&
+        !previousLibrary.sharesRealm(loaded)
+      )
+        previousLibrary.close();
+      replaceLibrary(loaded);
+      return loaded.summary;
+    } catch (error) {
+      // Restore the previous library if the new import fails or is cancelled.
+      if (previousLibrary) library = previousLibrary;
+      else library = null;
+      // Closing the app intentionally aborts the pending IPC request. Returning
+      // a harmless summary prevents Electron from reporting that expected
+      // cancellation as an unhandled handler error.
+      if (quitting && isAbortError(error))
+        return previousLibrary?.summary ?? cancelledLibrarySummary(installPath);
+      throw error;
     } finally {
       pendingLoad = null;
       pendingPath = undefined;
@@ -506,9 +552,21 @@ void app.whenReady().then(() => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
-app.on("before-quit", () => {
+let quitReady = false;
+let quitting = false;
+app.on("before-quit", (event) => {
+  if (quitReady) return;
+  event.preventDefault();
+  if (quitting) return;
+  quitting = true;
   importController?.abort();
   videoTranscoder?.dispose();
+  void waitForLibraryWorkers().then(() => {
+    library?.close();
+    library = null;
+    quitReady = true;
+    app.quit();
+  });
 });
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();

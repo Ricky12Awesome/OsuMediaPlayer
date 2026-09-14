@@ -33,6 +33,8 @@ function formatDuration(value: number): string {
 type LibraryCache = {
   query: LibraryQuery;
   pages: Map<number, Track[]>;
+  stalePages: Map<number, Track[]>;
+  previousTotal: number | null;
   requests: Map<number, Promise<Track[] | null>>;
   errors: Map<number, string>;
   total: number | null;
@@ -100,18 +102,32 @@ export function VirtualTrackList({
       }),
     [query],
   );
-  const cache = useMemo<LibraryCache>(
-    () => ({
+  const previousCache = useRef<{
+    queryKey: string;
+    cache: LibraryCache;
+  } | null>(null);
+  const cache = useMemo<LibraryCache>(() => {
+    const previous =
+      previousCache.current?.queryKey === queryKey
+        ? previousCache.current.cache
+        : null;
+    return {
       query: JSON.parse(queryKey) as LibraryQuery,
       pages: new Map(),
+      // Keep visible songs on screen while a streamed revision refreshes the pages.
+      stalePages: new Map(
+        (previous ? [...previous.stalePages, ...previous.pages] : []).slice(
+          -pageCacheLimit,
+        ),
+      ),
+      previousTotal: previous?.total ?? previous?.previousTotal ?? null,
       requests: new Map(),
       errors: new Map(),
       total: null,
       active: false,
       firstReported: false,
-    }),
-    [api, queryKey, revision],
-  );
+    };
+  }, [api, queryKey, revision]);
   const activeCache = useRef(cache);
   const [, rerender] = useReducer((value: number) => value + 1, 0);
   const activeRequests = useRef(0);
@@ -140,6 +156,7 @@ export function VirtualTrackList({
   });
 
   useLayoutEffect(() => {
+    previousCache.current = { queryKey, cache };
     activeCache.current = cache;
     cache.active = true;
     pendingActivation.current = null;
@@ -150,7 +167,7 @@ export function VirtualTrackList({
       if (listRef.current) listRef.current.scrollTop = 0;
     }
     previousQueryKey.current = queryKey;
-    latest.current.onTotal(0);
+    if (cache.previousTotal === null) latest.current.onTotal(0);
     return () => {
       cache.active = false;
     };
@@ -203,6 +220,7 @@ export function VirtualTrackList({
 
           cache.total = result.total;
           cache.pages.set(page, result.items);
+          cache.stalePages.delete(page);
           while (cache.pages.size > pageCacheLimit) {
             const evicted =
               [...cache.pages.keys()].find(
@@ -248,7 +266,7 @@ export function VirtualTrackList({
     [api, cache],
   );
 
-  const total = cache.total;
+  const total = cache.total ?? cache.previousTotal;
   const visibleFirst = Math.max(
     0,
     Math.floor(scrollTop / rowHeight) - overscanRows,
@@ -264,8 +282,8 @@ export function VirtualTrackList({
   visiblePages.current = { first: firstPage, last: lastPage };
 
   useEffect(() => {
-    if (total === null) {
-      void loadPage(0);
+    if (cache.total === null) {
+      void loadPage(firstPage);
       return;
     }
     if (!total) return;
@@ -325,8 +343,12 @@ export function VirtualTrackList({
       select(followCurrentTrackIndex, true);
   }, [followCurrentTrackIndex, select]);
 
-  const getTrack = (index: number) =>
-    cache.pages.get(Math.floor(index / pageSize))?.[index % pageSize];
+  const getTrack = (index: number) => {
+    const page = Math.floor(index / pageSize);
+    return (cache.pages.get(page) ?? cache.stalePages.get(page))?.[
+      index % pageSize
+    ];
+  };
 
   const choose = useCallback(
     (index: number) => {

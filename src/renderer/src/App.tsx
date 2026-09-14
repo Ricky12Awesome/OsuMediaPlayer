@@ -14,7 +14,6 @@ import {
   ArrowUpWideNarrow,
   AudioWaveform,
   CircleAlert,
-  Disc3,
   Eye,
   EyeOff,
   FolderHeart,
@@ -50,7 +49,6 @@ import {
   X,
 } from "lucide-react";
 import type {
-  LibraryProgress,
   LibraryQuery,
   LibrarySummary,
   PlayerAPI,
@@ -173,10 +171,6 @@ export function App() {
   const [summary, setSummary] = useState<LibrarySummary | null>(null);
   const [importing, setImporting] = useState(true);
   const [loadError, setLoadError] = useState("");
-  const [progress, setProgress] = useState<LibraryProgress>({
-    phase: "reading",
-    records: 0,
-  });
   const [revision, setRevision] = useState(0);
   const [resultTotal, setResultTotal] = useState(0);
   const [isDesktop, setIsDesktop] = useState(() => window.innerWidth > 760);
@@ -285,7 +279,6 @@ export function App() {
       setResultTotal(0);
       setImporting(true);
       setLoadError("");
-      setProgress({ phase: "reading", records: 0 });
       try {
         const next = await api.loadLibrary(installPath);
         setSummary(next);
@@ -302,7 +295,6 @@ export function App() {
 
   useEffect(() => {
     const removeProgress = api.onLibraryProgress((next) => {
-      setProgress(next);
       if ("summary" in next && next.summary) {
         setSummary(next.summary);
         setRevision((value) => value + 1);
@@ -1283,26 +1275,7 @@ export function App() {
             )}
 
             <div className="list-area">
-              {importing && !summary?.trackCount ? (
-                <div className="library-state">
-                  <div className="loading-orbit">
-                    <Disc3 size={32} />
-                  </div>
-                  <h3>Finding your rhythm</h3>
-                  <p>
-                    {progress.phase === "downloading"
-                      ? "Downloading OsuFilesUtility…"
-                      : progress.phase === "indexing"
-                        ? "Organizing your songs…"
-                        : "Reading your osu! library…"}
-                  </p>
-                  {progress.records > 0 && (
-                    <small>
-                      {progress.records.toLocaleString()} records discovered
-                    </small>
-                  )}
-                </div>
-              ) : loadError ? (
+              {loadError ? (
                 <div className="library-state error-state">
                   <CircleAlert size={35} />
                   <h3>Let’s find your music</h3>
@@ -1320,7 +1293,7 @@ export function App() {
                     Try again
                   </button>
                 </div>
-              ) : (
+              ) : summary ? (
                 <VirtualTrackList
                   api={api}
                   query={query}
@@ -1340,17 +1313,14 @@ export function App() {
                   onFirstTrack={cueFirstTrack}
                   keyboardControlsRef={trackListKeyboardRef}
                 />
-              )}
+              ) : null}
             </div>
 
             <div className="library-footer">
               <span>
                 <i />
                 {importing
-                  ? summary?.trackCount
-                    ? summary.trackCount.toLocaleString() +
-                      " songs loaded · Reading library…"
-                    : "Connecting to osu!lazer"
+                  ? (summary?.trackCount ?? 0).toLocaleString() + " songs loaded"
                   : resultTotal.toLocaleString() +
                     (hasFilters ? " songs found" : " songs in your library")}
               </span>

@@ -94,7 +94,7 @@ export type TrackContextMenuAction =
   | "open-video";
 
 export type LibraryProgress =
-  | { phase: "downloading" | "reading" | "indexing"; records: number }
+  | { phase: "reading" | "indexing"; records: number }
   | {
       phase: "reading";
       records: number;

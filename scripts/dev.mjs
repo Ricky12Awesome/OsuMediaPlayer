@@ -1,4 +1,7 @@
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
 
 const electronCommand =
   process.platform === "win32"
@@ -9,6 +12,12 @@ const viteCommand =
     ? "node_modules/.bin/vite.cmd"
     : "node_modules/.bin/vite";
 const viteUrl = "http://127.0.0.1:5173/";
+
+// The Electron entry points are generated files. Build them here so a clean
+// checkout can start with `npm run dev` without requiring a previous package build.
+await execFileAsync(process.execPath, ["scripts/build-electron.mjs"], {
+  stdio: "inherit",
+});
 
 function waitForServer(url) {
   return new Promise((resolve, reject) => {
