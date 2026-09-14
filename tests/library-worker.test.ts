@@ -13,12 +13,13 @@ import {
 } from "../src/main/library";
 import {
   libraryCachePath,
+  libraryCachePaths,
   libraryFingerprintsEqual,
 } from "../src/main/library-cache";
 import type { loadLibraryInWorker } from "../src/main/library-loader";
 import type { SortKey } from "../src/shared/types";
 
-test("worker imports Realm and transfers every sort order; errors and cancellation reject", async () => {
+test("worker imports Realm and transfers canonical sort orders; errors and cancellation reject", async () => {
   const directory = await mkdtemp(join(process.cwd(), ".worker-test-"));
   try {
     await build({
@@ -76,6 +77,12 @@ test("worker imports Realm and transfers every sort order; errors and cancellati
         }) as unknown as { Beatmaps: { BeatmapSet: unknown }[] };
         set.Beatmaps[0].BeatmapSet = set;
       }
+      fixture.create("BeatmapCollection", {
+        ID: new Realm.BSON.UUID(),
+        Name: "Favorites",
+        BeatmapMD5Hashes: ["1".repeat(32)],
+        LastModified: new Date(2025, 0, 1),
+      });
     });
     fixture.close();
     const direct = await loadLibraryFromRealm(directory);
@@ -104,7 +111,7 @@ test("worker imports Realm and transfers every sort order; errors and cancellati
       assert.deepEqual(batches.at(-1)!.index.query(), loaded.query());
       assert.equal(loaded.summary.trackCount, 3);
       assert.ok(progress.length);
-      assert.equal(loaded.snapshot().orders.size, 16);
+      assert.equal(loaded.snapshot().orders.size, 8);
       for (const sort of [
         "title",
         "artist",
@@ -142,25 +149,47 @@ test("worker imports Realm and transfers every sort order; errors and cancellati
       undefined,
       cacheDirectory,
     );
-    const cacheFile = libraryCachePath(cacheDirectory, directory);
-    const cache = JSON.parse(await readFile(cacheFile, "utf8")) as {
+    const cachePath = libraryCachePath(cacheDirectory, directory);
+    const cacheFiles = libraryCachePaths(cachePath);
+    const manifest = JSON.parse(
+      await readFile(cacheFiles.manifest, "utf8"),
+    ) as {
       fingerprint: {
         beatmapSetCount: number;
         beatmapCount: number;
         latestDateAdded: number;
       };
-      snapshot: {
-        indexed: { track: { title: string; artist: string } }[];
-      };
+      collectionFingerprint: Record<string, number>;
     };
+    const tracks = JSON.parse(
+      await readFile(cacheFiles.tracks, "utf8"),
+    ) as Record<
+      string,
+      { title: string; artist: string; beatmapHashes: string[] }
+    >;
+    const collectionLines = (await readFile(cacheFiles.collections, "utf8"))
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as { name: string; tracks: string[] });
+    const orderLines = (await readFile(cacheFiles.orders, "utf8"))
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as { sortby: string; tracks: string[] });
     const fingerprint = await readLibraryFingerprint(directory);
     assert.equal(firstCached.summary.trackCount, 3);
-    assert.deepEqual(cache.fingerprint, fingerprint.fingerprint);
-    assert.equal(cache.fingerprint.beatmapSetCount, 3);
-    assert.equal(cache.fingerprint.beatmapCount, 3);
-    cache.snapshot.indexed[0].track.title = "From disk cache";
-    cache.snapshot.indexed[0].track.artist = "Cached artist";
-    await writeFile(cacheFile, JSON.stringify(cache), "utf8");
+    assert.deepEqual(manifest.fingerprint, fingerprint.fingerprint);
+    assert.equal(manifest.fingerprint.beatmapSetCount, 3);
+    assert.equal(manifest.fingerprint.beatmapCount, 3);
+    assert.equal(collectionLines.length, 1);
+    assert.equal(collectionLines[0].name, "Favorites");
+    assert.equal(orderLines.length, 8);
+    assert.ok(orderLines.every(({ sortby }) => !sortby.includes(":")));
+    const firstTrackId = Object.keys(tracks)[0];
+    tracks[firstTrackId].title = "From disk cache";
+    tracks[firstTrackId].artist = "Cached artist";
+    await writeFile(cacheFiles.tracks, JSON.stringify(tracks), "utf8");
     const cached = await load(
       directory,
       undefined,
@@ -174,6 +203,7 @@ test("worker imports Realm and transfers every sort order; errors and cancellati
     assert.ok(
       cached.query().items.some((track) => track.artist === "Cached artist"),
     );
+    assert.equal(cached.snapshot().orders.size, 8);
     assert.equal(
       libraryFingerprintsEqual(fingerprint.fingerprint, {
         ...fingerprint.fingerprint,
@@ -188,12 +218,53 @@ test("worker imports Realm and transfers every sort order; errors and cancellati
     });
     try {
       changedRealm.write(() => {
-        changedRealm.objects("BeatmapSet")[0].DateAdded = new Date(
+        const collection = changedRealm.objects(
+          "BeatmapCollection",
+        )[0] as unknown as {
+          LastModified: Date;
+          BeatmapMD5Hashes: { splice: (...values: unknown[]) => void };
+        };
+        collection.LastModified = new Date(2025, 0, 2);
+        collection.BeatmapMD5Hashes.splice(0, 1, "2".repeat(32));
+      });
+    } finally {
+      changedRealm.close();
+    }
+    const collectionCached = await load(
+      directory,
+      undefined,
+      undefined,
+      undefined,
+      cacheDirectory,
+    );
+    assert.equal(
+      collectionCached.getTrack(firstTrackId)?.title,
+      "From disk cache",
+    );
+    assert.deepEqual(
+      collectionCached
+        .query({ collection: "Favorites" })
+        .items.map((track) => track.id),
+      [
+        Object.entries(tracks).find(([, track]) =>
+          track.beatmapHashes.includes("2".repeat(32)),
+        )?.[0],
+      ],
+    );
+
+    const rebuiltRealm = new Realm({
+      path: join(directory, "client.realm"),
+      schema: Schema,
+      schemaVersion: 52,
+    });
+    try {
+      rebuiltRealm.write(() => {
+        rebuiltRealm.objects("BeatmapSet")[0].DateAdded = new Date(
           fingerprint.fingerprint.latestDateAdded + 1,
         );
       });
     } finally {
-      changedRealm.close();
+      rebuiltRealm.close();
     }
     const rebuilt = await load(
       directory,

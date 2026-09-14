@@ -1,10 +1,13 @@
 import Realm from "realm";
 import {
+  LibraryIndex,
+  readLibraryCollections,
   loadLibraryFromRealm,
-  readLibraryFingerprint,
+  readLibraryFingerprints,
   type LibraryFingerprint,
 } from "./library";
 import {
+  collectionFingerprintsEqual,
   libraryCachePath,
   readLibraryCache,
   writeLibraryCache,
@@ -57,23 +60,60 @@ void (async () => {
       options = { installPath: argument };
     }
     let resolvedPath = options.installPath;
-    let cacheFile: string | undefined;
+    let cacheDirectory: string | undefined;
     let fingerprint: LibraryFingerprint | undefined;
+    let collectionFingerprint: Record<string, number> | undefined;
     if (options.cacheDirectory) {
-      const checked = await readLibraryFingerprint(
+      const checked = await readLibraryFingerprints(
         options.installPath,
         controller.signal,
       );
       resolvedPath = checked.installPath;
       fingerprint = checked.fingerprint;
-      cacheFile = libraryCachePath(options.cacheDirectory, resolvedPath);
+      collectionFingerprint = checked.collectionFingerprint;
+      cacheDirectory = libraryCachePath(options.cacheDirectory, resolvedPath);
       const cached = await readLibraryCache(
-        cacheFile,
+        cacheDirectory,
         fingerprint,
         controller.signal,
       );
-      if (cached && cached.summary.installPath === resolvedPath) {
-        await send({ type: "complete", snapshot: cached });
+      if (cached && cached.snapshot.summary.installPath === resolvedPath) {
+        const index = LibraryIndex.fromSnapshot(cached.snapshot);
+        if (
+          !collectionFingerprintsEqual(
+            cached.collectionFingerprint,
+            collectionFingerprint,
+          )
+        ) {
+          const trackIdsByMd5 = new Map<string, Set<string>>();
+          for (const item of cached.snapshot.indexed) {
+            for (const hash of item.beatmapHashes) {
+              const ids = trackIdsByMd5.get(hash) ?? new Set<string>();
+              ids.add(item.track.id);
+              trackIdsByMd5.set(hash, ids);
+            }
+          }
+          const collections = await readLibraryCollections(
+            checked.installPath,
+            trackIdsByMd5,
+            controller.signal,
+          );
+          index.replaceCollections(collections);
+          await send({ type: "complete", snapshot: index.snapshot() });
+          try {
+            await writeLibraryCache(
+              cacheDirectory,
+              fingerprint,
+              collectionFingerprint,
+              index.snapshot(),
+            );
+          } catch {
+            // Caching is an optimization. A read-only or full cache directory
+            // must never make a successfully loaded library fail.
+          }
+        } else {
+          await send({ type: "complete", snapshot: cached.snapshot });
+        }
         return;
       }
     }
@@ -90,9 +130,14 @@ void (async () => {
       await send({ type: "complete", snapshot });
       // The snapshot is complete at this point. Finish persisting it even if
       // the parent starts a graceful shutdown immediately afterward.
-      if (cacheFile && fingerprint) {
+      if (cacheDirectory && fingerprint && collectionFingerprint) {
         try {
-          await writeLibraryCache(cacheFile, fingerprint, snapshot);
+          await writeLibraryCache(
+            cacheDirectory,
+            fingerprint,
+            collectionFingerprint,
+            snapshot,
+          );
         } catch {
           // Caching is an optimization. A read-only or full cache directory
           // must never make a successfully loaded library fail.
