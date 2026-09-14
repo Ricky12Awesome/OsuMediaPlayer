@@ -63,6 +63,7 @@ export interface PlayerState {
   previous: () => Promise<void>;
   jumpRandom: (direction: 1 | -1) => Promise<void>;
   audioRef: RefObject<HTMLAudioElement>;
+  analyser: AnalyserNode | null;
   videoRef: RefObject<HTMLVideoElement | null>;
   videoUrl: string | null;
   videoLoading: boolean;
@@ -71,7 +72,17 @@ export interface PlayerState {
 }
 
 export function usePlayer(api: PlayerAPI): PlayerState {
-  const [audio] = useState(() => new Audio());
+  const [audio] = useState(() => {
+    const element = new Audio();
+    element.crossOrigin = "anonymous";
+    return element;
+  });
+  const graph = useRef<{
+    context: AudioContext;
+    source: MediaElementAudioSourceNode;
+    analyser: AnalyserNode;
+  } | null>(null);
+  const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
   const audioRef = useRef(audio);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [settings] = useState(readSettings);
@@ -117,8 +128,7 @@ export function usePlayer(api: PlayerAPI): PlayerState {
       }
       if (video.readyState === 0) return;
       const videoDuration = video.duration;
-      const ended =
-        Number.isFinite(videoDuration) && time >= videoDuration;
+      const ended = Number.isFinite(videoDuration) && time >= videoDuration;
       const target = Number.isFinite(videoDuration)
         ? Math.min(time, Math.max(0, videoDuration - 0.01))
         : time;
@@ -162,6 +172,21 @@ export function usePlayer(api: PlayerAPI): PlayerState {
   const resumeGeneration = useCallback(
     async (id: number) => {
       try {
+        // Attach once to the existing decoder. Only one path reaches the speakers.
+        if (!graph.current) {
+          const context = new AudioContext();
+          const analyser = context.createAnalyser();
+          analyser.fftSize = 2048;
+          analyser.smoothingTimeConstant = 0.8;
+          const source = context.createMediaElementSource(audio);
+          source.connect(context.destination);
+          source.connect(analyser); // Analysis-only branch, never connected to output.
+          graph.current = { context, source, analyser };
+          setAnalyser(analyser);
+        }
+        if (graph.current.context.state === "suspended")
+          await graph.current.context.resume();
+        if (id !== generation.current || !mounted.current) return;
         await audio.play();
         if (id === generation.current && mounted.current) {
           syncVideo(true);
@@ -356,7 +381,13 @@ export function usePlayer(api: PlayerAPI): PlayerState {
           history.current = selected.history.entries;
           historyPosition.current = selected.history.position;
         }
-        loadTrack(nextTrack, currentQueue.query, nextIndex, true, Boolean(selected));
+        loadTrack(
+          nextTrack,
+          currentQueue.query,
+          nextIndex,
+          true,
+          Boolean(selected),
+        );
         currentQueue.total = page.total;
       } catch {
         if (id !== generation.current || !mounted.current) return;
@@ -444,7 +475,10 @@ export function usePlayer(api: PlayerAPI): PlayerState {
   }, []);
   const toggleMute = useCallback(() => setMuted((value) => !value), []);
   const cycleRepeat = useCallback(
-    () => setRepeat((value) => (value === "off" ? "all" : value === "all" ? "one" : "off")),
+    () =>
+      setRepeat((value) =>
+        value === "off" ? "all" : value === "all" ? "one" : "off",
+      ),
     [],
   );
 
@@ -512,19 +546,26 @@ export function usePlayer(api: PlayerAPI): PlayerState {
       ["waiting", waiting],
       ["stalled", waiting],
       ["canplay", () => setLoading(false)],
-      ["ended", () => {
-        setPlaying(false);
-        void controls.current.navigate(1, true);
-      }],
-      ["error", () => {
-        if (activeTrack.current) {
+      [
+        "ended",
+        () => {
           setPlaying(false);
-          setLoading(false);
-          setError(playbackError(audio.error));
-        }
-      }],
+          void controls.current.navigate(1, true);
+        },
+      ],
+      [
+        "error",
+        () => {
+          if (activeTrack.current) {
+            setPlaying(false);
+            setLoading(false);
+            setError(playbackError(audio.error));
+          }
+        },
+      ],
     ];
-    for (const [name, listener] of events) audio.addEventListener(name, listener);
+    for (const [name, listener] of events)
+      audio.addEventListener(name, listener);
     const removeMediaListener = api.onMediaAction?.((action) => {
       const current = controls.current;
       if (action === "stop") {
@@ -548,14 +589,20 @@ export function usePlayer(api: PlayerAPI): PlayerState {
       ["pause", () => controls.current.pause()],
       ["nexttrack", () => controls.current.next()],
       ["previoustrack", () => controls.current.previous()],
-      ["stop", () => {
-        controls.current.pause();
-        controls.current.seek(0);
-      }],
-      ["seekto", (details) => {
-        if (details?.seekTime !== undefined)
-          controls.current.seek(details.seekTime);
-      }],
+      [
+        "stop",
+        () => {
+          controls.current.pause();
+          controls.current.seek(0);
+        },
+      ],
+      [
+        "seekto",
+        (details) => {
+          if (details?.seekTime !== undefined)
+            controls.current.seek(details.seekTime);
+        },
+      ],
       ["seekbackward", () => controls.current.seek(audio.currentTime - 10)],
       ["seekforward", () => controls.current.seek(audio.currentTime + 10)],
     ];
@@ -588,6 +635,13 @@ export function usePlayer(api: PlayerAPI): PlayerState {
       audio.pause();
       audio.removeAttribute("src");
       audio.load();
+      // StrictMode re-runs effects synchronously; only dispose on a real unmount.
+      queueMicrotask(() => {
+        if (!mounted.current && graph.current) {
+          graph.current.source.disconnect();
+          void graph.current.context.close();
+        }
+      });
     };
   }, [api, audio, syncVideo]);
 
@@ -604,13 +658,11 @@ export function usePlayer(api: PlayerAPI): PlayerState {
     api
       .prepareVideo(track.id)
       .then((prepared) => {
-        if (
-          active &&
-          activeTrack.current?.id === track.id
-        ) {
+        if (active && activeTrack.current?.id === track.id) {
           setVideoUrl(prepared);
           setVideoLoading(false);
-          if (!prepared) setVideoError("The beatmap video could not be prepared.");
+          if (!prepared)
+            setVideoError("The beatmap video could not be prepared.");
         }
       })
       .catch((reason: unknown) => {
@@ -719,6 +771,7 @@ export function usePlayer(api: PlayerAPI): PlayerState {
     previous,
     jumpRandom,
     audioRef,
+    analyser,
     videoRef,
     videoUrl,
     videoLoading,

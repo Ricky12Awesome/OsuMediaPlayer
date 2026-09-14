@@ -67,6 +67,7 @@ import {
   VirtualTrackList,
   type VirtualTrackListKeyboardControls,
 } from "./VirtualTrackList";
+import { AudioVisualizer, VisualizerControls, useVisualizerSettings } from "./AudioVisualizer";
 import { usePlayer } from "./usePlayer";
 
 const defaultPosition = "bottom-left";
@@ -163,6 +164,7 @@ function isLibraryPosition(value: unknown): value is LibraryPosition {
 
 export function App() {
   const player = usePlayer(api);
+  const [visualizer, setVisualizer] = useVisualizerSettings();
   const [summary, setSummary] = useState<LibrarySummary | null>(null);
   const [importing, setImporting] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -997,6 +999,7 @@ export function App() {
                 />
               )}
               <div className="artwork-grain" />
+              <AudioVisualizer analyser={player.analyser} playing={player.playing} settings={visualizer} />
               {showNowPlayingTitleArtist && (
                 <div
                   className={
@@ -1799,6 +1802,7 @@ export function App() {
                 </span>
               </button>
             </div>
+            <VisualizerControls settings={visualizer} onChange={setVisualizer} />
             <div className="settings-stats">
               <span>
                 <strong>{summary?.trackCount.toLocaleString() ?? "—"}</strong>{" "}
