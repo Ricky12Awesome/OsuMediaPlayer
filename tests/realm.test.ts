@@ -6,7 +6,10 @@ import { join } from "node:path";
 import test, { after } from "node:test";
 import Realm from "realm";
 import { Schema } from "../src/shared/client-model";
-import { loadLibraryFromRealm } from "../src/main/library";
+import {
+  loadLibraryFromRealm,
+  sortedLibraryBeatmaps,
+} from "../src/main/library";
 import {
   defaultLazerInstallPath,
   resolveLazerInstallPath,
@@ -154,6 +157,55 @@ test("missing database is never created", async () => {
     await assert.rejects(readFile(join(directory, "client.realm")), {
       code: "ENOENT",
     });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("Realm sorts linked Unicode titles ascending before loading", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "osu-sort-"));
+  const path = join(directory, "client.realm");
+  try {
+    const fixture = new Realm({
+      path,
+      schemaVersion: 52,
+      schema: [
+        { name: "BeatmapSet", properties: { DeletePending: "bool" } },
+        {
+          name: "Metadata",
+          properties: { Title: "string", TitleUnicode: "string?" },
+        },
+        {
+          name: "Beatmap",
+          properties: { Metadata: "Metadata", BeatmapSet: "BeatmapSet" },
+        },
+      ],
+    });
+    try {
+      fixture.write(() => {
+        for (const Title of ["Zulu", "-+", "Alpha"])
+          fixture.create("Beatmap", {
+            Metadata: { Title, TitleUnicode: Title },
+            BeatmapSet: { DeletePending: false },
+          });
+        fixture.create("Beatmap", {
+          Metadata: { Title: "Deleted", TitleUnicode: "Deleted" },
+          BeatmapSet: { DeletePending: true },
+        });
+        fixture.create("Beatmap", { Metadata: { Title: "Orphan" } });
+      });
+    } finally {
+      fixture.close();
+    }
+    const realm = new Realm({ path, readOnly: true, schemaVersion: 52 });
+    try {
+      assert.deepEqual(
+        Array.from(sortedLibraryBeatmaps(realm), (map) => map.Metadata?.Title),
+        ["-+", "Alpha", "Zulu"],
+      );
+    } finally {
+      realm.close();
+    }
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

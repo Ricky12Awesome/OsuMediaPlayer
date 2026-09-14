@@ -1,11 +1,8 @@
+import type Realm from "realm";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { posix, join } from "node:path";
-import type {
-  Beatmap,
-  BeatmapSet,
-  BeatmapCollection,
-} from "../shared/client-model";
+import type { Beatmap, BeatmapCollection } from "../shared/client-model";
 import { resolveLazerInstallPath } from "./lazer-path";
 import type {
   LibraryFacet,
@@ -53,6 +50,10 @@ const string = (value: unknown): string =>
   typeof value === "string" ? value : "";
 const number = (value: unknown): number =>
   typeof value === "number" && Number.isFinite(value) ? value : 0;
+const beatmapTitle = (map: Beatmap): string =>
+  string(map.Metadata?.Title) ||
+  string(map.Metadata?.TitleUnicode) ||
+  "Untitled";
 const strings = (value: unknown): string[] =>
   Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string")
@@ -128,13 +129,23 @@ export class LibraryIndex {
   readonly assets: ReadonlyMap<string, MediaAsset>;
   readonly summary: LibrarySummary;
   private readonly indexed: IndexedTrack[];
+  private readonly indexedById: Map<string, IndexedTrack>;
   private readonly byId: Map<string, Track>;
+  private readonly realm?: Realm;
+  private readonly trackIdByBeatmap: ReadonlyMap<string, string>;
+  private readonly trackIdsByMd5: ReadonlyMap<string, ReadonlySet<string>>;
+  private readonly orderCache = new Map<string, readonly string[]>();
   private readonly queryCache = new Map<string, Track[]>();
+  private realmClosed = false;
 
   constructor(
     tracks: Track[],
     assets: Map<string, MediaAsset>,
     summary: LibrarySummary,
+    realm?: Realm,
+    trackIdByBeatmap: ReadonlyMap<string, string> = new Map(),
+    trackIdsByMd5: ReadonlyMap<string, ReadonlySet<string>> = new Map(),
+    initialTitleOrder?: readonly string[],
   ) {
     this.assets = assets;
     this.summary = summary;
@@ -155,6 +166,45 @@ export class LibraryIndex {
       tags: new Set(track.tags.map(normalize)),
       collections: new Set(track.collections.map(normalize)),
     }));
+    this.indexedById = new Map(
+      this.indexed.map((item) => [item.track.id, item]),
+    );
+    this.realm = realm;
+    this.trackIdByBeatmap = trackIdByBeatmap;
+    this.trackIdsByMd5 = trackIdsByMd5;
+    // Realm already supplied this order while the library was materialized.
+    if (initialTitleOrder)
+      this.orderCache.set("title:ascending", initialTitleOrder);
+  }
+
+  /** Release the read-only Realm held by this index. */
+  close(): void {
+    if (!this.realm || this.realmClosed) return;
+    this.realm.close();
+    this.realmClosed = true;
+  }
+
+  sharesRealm(other: LibraryIndex): boolean {
+    return this.realm !== undefined && this.realm === other.realm;
+  }
+
+  private orderFor(sort: SortKey, descending: boolean): readonly string[] {
+    const key = `${sort}:${descending ? "descending" : "ascending"}`;
+    const cached = this.orderCache.get(key);
+    if (cached) return cached;
+    const fallback = this.indexed.map((item) => item.track.id);
+    const order = this.realm
+      ? realmTrackOrder(
+          this.realm,
+          sort,
+          this.trackIdByBeatmap,
+          this.trackIdsByMd5,
+          fallback,
+          descending,
+        )
+      : fallback;
+    this.orderCache.set(key, order);
+    return order;
   }
 
   getTrack(id: string): Track | null {
@@ -178,60 +228,25 @@ export class LibraryIndex {
       tagFilters,
       sort,
       descending,
-      favorites ? [...favorites].sort() : null,
+      favorites ? [...favorites] : null,
     ]);
     let matches = this.queryCache.get(key);
     if (!matches) {
       const terms = search.split(/\s+/).filter(Boolean);
-      matches = this.indexed
-        .filter(
-          (item) =>
-            (!collection || item.collections.has(collection)) &&
-            tagFilters.every((tag) => item.tags.has(tag)) &&
-            (!favorites || favorites.has(item.track.id)) &&
-            terms.every((term) => item.search.includes(term)),
-        )
-        .map((item) => item.track);
-      const compare = (a: Track, b: Track): number => {
-        let result: number;
-        switch (sort) {
-          case "duration":
-            result = a.duration - b.duration;
-            break;
-          case "bpm":
-            result = a.bpm - b.bpm;
-            break;
-          case "added":
-            result = a.addedAt - b.addedAt;
-            break;
-          case "stars":
-            result = a.stars - b.stars;
-            break;
-          case "artist":
-            result = collator.compare(a.artist, b.artist);
-            break;
-          case "collection":
-            result = collator.compare(
-              a.collections[0] ?? "\uffff",
-              b.collections[0] ?? "\uffff",
-            );
-            break;
-          case "tags":
-            result = collator.compare(
-              a.tags[0] ?? "\uffff",
-              b.tags[0] ?? "\uffff",
-            );
-            break;
-          default:
-            result = collator.compare(a.title, b.title);
+      const ordered = this.orderFor(sort, descending);
+      matches = [];
+      for (const id of ordered) {
+        const item = this.indexedById.get(id);
+        if (
+          item &&
+          (!collection || item.collections.has(collection)) &&
+          tagFilters.every((tag) => item.tags.has(tag)) &&
+          (!favorites || favorites.has(item.track.id)) &&
+          terms.every((term) => item.search.includes(term))
+        ) {
+          matches.push(item.track);
         }
-        result ||=
-          collator.compare(a.title, b.title) ||
-          collator.compare(a.artist, b.artist) ||
-          a.id.localeCompare(b.id);
-        return descending ? -result : result;
-      };
-      matches.sort(compare);
+      }
       if (this.queryCache.size >= 12)
         this.queryCache.delete(this.queryCache.keys().next().value!);
       this.queryCache.set(key, matches);
@@ -255,6 +270,159 @@ export class LibraryIndex {
   }
 }
 
+/** Sort persisted title fields in Realm before materializing songs. */
+export function sortedLibraryBeatmaps(realm: Realm, descending = false) {
+  const maps = realm
+    .objects<Beatmap>("Beatmap")
+    .filtered("BeatmapSet != nil AND BeatmapSet.DeletePending == false");
+  // Realm's tuple direction is `reverse`, so false means ascending.
+  return maps.sorted([
+    ["Metadata.TitleUnicode", descending],
+    ["Metadata.Title", descending],
+  ]);
+}
+
+type RealmSortDescriptor = [string, boolean];
+
+function sortedBeatmaps(
+  realm: Realm,
+  descriptors: RealmSortDescriptor[],
+  descending: boolean,
+) {
+  const maps = realm
+    .objects<Beatmap>("Beatmap")
+    .filtered("BeatmapSet != nil AND BeatmapSet.DeletePending == false");
+  return maps.sorted(
+    descriptors.map(
+      ([property]) => [property, descending] as RealmSortDescriptor,
+    ),
+  );
+}
+
+function orderFromBeatmaps(
+  maps: Iterable<Beatmap>,
+  trackIdByBeatmap: ReadonlyMap<string, string>,
+  fallback: readonly string[],
+): string[] {
+  const order: string[] = [];
+  const seen = new Set<string>();
+  for (const map of maps) {
+    const id = trackIdByBeatmap.get(map.ID.toHexString());
+    if (id && !seen.has(id)) {
+      seen.add(id);
+      order.push(id);
+    }
+  }
+  for (const id of fallback) {
+    if (!seen.has(id)) {
+      seen.add(id);
+      order.push(id);
+    }
+  }
+  return order;
+}
+
+function collectionOrder(
+  realm: Realm,
+  trackIdsByMd5: ReadonlyMap<string, ReadonlySet<string>>,
+  fallback: readonly string[],
+  descending: boolean,
+): string[] {
+  const order: string[] = [];
+  const seen = new Set<string>();
+  for (const collection of realm
+    .objects<BeatmapCollection>("BeatmapCollection")
+    .sorted("Name", descending)) {
+    for (const hash of collection.BeatmapMD5Hashes) {
+      for (const id of trackIdsByMd5.get(hash?.toLowerCase() ?? "") ?? []) {
+        if (!seen.has(id)) {
+          seen.add(id);
+          order.push(id);
+        }
+      }
+    }
+  }
+  for (const id of fallback) {
+    if (!seen.has(id)) {
+      seen.add(id);
+      order.push(id);
+    }
+  }
+  return order;
+}
+
+function realmTrackOrder(
+  realm: Realm,
+  sort: SortKey,
+  trackIdByBeatmap: ReadonlyMap<string, string>,
+  trackIdsByMd5: ReadonlyMap<string, ReadonlySet<string>>,
+  fallback: readonly string[],
+  descending: boolean,
+): string[] {
+  const titleFallback = (): string[] =>
+    orderFromBeatmaps(
+      sortedLibraryBeatmaps(realm, descending),
+      trackIdByBeatmap,
+      fallback,
+    );
+  switch (sort) {
+    case "title":
+      return titleFallback();
+    case "artist":
+      return orderFromBeatmaps(
+        sortedBeatmaps(
+          realm,
+          [
+            ["Metadata.Artist", false],
+            ["Metadata.ArtistUnicode", false],
+          ],
+          descending,
+        ),
+        trackIdByBeatmap,
+        titleFallback(),
+      );
+    case "duration":
+      return orderFromBeatmaps(
+        sortedBeatmaps(realm, [["Length", false]], descending),
+        trackIdByBeatmap,
+        titleFallback(),
+      );
+    case "bpm":
+      return orderFromBeatmaps(
+        sortedBeatmaps(realm, [["BPM", false]], descending),
+        trackIdByBeatmap,
+        titleFallback(),
+      );
+    case "added":
+      return orderFromBeatmaps(
+        sortedBeatmaps(
+          realm,
+          [
+            ["LastLocalUpdate", false],
+            ["LastOnlineUpdate", false],
+          ],
+          descending,
+        ),
+        trackIdByBeatmap,
+        titleFallback(),
+      );
+    case "stars":
+      return orderFromBeatmaps(
+        sortedBeatmaps(realm, [["StarRating", false]], descending),
+        trackIdByBeatmap,
+        titleFallback(),
+      );
+    case "tags":
+      return orderFromBeatmaps(
+        sortedBeatmaps(realm, [["Metadata.Tags", false]], descending),
+        trackIdByBeatmap,
+        titleFallback(),
+      );
+    case "collection":
+      return collectionOrder(realm, trackIdsByMd5, titleFallback(), descending);
+  }
+}
+
 /** Read a consistent library snapshot without modifying osu!'s database. */
 export async function loadLibraryFromRealm(
   requestedPath?: string,
@@ -273,6 +441,7 @@ export async function loadLibraryFromRealm(
     schemaVersion: 52,
     disableFormatUpgrade: true,
   });
+  let handedOff = false;
   try {
     const collectionsByHash = new Map<string, Set<string>>();
     const collectionNames = new Set<string>();
@@ -292,11 +461,18 @@ export async function loadLibraryFromRealm(
         }
       }
     }
+    const sortedMaps = sortedLibraryBeatmaps(realm);
     // Filter in Realm and traverse its links directly, without a detached copy of every difficulty.
     function* beatmaps(): Generator<{ map: Beatmap; set: RawSet }> {
-      for (const source of realm
-        .objects<BeatmapSet>("BeatmapSet")
-        .filtered("DeletePending == false")) {
+      const sets = new Map<string, RawSet>();
+      for (const map of sortedMaps) {
+        const source = map.BeatmapSet!;
+        const key = source.ID.toHexString();
+        const cached = sets.get(key);
+        if (cached) {
+          yield { map, set: cached };
+          continue;
+        }
         const files = new Map<string, { hash: string; filename: string }>();
         const beatmapDirectories = new Map<string, string>();
         for (const usage of source.Files) {
@@ -326,10 +502,11 @@ export async function loadLibraryFromRealm(
                 .digest("hex")
                 .slice(0, 20)}`;
         const set = { identity, onlineId, files, beatmapDirectories };
-        for (const map of linkedMaps) yield { map, set };
+        sets.set(key, set);
+        yield { map, set };
       }
     }
-    return await buildIndex(
+    const index = await buildIndex(
       installPath,
       beatmaps(),
       collectionsByHash,
@@ -337,9 +514,12 @@ export async function loadLibraryFromRealm(
       onProgress,
       signal,
       onSnapshot,
+      realm,
     );
+    handedOff = true;
+    return index;
   } finally {
-    realm.close();
+    if (!handedOff) realm.close();
   }
 }
 
@@ -351,6 +531,7 @@ async function buildIndex(
   onProgress?: (progress: LibraryProgress) => void,
   signal?: AbortSignal,
   onSnapshot?: (index: LibraryIndex) => void,
+  realm?: Realm,
 ): Promise<LibraryIndex> {
   const tracks = new Map<string, Track>();
   const assets = new Map<string, MediaAsset>();
@@ -361,6 +542,8 @@ async function buildIndex(
     beatmapHash: string;
     fallback: MediaAsset;
   }[] = [];
+  const trackIdByBeatmap = new Map<string, string>();
+  const trackIdsByMd5 = new Map<string, Set<string>>();
   let skippedCount = 0;
   let beatmapCount = 0;
   let lastYield = performance.now();
@@ -389,6 +572,10 @@ async function buildIndex(
             beatmapCount,
             skippedCount,
             collectionNames,
+            realm,
+            trackIdByBeatmap,
+            trackIdsByMd5,
+            [...tracks.keys()],
           ),
         );
         publishedPreview = true;
@@ -428,6 +615,13 @@ async function buildIndex(
         filename: artwork.filename,
       });
     const id = `${set.identity}-${audio.hash}`;
+    trackIdByBeatmap.set(map.ID.toHexString(), id);
+    for (const hash of hashes) {
+      if (!hash) continue;
+      const ids = trackIdsByMd5.get(hash) ?? new Set<string>();
+      ids.add(id);
+      trackIdsByMd5.set(hash, ids);
+    }
     const tags = [
       ...new Set(
         [
@@ -463,8 +657,7 @@ async function buildIndex(
     } else {
       const track: Track = {
         id,
-        title:
-          string(metadata.Title) || string(metadata.TitleUnicode) || "Untitled",
+        title: beatmapTitle(map),
         titleUnicode: string(metadata.TitleUnicode) || undefined,
         artist:
           string(metadata.Artist) ||
@@ -549,6 +742,10 @@ async function buildIndex(
     beatmapCount,
     skippedCount,
     collectionNames,
+    realm,
+    trackIdByBeatmap,
+    trackIdsByMd5,
+    [...tracks.keys()],
   );
 }
 
@@ -559,6 +756,10 @@ function finishIndex(
   beatmapCount: number,
   skippedCount: number,
   collectionNames: Set<string>,
+  realm?: Realm,
+  trackIdByBeatmap: ReadonlyMap<string, string> = new Map(),
+  trackIdsByMd5: ReadonlyMap<string, ReadonlySet<string>> = new Map(),
+  initialTitleOrder?: readonly string[],
 ): LibraryIndex {
   const collectionCounts = new Map(
     [...collectionNames].map((name) => [name, 0]),
@@ -574,17 +775,25 @@ function finishIndex(
   }
   const facets = (values: Map<string, number>): LibraryFacet[] =>
     [...values].map(([name, count]) => ({ name, count }));
-  return new LibraryIndex([...tracks.values()], assets, {
-    trackCount: tracks.size,
-    beatmapCount,
-    collectionCount: collectionNames.size,
-    collections: facets(collectionCounts).sort((a, b) =>
-      collator.compare(a.name, b.name),
-    ),
-    tags: facets(tagCounts).sort(
-      (a, b) => b.count - a.count || collator.compare(a.name, b.name),
-    ),
-    installPath,
-    skippedCount,
-  });
+  return new LibraryIndex(
+    [...tracks.values()],
+    assets,
+    {
+      trackCount: tracks.size,
+      beatmapCount,
+      collectionCount: collectionNames.size,
+      collections: facets(collectionCounts).sort((a, b) =>
+        collator.compare(a.name, b.name),
+      ),
+      tags: facets(tagCounts).sort(
+        (a, b) => b.count - a.count || collator.compare(a.name, b.name),
+      ),
+      installPath,
+      skippedCount,
+    },
+    realm,
+    trackIdByBeatmap,
+    trackIdsByMd5,
+    initialTitleOrder,
+  );
 }

@@ -68,6 +68,12 @@ const zoomStages = [
   25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400, 500,
 ] as const;
 
+function replaceLibrary(next: LibraryIndex): void {
+  if (library && library !== next && !library.sharesRealm(next))
+    library.close();
+  library = next;
+}
+
 function currentZoomPercent(): number {
   if (!window || window.isDestroyed()) return 100;
   return Math.round(window.webContents.getZoomFactor() * 100);
@@ -301,6 +307,7 @@ function setupIPC(): void {
     }
     importController = new AbortController();
     pendingPath = installPath;
+    const previousLibrary = library;
     pendingLoad = loadLibraryFromRealm(
       installPath,
       (progress) => {
@@ -309,6 +316,8 @@ function setupIPC(): void {
       },
       importController!.signal,
       (index) => {
+        // Keep the previous index alive until the new Realm has finished loading.
+        // If loading is cancelled, the callback can then restore it.
         library = index;
         if (window && !window.isDestroyed())
           window.webContents.send("library:progress", {
@@ -319,8 +328,21 @@ function setupIPC(): void {
       },
     );
     try {
-      library = await pendingLoad;
-      return library.summary;
+      const loaded = await pendingLoad;
+      if (
+        previousLibrary &&
+        previousLibrary !== loaded &&
+        !previousLibrary.sharesRealm(loaded)
+      )
+        previousLibrary.close();
+      replaceLibrary(loaded);
+      return loaded.summary;
+    } catch (error) {
+      // loadLibraryFromRealm closes its Realm when it fails or is cancelled.
+      // Do not leave IPC queries pointed at a closed preview index.
+      if (previousLibrary) library = previousLibrary;
+      else library = null;
+      throw error;
     } finally {
       pendingLoad = null;
       pendingPath = undefined;
@@ -494,6 +516,8 @@ void app.whenReady().then(() => {
 app.on("before-quit", () => {
   importController?.abort();
   videoTranscoder?.dispose();
+  library?.close();
+  library = null;
 });
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
