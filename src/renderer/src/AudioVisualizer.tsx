@@ -276,11 +276,14 @@ export function AudioVisualizer({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const latest = useRef(settings);
   latest.current = settings;
+  const playbackRef = useRef(playing);
+  playbackRef.current = playing;
+  const playbackMixRef = useRef(0);
   const [revision, setRevision] = useState(0);
   const [unavailable, setUnavailable] = useState(false);
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !settings.enabled || !analyser) return;
+    if (!canvas || !settings.enabled) return;
     const gl = canvas.getContext("webgl", {
       alpha: true,
       antialias: false,
@@ -330,25 +333,21 @@ export function AudioVisualizer({
     };
     const ready = setup();
     setUnavailable(!ready);
-    const samples = new Uint8Array(analyser.fftSize);
-    const waveform = new Float32Array(analyser.fftSize);
+    const sampleSize = analyser?.fftSize ?? 2048;
+    const samples = new Uint8Array(sampleSize);
+    const waveform = new Float32Array(sampleSize);
     const retained = new Float32Array(256);
     let previousMode = settings.mode;
     let previousBars = settings.bars;
     const amplitudes = new Float32Array(256);
+    const liveAmplitudes = new Float32Array(256);
     const vertices = new Float32Array(1022 * 12);
     let lastFrame = -Infinity;
     const draw = (time: number) => {
       frame = 0;
       if (!ready || lost) return;
 
-      if (
-        !playing ||
-        document.hidden ||
-        !visible ||
-        width === 0 ||
-        height === 0
-      ) {
+      if (document.hidden || !visible || width === 0 || height === 0) {
         gl.clearColor(0, 0, 0, 0);
         gl.clear(gl.COLOR_BUFFER_BIT);
         return;
@@ -359,47 +358,68 @@ export function AudioVisualizer({
       }
       const elapsed = Number.isFinite(lastFrame) ? time - lastFrame : 1000 / 60;
       lastFrame = time;
+      const activeAnalyser = playbackRef.current ? analyser : null;
+      const targetMix = activeAnalyser ? 1 : 0;
+      const mixStep = Math.min(1, Math.max(0, elapsed / 280));
+      const playbackMix =
+        playbackMixRef.current + (targetMix - playbackMixRef.current) * mixStep;
+      playbackMixRef.current = playbackMix;
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
       const s = latest.current;
-      if (s.mode !== previousMode || s.bars !== previousBars) retained.fill(0);
+      if (s.mode !== previousMode || s.bars !== previousBars) {
+        retained.fill(0);
+        liveAmplitudes.fill(0);
+      }
       previousMode = s.mode;
       previousBars = s.bars;
-      if (s.mode === "fft") analyser.getByteFrequencyData(samples);
-      else analyser.getFloatTimeDomainData(waveform);
+      if (activeAnalyser && s.mode === "fft")
+        activeAnalyser.getByteFrequencyData(samples);
+      else if (activeAnalyser) activeAnalyser.getFloatTimeDomainData(waveform);
       const scale = Math.min(width, height);
       const radius = scale * 0.23;
       const maxLength = (scale * 0.2 * s.length) / 100;
       // Analyze once before mirroring, so trimming preserves all symmetries.
       for (let i = 0; i < s.bars; i++) {
-        let amplitude = 0;
-        if (s.mode === "fft") {
-          const endBin = Math.min(
-            analyser.frequencyBinCount,
-            Math.floor(
-              (18000 * analyser.fftSize) / analyser.context.sampleRate,
-            ),
-          );
-          const start = Math.floor(Math.pow(endBin, i / s.bars));
-          const end = Math.max(
-            start + 1,
-            Math.floor(Math.pow(endBin, (i + 1) / s.bars)),
-          );
-          for (let j = start; j < end; j++)
-            amplitude = Math.max(amplitude, samples[j] / 255);
-        } else {
-          const sample =
-            waveform[Math.floor((i * (waveform.length - 1)) / (s.bars - 1))];
-          const target = Math.min(1, Math.abs(sample) * s.waveformMultiplier);
-          amplitude = retainWaveform(
-            retained[i],
-            target,
-            elapsed,
-            s.waveformRetention,
-          );
-          retained[i] = amplitude;
+        let liveAmplitude = liveAmplitudes[i];
+        if (activeAnalyser) {
+          let amplitude = 0;
+          if (s.mode === "fft") {
+            const endBin = Math.min(
+              activeAnalyser.frequencyBinCount,
+              Math.floor(
+                (18000 * activeAnalyser.fftSize) /
+                  activeAnalyser.context.sampleRate,
+              ),
+            );
+            const start = Math.floor(Math.pow(endBin, i / s.bars));
+            const end = Math.max(
+              start + 1,
+              Math.floor(Math.pow(endBin, (i + 1) / s.bars)),
+            );
+            for (let j = start; j < end; j++)
+              amplitude = Math.max(amplitude, samples[j] / 255);
+          } else {
+            const sample =
+              waveform[Math.floor((i * (waveform.length - 1)) / (s.bars - 1))];
+            const target = Math.min(1, Math.abs(sample) * s.waveformMultiplier);
+            amplitude = retainWaveform(
+              retained[i],
+              target,
+              elapsed,
+              s.waveformRetention,
+            );
+            retained[i] = amplitude;
+          }
+          liveAmplitude = amplitude;
+          liveAmplitudes[i] = amplitude;
         }
-        amplitudes[i] = amplitude;
+
+        const breath = 0.08 + 0.045 * (0.5 + 0.5 * Math.sin(time * 0.0012));
+        const ripple = 0.025 * Math.sin(time * 0.0018 + i * 0.24);
+        const idleAmplitude = Math.max(0, Math.min(1, breath + ripple));
+        amplitudes[i] =
+          liveAmplitude * playbackMix + idleAmplitude * (1 - playbackMix);
       }
       const offset =
         s.mode === "fft" ? fftLeadingOffset(amplitudes, s.bars) : 0;
@@ -531,7 +551,7 @@ export function AudioVisualizer({
       gl.deleteProgram(program);
       shaders.forEach((shader) => gl.deleteShader(shader));
     };
-  }, [analyser, playing, settings.enabled, revision]);
+  }, [analyser, settings.enabled, revision]);
   if (!settings.enabled) return null;
   return (
     <>

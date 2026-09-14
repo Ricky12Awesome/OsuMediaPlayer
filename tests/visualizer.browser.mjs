@@ -147,9 +147,9 @@ try {
   const draws = await page.evaluate(() => window.draws);
   await page.waitForTimeout(100);
   assert.equal(
-    await page.evaluate(() => window.draws),
-    draws,
-    "paused renderer stops drawing",
+    await page.evaluate((before) => window.draws > before, draws),
+    true,
+    "paused renderer continues with its idle animation",
   );
   await page.evaluate(() => window.renderVisualizer({ enabled: false }));
   await page.waitForFunction(
