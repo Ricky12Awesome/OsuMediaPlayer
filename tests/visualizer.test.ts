@@ -13,36 +13,34 @@ test("visualizer settings recover from invalid storage", () => {
     assert.deepEqual(parseVisualizer(value), defaultVisualizer);
 });
 test("visualizer settings bound rendering work and preserve supported options", () => {
-  assert.deepEqual(
-    parseVisualizer(
-      JSON.stringify({
-        enabled: false,
-        bars: 10000,
-        width: -4,
-        length: "bad",
-        mirrored: false,
-        layout: "circle",
-        mode: "waveform",
-      }),
-    ),
-    {
+  const settings = parseVisualizer(
+    JSON.stringify({
       enabled: false,
-      bars: 256,
-      width: 10,
-      length: 70,
-      waveformMultiplier: 10,
-      waveformRetention: 200,
+      bars: 10000,
+      width: -4,
+      length: "bad",
       mirrored: false,
-      flipped: false,
-      circleMirrored: false,
-      circleFlipped: false,
-      mirrorVertically: false,
-      circleMirrorVertically: false,
-      circleInwardLength: 0,
       layout: "circle",
       mode: "waveform",
-    },
+    }),
   );
+  assert.equal(settings.enabled, false);
+  assert.equal(settings.layout, "circle");
+  assert.deepEqual(settings.line, {
+    mode: "waveform",
+    bars: 256,
+    width: 10,
+    length: 70,
+    radius: 23,
+    waveformMultiplier: 10,
+    waveformRetention: 200,
+    fftRetention: 200,
+    mirrored: false,
+    flipped: false,
+    mirrorVertically: false,
+    inwardLength: 0,
+  });
+  assert.deepEqual(settings.circle, settings.line);
 });
 
 test("mirroring reflects the sequence without duplicating the peak", () => {
@@ -69,8 +67,8 @@ test("flipped mirroring puts the lowest index at the center", () => {
     [5, 4, 3, 2, 1, 2, 3, 4, 5],
   );
   assert.equal(visualizerBarIndex(0, 5, false, true), 0);
-  assert.equal(parseVisualizer('{"flipped":true}').flipped, true);
-  assert.equal(parseVisualizer('{"flipped":"true"}').flipped, false);
+  assert.equal(parseVisualizer('{"flipped":true}').line.flipped, true);
+  assert.equal(parseVisualizer('{"flipped":"true"}').line.flipped, false);
 });
 
 test("FFT trimming keeps the first different bar and all following bars", () => {
@@ -92,26 +90,26 @@ test("circle mirroring settings are independent and migrate existing preferences
       circleFlipped: true,
     }),
   );
-  assert.equal(settings.mirrored, false);
-  assert.equal(settings.flipped, false);
-  assert.equal(settings.circleMirrored, true);
-  assert.equal(settings.circleFlipped, true);
+  assert.equal(settings.line.mirrored, false);
+  assert.equal(settings.line.flipped, false);
+  assert.equal(settings.circle.mirrored, true);
+  assert.equal(settings.circle.flipped, true);
   const legacy = parseVisualizer('{"mirrored":false,"flipped":true}');
-  assert.equal(legacy.circleMirrored, false);
-  assert.equal(legacy.circleFlipped, true);
+  assert.equal(legacy.circle.mirrored, false);
+  assert.equal(legacy.circle.flipped, true);
 });
 
 test("circle inward length is a persisted percentage capped at 100", () => {
   assert.equal(
-    parseVisualizer('{"circleInwardLength":75}').circleInwardLength,
+    parseVisualizer('{"circleInwardLength":75}').circle.inwardLength,
     75,
   );
   assert.equal(
-    parseVisualizer('{"circleInwardLength":1000}').circleInwardLength,
+    parseVisualizer('{"circleInwardLength":1000}').circle.inwardLength,
     100,
   );
   assert.equal(
-    parseVisualizer('{"circleInwardLength":-1}').circleInwardLength,
+    parseVisualizer('{"circleInwardLength":-1}').circle.inwardLength,
     0,
   );
 });
@@ -120,10 +118,10 @@ test("vertical mirroring is independent per layout and preserves legacy settings
   const settings = parseVisualizer(
     '{"mirrorVertically":true,"circleMirrorVertically":false}',
   );
-  assert.equal(settings.mirrorVertically, true);
-  assert.equal(settings.circleMirrorVertically, false);
+  assert.equal(settings.line.mirrorVertically, true);
+  assert.equal(settings.circle.mirrorVertically, false);
   assert.equal(
-    parseVisualizer('{"mirrorVertically":true}').circleMirrorVertically,
+    parseVisualizer('{"mirrorVertically":true}').circle.mirrorVertically,
     true,
   );
 });
@@ -138,14 +136,55 @@ test("waveform retention is frame-rate independent and can be disabled", () => {
   const settings = parseVisualizer(
     '{"waveformMultiplier":999,"waveformRetention":-1}',
   );
-  assert.equal(settings.waveformMultiplier, 25);
+  assert.equal(settings.line.waveformMultiplier, 25);
   assert.equal(
-    parseVisualizer('{"waveformMultiplier":0}').waveformMultiplier,
+    parseVisualizer('{"waveformMultiplier":0}').line.waveformMultiplier,
     1,
   );
-  assert.equal(settings.waveformRetention, 0);
+  assert.equal(settings.line.waveformRetention, 0);
   assert.equal(
-    parseVisualizer('{"waveformRetention":1000}').waveformRetention,
+    parseVisualizer('{"waveformRetention":1000}').line.waveformRetention,
     250,
   );
+});
+
+test("line and circle visualizer settings stay independent", () => {
+  const settings = parseVisualizer(
+    JSON.stringify({
+      line: {
+        mode: "waveform",
+        bars: 24,
+        width: 35,
+        length: 45,
+        waveformMultiplier: 7,
+        waveformRetention: 80,
+        fftRetention: 20,
+        mirrored: false,
+        flipped: true,
+        mirrorVertically: true,
+      },
+      circle: {
+        mode: "fft",
+        bars: 96,
+        width: 75,
+        length: 90,
+        waveformMultiplier: 18,
+        waveformRetention: 210,
+        fftRetention: 150,
+        mirrored: true,
+        flipped: false,
+        mirrorVertically: true,
+        inwardLength: 60,
+        radius: 30,
+      },
+    }),
+  );
+  assert.equal(settings.line.mode, "waveform");
+  assert.equal(settings.line.bars, 24);
+  assert.equal(settings.line.fftRetention, 20);
+  assert.equal(settings.circle.mode, "fft");
+  assert.equal(settings.circle.bars, 96);
+  assert.equal(settings.circle.fftRetention, 150);
+  assert.equal(settings.circle.inwardLength, 60);
+  assert.equal(settings.circle.radius, 30);
 });

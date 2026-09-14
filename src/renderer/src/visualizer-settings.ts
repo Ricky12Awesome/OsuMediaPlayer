@@ -1,92 +1,198 @@
-export interface VisualizerSettings {
-  enabled: boolean;
+export interface VisualizerLayoutSettings {
+  mode: "fft" | "waveform";
   bars: number;
   width: number;
   length: number;
+  radius: number;
   waveformMultiplier: number;
   waveformRetention: number;
+  fftRetention: number;
   mirrored: boolean;
   flipped: boolean;
-  circleMirrored: boolean;
-  circleFlipped: boolean;
   mirrorVertically: boolean;
-  circleMirrorVertically: boolean;
-  circleInwardLength: number;
-  layout: "line" | "circle";
-  mode: "fft" | "waveform";
+  inwardLength: number;
 }
+
+export interface VisualizerSettings {
+  enabled: boolean;
+  layout: "line" | "circle";
+  line: VisualizerLayoutSettings;
+  circle: VisualizerLayoutSettings;
+}
+
+function createDefaultLayout(): VisualizerLayoutSettings {
+  return {
+    mode: "fft",
+    bars: 64,
+    width: 65,
+    length: 70,
+    radius: 23,
+    waveformMultiplier: 10,
+    waveformRetention: 200,
+    fftRetention: 200,
+    mirrored: true,
+    flipped: false,
+    mirrorVertically: false,
+    inwardLength: 0,
+  };
+}
+
 export const defaultVisualizer: VisualizerSettings = {
   enabled: true,
-  bars: 64,
-  width: 65,
-  length: 70,
-  waveformMultiplier: 10,
-  waveformRetention: 200,
-  mirrored: true,
-  flipped: false,
-  circleMirrored: true,
-  circleFlipped: false,
-  mirrorVertically: false,
-  circleMirrorVertically: false,
-  circleInwardLength: 0,
   layout: "line",
-  mode: "fft",
+  line: createDefaultLayout(),
+  circle: createDefaultLayout(),
 };
+
+function cloneDefaultVisualizer(): VisualizerSettings {
+  return {
+    enabled: defaultVisualizer.enabled,
+    layout: defaultVisualizer.layout,
+    line: { ...defaultVisualizer.line },
+    circle: { ...defaultVisualizer.circle },
+  };
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function booleanValue(
+  value: Record<string, unknown>,
+  key: string,
+  fallback: boolean,
+): boolean {
+  return typeof value[key] === "boolean" ? value[key] : fallback;
+}
+
+function boundedNumber(
+  value: unknown,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.round(Math.max(min, Math.min(max, value)))
+    : fallback;
+}
+
+function parseLayout(
+  raw: unknown,
+  fallback: VisualizerLayoutSettings,
+): VisualizerLayoutSettings {
+  const value = record(raw);
+  return {
+    mode:
+      value.mode === "waveform"
+        ? "waveform"
+        : value.mode === "fft"
+          ? "fft"
+          : fallback.mode,
+    bars: boundedNumber(value.bars, fallback.bars, 8, 256),
+    width: boundedNumber(value.width, fallback.width, 10, 100),
+    length: boundedNumber(value.length, fallback.length, 10, 100),
+    radius: boundedNumber(value.radius, fallback.radius, 8, 45),
+    waveformMultiplier: boundedNumber(
+      value.waveformMultiplier,
+      fallback.waveformMultiplier,
+      1,
+      25,
+    ),
+    waveformRetention: boundedNumber(
+      value.waveformRetention,
+      fallback.waveformRetention,
+      0,
+      250,
+    ),
+    fftRetention: boundedNumber(
+      value.fftRetention,
+      fallback.fftRetention,
+      0,
+      250,
+    ),
+    mirrored: booleanValue(value, "mirrored", fallback.mirrored),
+    flipped: booleanValue(value, "flipped", fallback.flipped),
+    mirrorVertically: booleanValue(
+      value,
+      "mirrorVertically",
+      fallback.mirrorVertically,
+    ),
+    inwardLength: boundedNumber(
+      value.inwardLength,
+      fallback.inwardLength,
+      0,
+      100,
+    ),
+  };
+}
+
 export function parseVisualizer(raw: string | null): VisualizerSettings {
   try {
-    const value = JSON.parse(raw ?? "null");
-    if (!value || typeof value !== "object") return { ...defaultVisualizer };
-    const number = (
-      key:
-        | "bars"
-        | "width"
-        | "length"
-        | "waveformMultiplier"
-        | "waveformRetention"
-        | "circleInwardLength",
-      min: number,
-      max: number,
-    ) =>
-      typeof value[key] === "number" && Number.isFinite(value[key])
-        ? Math.round(Math.max(min, Math.min(max, value[key])))
-        : defaultVisualizer[key];
+    const value = record(JSON.parse(raw ?? "null"));
+    if (!Object.keys(value).length) return cloneDefaultVisualizer();
+
+    const legacyMode =
+      value.mode === "waveform" || value.mode === "fft"
+        ? value.mode
+        : defaultVisualizer.line.mode;
+    const legacyLine: VisualizerLayoutSettings = {
+      ...createDefaultLayout(),
+      mode: legacyMode,
+      bars: boundedNumber(value.bars, defaultVisualizer.line.bars, 8, 256),
+      width: boundedNumber(value.width, defaultVisualizer.line.width, 10, 100),
+      length: boundedNumber(
+        value.length,
+        defaultVisualizer.line.length,
+        10,
+        100,
+      ),
+      radius: boundedNumber(value.radius, defaultVisualizer.line.radius, 8, 45),
+      waveformMultiplier: boundedNumber(
+        value.waveformMultiplier,
+        defaultVisualizer.line.waveformMultiplier,
+        1,
+        25,
+      ),
+      waveformRetention: boundedNumber(
+        value.waveformRetention,
+        defaultVisualizer.line.waveformRetention,
+        0,
+        250,
+      ),
+      fftRetention: boundedNumber(
+        value.fftRetention,
+        defaultVisualizer.line.fftRetention,
+        0,
+        250,
+      ),
+      mirrored: booleanValue(value, "mirrored", true),
+      flipped: booleanValue(value, "flipped", false),
+      mirrorVertically: booleanValue(value, "mirrorVertically", false),
+      inwardLength: boundedNumber(value.inwardLength, 0, 0, 100),
+    };
+    const legacyCircle: VisualizerLayoutSettings = {
+      ...legacyLine,
+      radius: boundedNumber(value.circleRadius, legacyLine.radius, 8, 45),
+      mirrored: booleanValue(value, "circleMirrored", legacyLine.mirrored),
+      flipped: booleanValue(value, "circleFlipped", legacyLine.flipped),
+      mirrorVertically: booleanValue(
+        value,
+        "circleMirrorVertically",
+        legacyLine.mirrorVertically,
+      ),
+      inwardLength: boundedNumber(value.circleInwardLength, 0, 0, 100),
+    };
+
     return {
-      enabled: typeof value.enabled === "boolean" ? value.enabled : true,
-      mirrored: typeof value.mirrored === "boolean" ? value.mirrored : true,
-      flipped: typeof value.flipped === "boolean" ? value.flipped : false,
-      circleMirrored:
-        typeof value.circleMirrored === "boolean"
-          ? value.circleMirrored
-          : typeof value.mirrored === "boolean"
-            ? value.mirrored
-            : true,
-      circleFlipped:
-        typeof value.circleFlipped === "boolean"
-          ? value.circleFlipped
-          : typeof value.flipped === "boolean"
-            ? value.flipped
-            : false,
-      mirrorVertically:
-        typeof value.mirrorVertically === "boolean"
-          ? value.mirrorVertically
-          : false,
-      circleMirrorVertically:
-        typeof value.circleMirrorVertically === "boolean"
-          ? value.circleMirrorVertically
-          : typeof value.mirrorVertically === "boolean"
-            ? value.mirrorVertically
-            : false,
-      circleInwardLength: number("circleInwardLength", 0, 100),
-      bars: number("bars", 8, 256),
-      width: number("width", 10, 100),
-      length: number("length", 10, 100),
-      waveformMultiplier: number("waveformMultiplier", 1, 25),
-      waveformRetention: number("waveformRetention", 0, 250),
+      enabled: booleanValue(value, "enabled", true),
       layout: value.layout === "circle" ? "circle" : "line",
-      mode: value.mode === "waveform" ? "waveform" : "fft",
+      line: parseLayout(value.line, legacyLine),
+      circle: parseLayout(value.circle, legacyCircle),
     };
   } catch {
-    return { ...defaultVisualizer };
+    return cloneDefaultVisualizer();
   }
 }
 

@@ -177,7 +177,9 @@ export function usePlayer(api: PlayerAPI): PlayerState {
           const context = new AudioContext();
           const analyser = context.createAnalyser();
           analyser.fftSize = 2048;
-          analyser.smoothingTimeConstant = 0.8;
+          // Keep the raw spectrum here; the per-layout FFT retention setting
+          // owns smoothing so its effect remains visible to the user.
+          analyser.smoothingTimeConstant = 0;
           const source = context.createMediaElementSource(audio);
           source.connect(context.destination);
           source.connect(analyser); // Analysis-only branch, never connected to output.

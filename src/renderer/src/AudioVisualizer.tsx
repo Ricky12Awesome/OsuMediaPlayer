@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
+  type VisualizerLayoutSettings,
   type VisualizerSettings,
   parseVisualizer,
   fftLeadingOffset,
@@ -33,81 +34,97 @@ export function VisualizerControls({
   settings: VisualizerSettings;
   onChange: (settings: VisualizerSettings) => void;
 }) {
-  const toggle = (
-    key:
-      | "enabled"
-      | "mirrored"
-      | "flipped"
-      | "circleMirrored"
-      | "circleFlipped"
-      | "mirrorVertically"
-      | "circleMirrorVertically",
-    title: string,
-    description: string,
-    disabled = false,
-  ) => (
+  const layoutSettings = settings[settings.layout];
+  const updateLayout = (patch: Partial<VisualizerLayoutSettings>) =>
+    onChange({
+      ...settings,
+      [settings.layout]: { ...layoutSettings, ...patch },
+    });
+  const toggleGlobal = (title: string, description: string) => (
     <button
       type="button"
-      className={"settings-toggle " + (settings[key] ? "active" : "")}
-      aria-pressed={settings[key]}
-      disabled={disabled}
-      onClick={() => onChange({ ...settings, [key]: !settings[key] })}
+      className={"settings-toggle " + (settings.enabled ? "active" : "")}
+      aria-pressed={settings.enabled}
+      onClick={() => onChange({ ...settings, enabled: !settings.enabled })}
     >
       <span className="settings-toggle-copy">
         <strong>{title}</strong>
         <span>{description}</span>
       </span>
       <span className="settings-toggle-status">
-        {settings[key] ? "On" : "Off"}
+        {settings.enabled ? "On" : "Off"}
+      </span>
+    </button>
+  );
+  const toggle = (
+    key: "mirrored" | "flipped" | "mirrorVertically",
+    title: string,
+    description: string,
+    disabled = false,
+  ) => (
+    <button
+      type="button"
+      className={"settings-toggle " + (layoutSettings[key] ? "active" : "")}
+      aria-pressed={layoutSettings[key]}
+      disabled={disabled}
+      onClick={() => updateLayout({ [key]: !layoutSettings[key] })}
+    >
+      <span className="settings-toggle-copy">
+        <strong>{title}</strong>
+        <span>{description}</span>
+      </span>
+      <span className="settings-toggle-status">
+        {layoutSettings[key] ? "On" : "Off"}
       </span>
     </button>
   );
   return (
     <div className="settings-block visualizer-settings">
       <span className="settings-label">AUDIO VISUALIZER</span>
-      {toggle("enabled", "Show visualizer", "Display bars over the artwork")}
+      {toggleGlobal("Show visualizer", "Display bars over the artwork")}
       <fieldset>
-        <legend>Layout</legend>
-        <div className="transport-layout-options">
-          {(["line", "circle"] as const).map((layout) => (
+        <legend>Visualizer</legend>
+        <div className="transport-layout-options visualizer-variant-options">
+          {(
+            [
+              ["circle", "fft", "Circle (FFT)", "Bars around a ring"],
+              [
+                "circle",
+                "waveform",
+                "Circle (Waveform)",
+                "Audio amplitude around a ring",
+              ],
+              ["line", "fft", "Line (FFT)", "Frequency bars along a baseline"],
+              [
+                "line",
+                "waveform",
+                "Line (Waveform)",
+                "Audio amplitude along a baseline",
+              ],
+            ] as const
+          ).map(([layout, mode, title, description]) => (
             <button
-              key={layout}
+              key={`${layout}-${mode}`}
               type="button"
-              aria-pressed={settings.layout === layout}
+              aria-pressed={
+                settings.layout === layout && layoutSettings.mode === mode
+              }
               className={
                 "transport-layout-option " +
-                (settings.layout === layout ? "active" : "")
+                (settings.layout === layout && layoutSettings.mode === mode
+                  ? "active"
+                  : "")
               }
-              onClick={() => onChange({ ...settings, layout })}
-            >
-              <strong>{layout === "line" ? "Line" : "Circle"}</strong>
-              <span>
-                {layout === "line"
-                  ? "Bars along a baseline"
-                  : "Bars around a ring"}
-              </span>
-            </button>
-          ))}
-        </div>
-      </fieldset>
-      <fieldset>
-        <legend>Signal</legend>
-        <div className="transport-layout-options">
-          {(["fft", "waveform"] as const).map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              aria-pressed={settings.mode === mode}
-              className={
-                "transport-layout-option " +
-                (settings.mode === mode ? "active" : "")
+              onClick={() =>
+                onChange({
+                  ...settings,
+                  layout,
+                  [layout]: { ...settings[layout], mode },
+                })
               }
-              onClick={() => onChange({ ...settings, mode })}
             >
-              <strong>{mode === "fft" ? "FFT spectrum" : "Waveform"}</strong>
-              <span>
-                {mode === "fft" ? "Frequency levels" : "Audio amplitude"}
-              </span>
+              <strong>{title}</strong>
+              <span>{description}</span>
             </button>
           ))}
         </div>
@@ -124,7 +141,7 @@ export function VisualizerControls({
             "flipped",
             "Flip mirrored direction",
             "Place the lowest frequency at the center",
-            !settings.mirrored,
+            !layoutSettings.mirrored,
           )}
           {toggle(
             "mirrorVertically",
@@ -136,18 +153,18 @@ export function VisualizerControls({
         <fieldset>
           <legend>Mirroring</legend>
           {toggle(
-            "circleMirrored",
+            "mirrored",
             "Mirror bar sequence",
             "Reflect the sequence around the ring",
           )}
           {toggle(
-            "circleFlipped",
+            "flipped",
             "Flip mirrored direction",
             "Reverse the mirrored frequency order",
-            !settings.circleMirrored,
+            !layoutSettings.mirrored,
           )}
           {toggle(
-            "circleMirrorVertically",
+            "mirrorVertically",
             "Mirror vertically",
             "Reflect one semicircle onto the other",
           )}
@@ -155,7 +172,7 @@ export function VisualizerControls({
       )}
       <fieldset className="visualizer-dimensions">
         <legend>Bars</legend>
-        {settings.mode === "waveform" && (
+        {layoutSettings.mode === "waveform" && (
           <p className="visualizer-slider-help">
             Higher retention smooths rapid changes. Set to 0 ms for an immediate
             response.
@@ -165,11 +182,7 @@ export function VisualizerControls({
           [
             [
               "bars",
-              (
-                settings.layout === "circle"
-                  ? settings.circleMirrored
-                  : settings.mirrored
-              )
+              layoutSettings.mirrored
                 ? "Bars before mirroring"
                 : "Amount of bars",
               8,
@@ -178,15 +191,19 @@ export function VisualizerControls({
             ],
             ["width", "Bar width (%)", 10, 100, "%"],
             ["length", "Bar length (%)", 10, 100, "%"],
-            ...(settings.mode === "waveform"
+            ...(layoutSettings.mode === "waveform"
               ? ([
                   ["waveformMultiplier", "Waveform multiplier", 1, 25, "×"],
                   ["waveformRetention", "Waveform retention", 0, 250, " ms"],
                 ] as const)
               : []),
+            ...(layoutSettings.mode === "fft"
+              ? ([["fftRetention", "FFT retention", 0, 250, " ms"]] as const)
+              : []),
             ...(settings.layout === "circle"
               ? ([
-                  ["circleInwardLength", "Inward length", 0, 100, "%"],
+                  ["inwardLength", "Inward length", 0, 100, "%"],
+                  ["radius", "Circle radius", 8, 45, "%"],
                 ] as const)
               : []),
           ] as const
@@ -197,7 +214,7 @@ export function VisualizerControls({
                 {label.replace(" (%)", "")}
               </label>
               <output htmlFor={`visualizer-${name}`}>
-                {settings[name]}
+                {layoutSettings[name]}
                 {unit}
               </output>
             </div>
@@ -205,11 +222,10 @@ export function VisualizerControls({
               <button
                 type="button"
                 aria-label={`Decrease ${label}`}
-                disabled={settings[name] <= min}
+                disabled={layoutSettings[name] <= min}
                 onClick={() =>
-                  onChange({
-                    ...settings,
-                    [name]: Math.max(min, settings[name] - 1),
+                  updateLayout({
+                    [name]: Math.max(min, layoutSettings[name] - 1),
                   })
                 }
               >
@@ -222,25 +238,24 @@ export function VisualizerControls({
                 min={min}
                 max={max}
                 step={1}
-                value={settings[name]}
-                aria-valuetext={`${settings[name]}${name === "bars" ? " bars" : unit}`}
+                value={layoutSettings[name]}
+                aria-valuetext={`${layoutSettings[name]}${name === "bars" ? " bars" : unit}`}
                 style={
                   {
-                    "--slider-progress": `${((settings[name] - min) / (max - min)) * 100}%`,
+                    "--slider-progress": `${((layoutSettings[name] - min) / (max - min)) * 100}%`,
                   } as CSSProperties
                 }
                 onChange={(e) =>
-                  onChange({ ...settings, [name]: Number(e.target.value) })
+                  updateLayout({ [name]: Number(e.target.value) })
                 }
               />
               <button
                 type="button"
                 aria-label={`Increase ${label}`}
-                disabled={settings[name] >= max}
+                disabled={layoutSettings[name] >= max}
                 onClick={() =>
-                  onChange({
-                    ...settings,
-                    [name]: Math.min(max, settings[name] + 1),
+                  updateLayout({
+                    [name]: Math.min(max, layoutSettings[name] + 1),
                   })
                 }
               >
@@ -337,8 +352,10 @@ export function AudioVisualizer({
     const samples = new Uint8Array(sampleSize);
     const waveform = new Float32Array(sampleSize);
     const retained = new Float32Array(256);
-    let previousMode = settings.mode;
-    let previousBars = settings.bars;
+    const initialLayoutSettings = settings[settings.layout];
+    let previousMode = initialLayoutSettings.mode;
+    let previousBars = initialLayoutSettings.bars;
+    let previousLayout = settings.layout;
     const amplitudes = new Float32Array(256);
     const liveAmplitudes = new Float32Array(256);
     const vertices = new Float32Array(1022 * 12);
@@ -367,24 +384,33 @@ export function AudioVisualizer({
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
       const s = latest.current;
-      if (s.mode !== previousMode || s.bars !== previousBars) {
+      const layoutSettings = s[s.layout];
+      const mode = layoutSettings.mode;
+      const bars = layoutSettings.bars;
+      if (
+        s.layout !== previousLayout ||
+        mode !== previousMode ||
+        bars !== previousBars
+      ) {
         retained.fill(0);
         liveAmplitudes.fill(0);
       }
-      previousMode = s.mode;
-      previousBars = s.bars;
-      if (activeAnalyser && s.mode === "fft")
+      previousLayout = s.layout;
+      previousMode = mode;
+      previousBars = bars;
+      if (activeAnalyser && mode === "fft")
         activeAnalyser.getByteFrequencyData(samples);
       else if (activeAnalyser) activeAnalyser.getFloatTimeDomainData(waveform);
       const scale = Math.min(width, height);
-      const radius = scale * 0.23;
-      const maxLength = (scale * 0.2 * s.length) / 100;
+      const radius =
+        scale * (s.layout === "circle" ? layoutSettings.radius / 100 : 0.23);
+      const maxLength = (scale * 0.2 * layoutSettings.length) / 100;
       // Analyze once before mirroring, so trimming preserves all symmetries.
-      for (let i = 0; i < s.bars; i++) {
+      for (let i = 0; i < bars; i++) {
         let liveAmplitude = liveAmplitudes[i];
         if (activeAnalyser) {
           let amplitude = 0;
-          if (s.mode === "fft") {
+          if (mode === "fft") {
             const endBin = Math.min(
               activeAnalyser.frequencyBinCount,
               Math.floor(
@@ -392,22 +418,32 @@ export function AudioVisualizer({
                   activeAnalyser.context.sampleRate,
               ),
             );
-            const start = Math.floor(Math.pow(endBin, i / s.bars));
+            const start = Math.floor(Math.pow(endBin, i / bars));
             const end = Math.max(
               start + 1,
-              Math.floor(Math.pow(endBin, (i + 1) / s.bars)),
+              Math.floor(Math.pow(endBin, (i + 1) / bars)),
             );
             for (let j = start; j < end; j++)
               amplitude = Math.max(amplitude, samples[j] / 255);
+            amplitude = retainWaveform(
+              retained[i],
+              amplitude,
+              elapsed,
+              layoutSettings.fftRetention,
+            );
+            retained[i] = amplitude;
           } else {
             const sample =
-              waveform[Math.floor((i * (waveform.length - 1)) / (s.bars - 1))];
-            const target = Math.min(1, Math.abs(sample) * s.waveformMultiplier);
+              waveform[Math.floor((i * (waveform.length - 1)) / (bars - 1))];
+            const target = Math.min(
+              1,
+              Math.abs(sample) * layoutSettings.waveformMultiplier,
+            );
             amplitude = retainWaveform(
               retained[i],
               target,
               elapsed,
-              s.waveformRetention,
+              layoutSettings.waveformRetention,
             );
             retained[i] = amplitude;
           }
@@ -418,16 +454,18 @@ export function AudioVisualizer({
         const breath = 0.08 + 0.045 * (0.5 + 0.5 * Math.sin(time * 0.0012));
         const ripple = 0.025 * Math.sin(time * 0.0018 + i * 0.24);
         const idleAmplitude = Math.max(0, Math.min(1, breath + ripple));
-        amplitudes[i] =
-          liveAmplitude * playbackMix + idleAmplitude * (1 - playbackMix);
+        amplitudes[i] = Math.max(
+          idleAmplitude,
+          liveAmplitude * playbackMix + idleAmplitude * (1 - playbackMix),
+        );
       }
-      const offset =
-        s.mode === "fft" ? fftLeadingOffset(amplitudes, s.bars) : 0;
-      const count = s.bars - offset;
-      const mirrored = s.layout === "circle" ? s.circleMirrored : s.mirrored;
-      const flipped = s.layout === "circle" ? s.circleFlipped : s.flipped;
+      const offset = mode === "fft" ? fftLeadingOffset(amplitudes, bars) : 0;
+      const count = bars - offset;
+      const mirrored = layoutSettings.mirrored;
+      const flipped = layoutSettings.flipped;
       const barCount = count === 0 ? 0 : mirrored ? count * 2 - 1 : count;
-      const mirrorCircle = s.layout === "circle" && s.circleMirrorVertically;
+      const mirrorCircle =
+        s.layout === "circle" && layoutSettings.mirrorVertically;
       const drawnBars = mirrorCircle ? barCount * 2 : barCount;
       for (let i = 0; i < barCount; i++) {
         const sampleIndex = visualizerBarIndex(i, count, mirrored, flipped);
@@ -445,12 +483,15 @@ export function AudioVisualizer({
         const halfWidth =
           (((s.layout === "circle" ? 2 * Math.PI * radius : width * 0.84) /
             drawnBars) *
-            s.width) /
+            layoutSettings.width) /
           200;
         const length = amplitude * maxLength;
-        const mirrorBaseline = s.mirrorVertically && s.layout === "line";
+        const mirrorBaseline =
+          layoutSettings.mirrorVertically && s.layout === "line";
         const inwardLength =
-          s.layout === "circle" ? length * (s.circleInwardLength / 100) : 0;
+          s.layout === "circle"
+            ? length * (layoutSettings.inwardLength / 100)
+            : 0;
         const low =
           s.layout === "circle"
             ? -inwardLength

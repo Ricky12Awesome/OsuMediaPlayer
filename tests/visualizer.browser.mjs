@@ -68,14 +68,21 @@ try {
       );
       window.lit = pixels.some((value) => value > 0);
     };
-    window.renderVisualizer = (settings = {}, playing = true) =>
+    window.renderVisualizer = (settings = {}, playing = true) => {
+      const merged = {
+        ...defaultVisualizer,
+        ...settings,
+        line: { ...defaultVisualizer.line, ...(settings.line || {}) },
+        circle: { ...defaultVisualizer.circle, ...(settings.circle || {}) },
+      };
       root.render(
         React.createElement(AudioVisualizer, {
           analyser,
           playing,
-          settings: { ...defaultVisualizer, ...settings },
+          settings: merged,
         }),
       );
+    };
     window.renderVisualizer();
   }, process.cwd());
   for (const layout of ["line", "circle"])
@@ -86,7 +93,10 @@ try {
             window.lit = false;
             window.renderVisualizer(settings);
           },
-          { layout, mode, mirrored, circleMirrored: mirrored },
+          {
+            layout,
+            [layout]: { mode, mirrored },
+          },
         );
         await page.waitForFunction(() => window.lit);
       }
@@ -95,8 +105,7 @@ try {
       window.vertexCount = 0;
       window.renderVisualizer({
         layout: "circle",
-        mode,
-        circleMirrorVertically: true,
+        circle: { mode, mirrorVertically: true },
       });
     }, mode);
     await page.waitForFunction(

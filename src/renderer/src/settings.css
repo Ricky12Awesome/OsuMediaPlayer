@@ -236,6 +236,12 @@
 .visualizer-settings .settings-toggle:disabled:hover {
   background: var(--panel-deep);
 }
+.visualizer-variant-options {
+  margin-top: 10px;
+}
+.visualizer-variant-options .transport-layout-option {
+  padding: 9px;
+}
 .visualizer-slider-card {
   margin-top: 12px;
   padding: 12px;
