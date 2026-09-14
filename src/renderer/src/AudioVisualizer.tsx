@@ -83,7 +83,7 @@ export function VisualizerControls({
       <span className="settings-label">AUDIO VISUALIZER</span>
       {toggleGlobal("Show visualizer", "Display bars over the artwork")}
       <fieldset>
-        <legend>Visualizer</legend>
+        <legend>Style</legend>
         <div className="transport-layout-options visualizer-variant-options">
           {(
             [
