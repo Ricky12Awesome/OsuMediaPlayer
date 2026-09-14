@@ -12,6 +12,7 @@ import { createPortal } from "react-dom";
 import {
   ArrowDownWideNarrow,
   ArrowUpWideNarrow,
+  AudioWaveform,
   CircleAlert,
   Disc3,
   Eye,
@@ -67,6 +68,11 @@ import {
   VirtualTrackList,
   type VirtualTrackListKeyboardControls,
 } from "./VirtualTrackList";
+import {
+  AudioVisualizer,
+  VisualizerControls,
+  useVisualizerSettings,
+} from "./AudioVisualizer";
 import { usePlayer } from "./usePlayer";
 
 const defaultPosition = "bottom-left";
@@ -163,6 +169,7 @@ function isLibraryPosition(value: unknown): value is LibraryPosition {
 
 export function App() {
   const player = usePlayer(api);
+  const [visualizer, setVisualizer] = useVisualizerSettings();
   const [summary, setSummary] = useState<LibrarySummary | null>(null);
   const [importing, setImporting] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -226,6 +233,9 @@ export function App() {
   });
   const [fullscreen, setFullscreen] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
+  const [visualizerOpen, setVisualizerOpen] = useState(() =>
+    readStorage("osu-music-visualizer-panel-open", false),
+  );
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [zoomPercent, setZoomPercent] = useState(100);
@@ -334,11 +344,18 @@ export function App() {
     };
   }, []);
 
-  const clampLibraryWidth = useCallback((value: number): number => {
-    const contentWidth = mainRef.current?.clientWidth ?? window.innerWidth;
-    const max = Math.max(320, Math.min(720, contentWidth - 360 - 7));
-    return Math.min(max, Math.max(320, value));
-  }, []);
+  const clampLibraryWidth = useCallback(
+    (value: number): number => {
+      const contentWidth = mainRef.current?.clientWidth ?? window.innerWidth;
+      const visualizerWidth = visualizerOpen ? 320 : 0;
+      const max = Math.max(
+        320,
+        Math.min(720, contentWidth - 360 - 7 - visualizerWidth),
+      );
+      return Math.min(max, Math.max(320, value));
+    },
+    [visualizerOpen],
+  );
 
   useEffect(() => {
     const onResize = () => {
@@ -395,6 +412,10 @@ export function App() {
   useEffect(
     () => writeStorage("osu-music-sidebar-hidden", sidebarHidden),
     [sidebarHidden],
+  );
+  useEffect(
+    () => writeStorage("osu-music-visualizer-panel-open", visualizerOpen),
+    [visualizerOpen],
   );
   useEffect(
     () => writeStorage("osu-music-library-position", libraryPosition),
@@ -544,6 +565,16 @@ export function App() {
       }
       if (
         event.key === "Escape" &&
+        visualizerOpen &&
+        !settingsOpen &&
+        !shortcutsOpen
+      ) {
+        event.preventDefault();
+        setVisualizerOpen(false);
+        return;
+      }
+      if (
+        event.key === "Escape" &&
         fullscreen &&
         !settingsOpen &&
         !shortcutsOpen
@@ -667,6 +698,7 @@ export function App() {
     player.toggle,
     player.toggleMute,
     focusSearch,
+    visualizerOpen,
     settingsOpen,
     shortcutsOpen,
   ]);
@@ -956,6 +988,7 @@ export function App() {
           className={
             "main-content " +
             (resizing ? "is-resizing " : "") +
+            (visualizerOpen ? "visualizer-is-open " : "") +
             (libraryHidden ? "sidebar-is-hidden " : "") +
             "library-position-" +
             libraryPosition
@@ -997,6 +1030,11 @@ export function App() {
                 />
               )}
               <div className="artwork-grain" />
+              <AudioVisualizer
+                analyser={player.analyser}
+                playing={player.playing}
+                settings={visualizer}
+              />
               {showNowPlayingTitleArtist && (
                 <div
                   className={
@@ -1034,6 +1072,37 @@ export function App() {
               <Sparkles size={14} />
             </div>
           </section>
+
+          <aside
+            id="visualizer-settings-panel"
+            className={"visualizer-panel " + (visualizerOpen ? "is-open" : "")}
+            aria-label="Audio visualizer settings"
+            aria-hidden={!visualizerOpen}
+            inert={!visualizerOpen || undefined}
+          >
+            <div className="visualizer-panel-heading">
+              <div>
+                <span className="settings-label">
+                  <AudioWaveform size={16} /> AUDIO VISUALIZER
+                </span>
+                <h2>Visualizer</h2>
+              </div>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="Close visualizer settings"
+                onClick={() => setVisualizerOpen(false)}
+              >
+                <X size={19} />
+              </button>
+            </div>
+            <div className="visualizer-panel-content">
+              <VisualizerControls
+                settings={visualizer}
+                onChange={setVisualizer}
+              />
+            </div>
+          </aside>
 
           <div
             className="library-resizer"
@@ -1523,6 +1592,28 @@ export function App() {
             onClick={() => setShortcutsOpen(true)}
           >
             <Keyboard size={17} />
+          </button>
+          <button
+            className={
+              "icon-button visualizer-toggle " +
+              (visualizerOpen ? "active" : "")
+            }
+            aria-label={
+              visualizerOpen
+                ? "Hide visualizer settings"
+                : "Show visualizer settings"
+            }
+            aria-pressed={visualizerOpen}
+            aria-expanded={visualizerOpen}
+            aria-controls="visualizer-settings-panel"
+            title={
+              visualizerOpen
+                ? "Hide visualizer settings"
+                : "Show visualizer settings"
+            }
+            onClick={() => setVisualizerOpen((value) => !value)}
+          >
+            <AudioWaveform size={17} />
           </button>
           <button
             className="icon-button"

@@ -109,6 +109,26 @@
     padding: 13px 20px 0;
     display: flex;
   }
+  .visualizer-panel {
+    z-index: 6;
+    position: absolute;
+    inset: 13px auto 0 13px;
+    width: min(330px, calc(100% - 26px));
+    max-height: calc(100% - 13px);
+    padding: 12px 13px 16px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 12px 16px 45px #09050e66;
+    transform: translate(-24px);
+  }
+  .main-content.library-position-left .visualizer-panel {
+    inset: 13px 13px 0 auto;
+    border: 1px solid var(--border);
+    transform: translate(24px);
+  }
+  .main-content.visualizer-is-open .visualizer-panel {
+    transform: translate(0);
+  }
   .now-playing-panel,
   .library-panel {
     min-height: 0;
