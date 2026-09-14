@@ -343,10 +343,77 @@
   font-variant-numeric: tabular-nums;
 }
 
-.visualizer-slider-help {
-  color: var(--pink-text);
-  opacity: 0.7;
+.visualizer-panel .visualizer-settings fieldset {
+  margin-top: 13px;
+}
+.visualizer-panel .visualizer-settings legend {
   font-size: 10px;
-  line-height: 1.6;
-  margin: 10px 0 0;
+}
+.visualizer-panel .visualizer-settings > .settings-toggle,
+.visualizer-panel .visualizer-settings fieldset .settings-toggle {
+  gap: 8px;
+  margin-top: 7px;
+  padding: 8px 9px;
+}
+.visualizer-panel .visualizer-settings .settings-toggle-copy {
+  gap: 0;
+}
+.visualizer-panel .visualizer-settings .settings-toggle-copy strong {
+  font-size: 10px;
+}
+.visualizer-panel .visualizer-settings .settings-toggle-copy span {
+  display: none;
+}
+.visualizer-panel .visualizer-settings .settings-toggle-status {
+  font-size: 9px;
+}
+.visualizer-panel .visualizer-settings fieldset:nth-of-type(2) {
+  display: block;
+}
+.visualizer-panel .visualizer-variant-options {
+  gap: 6px;
+  margin-top: 7px;
+}
+.visualizer-panel .visualizer-variant-options .transport-layout-option {
+  gap: 2px;
+  padding: 7px 8px;
+}
+.visualizer-panel .visualizer-variant-options .transport-layout-option strong {
+  font-size: 10px;
+}
+.visualizer-panel .visualizer-slider-card {
+  margin-top: 8px;
+  padding: 9px;
+}
+.visualizer-panel .visualizer-slider-heading {
+  gap: 8px;
+}
+.visualizer-panel .visualizer-slider-heading label {
+  font-size: 10px;
+}
+.visualizer-panel .visualizer-slider-heading output {
+  min-width: 42px;
+  padding: 3px 6px;
+  font-size: 10px;
+}
+.visualizer-panel .visualizer-slider-control {
+  gap: 7px;
+  margin-top: 7px;
+}
+.visualizer-panel .visualizer-slider-control button {
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  font-size: 15px;
+}
+.visualizer-panel .visualizer-slider-control input[type="range"] {
+  height: 24px;
+}
+.visualizer-panel .visualizer-slider-control input::-webkit-slider-thumb {
+  width: 12px;
+  height: 12px;
+}
+.visualizer-panel .visualizer-slider-limits {
+  margin: 1px 31px 0;
+  font-size: 8px;
 }

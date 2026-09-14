@@ -106,7 +106,7 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  padding: 17px 18px 24px;
+  padding: 14px 14px 18px;
   display: flex;
   opacity: 0;
   pointer-events: none;
@@ -140,14 +140,18 @@
   gap: 12px;
   display: flex;
 }
+.visualizer-panel-heading .icon-button {
+  width: 28px;
+  height: 28px;
+}
 .visualizer-panel-heading .settings-label {
   gap: 7px;
 }
 .visualizer-panel-heading h2 {
   letter-spacing: -0.7px;
   color: #eaddf0;
-  margin: 4px 0 0;
-  font-size: 23px;
+  margin: 2px 0 0;
+  font-size: 20px;
   font-weight: 900;
 }
 .visualizer-panel-content {
@@ -156,7 +160,7 @@
   scrollbar-gutter: stable;
 }
 .visualizer-panel .visualizer-settings {
-  margin-top: 16px;
+  margin-top: 10px;
 }
 .visualizer-panel .visualizer-settings > .settings-label {
   display: none;

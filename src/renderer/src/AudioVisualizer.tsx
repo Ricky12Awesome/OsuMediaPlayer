@@ -45,6 +45,7 @@ export function VisualizerControls({
       type="button"
       className={"settings-toggle " + (settings.enabled ? "active" : "")}
       aria-pressed={settings.enabled}
+      title={description}
       onClick={() => onChange({ ...settings, enabled: !settings.enabled })}
     >
       <span className="settings-toggle-copy">
@@ -67,6 +68,7 @@ export function VisualizerControls({
       className={"settings-toggle " + (layoutSettings[key] ? "active" : "")}
       aria-pressed={layoutSettings[key]}
       disabled={disabled}
+      title={description}
       onClick={() => updateLayout({ [key]: !layoutSettings[key] })}
     >
       <span className="settings-toggle-copy">
@@ -87,22 +89,12 @@ export function VisualizerControls({
         <div className="transport-layout-options visualizer-variant-options">
           {(
             [
-              ["circle", "fft", "Circle (FFT)", "Bars around a ring"],
-              [
-                "circle",
-                "waveform",
-                "Circle (Waveform)",
-                "Audio amplitude around a ring",
-              ],
-              ["line", "fft", "Line (FFT)", "Frequency bars along a baseline"],
-              [
-                "line",
-                "waveform",
-                "Line (Waveform)",
-                "Audio amplitude along a baseline",
-              ],
+              ["circle", "fft", "Circle (FFT)"],
+              ["circle", "waveform", "Circle (Waveform)"],
+              ["line", "fft", "Line (FFT)"],
+              ["line", "waveform", "Line (Waveform)"],
             ] as const
-          ).map(([layout, mode, title, description]) => (
+          ).map(([layout, mode, title]) => (
             <button
               key={`${layout}-${mode}`}
               type="button"
@@ -124,7 +116,6 @@ export function VisualizerControls({
               }
             >
               <strong>{title}</strong>
-              <span>{description}</span>
             </button>
           ))}
         </div>
@@ -172,12 +163,6 @@ export function VisualizerControls({
       )}
       <fieldset className="visualizer-dimensions">
         <legend>Bars</legend>
-        {layoutSettings.mode === "waveform" && (
-          <p className="visualizer-slider-help">
-            Higher retention smooths rapid changes. Set to 0 ms for an immediate
-            response.
-          </p>
-        )}
         {(
           [
             [
