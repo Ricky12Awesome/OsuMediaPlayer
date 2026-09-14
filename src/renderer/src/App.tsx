@@ -1290,11 +1290,9 @@ export function App() {
                   </div>
                   <h3>Finding your rhythm</h3>
                   <p>
-                    {progress.phase === "downloading"
-                      ? "Downloading OsuFilesUtility…"
-                      : progress.phase === "indexing"
-                        ? "Organizing your songs…"
-                        : "Reading your osu! library…"}
+                    {progress.phase === "indexing"
+                      ? "Organizing your songs…"
+                      : "Reading your osu! library…"}
                   </p>
                   {progress.records > 0 && (
                     <small>

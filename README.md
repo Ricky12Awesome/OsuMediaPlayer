@@ -20,6 +20,11 @@ these are features I want to add in the future
 - Custom Audio Visualizers (API)
 - Storyboards (might be difficult to do)
 
+## Library storage
+
+The player reads `client.realm` directly using Realm in read-only mode with schema version 52.
+Default osu!lazer directories are `%APPDATA%/osu` on Windows, `~/.local/share/osu` on Linux, and `~/Library/Application Support/osu` on macOS. If `storage.ini` contains `FullPath`, that directory is used for the database and media files. You can also choose a custom directory in the player.
+
 ## Development
 
 Install dependencies, then run:

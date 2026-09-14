@@ -1,9 +1,12 @@
-import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { isAbsolute, posix } from "node:path";
-import { createInterface } from "node:readline";
-import type { Readable } from "node:stream";
+import { posix, join } from "node:path";
+import type {
+  Beatmap,
+  BeatmapSet,
+  BeatmapCollection,
+} from "../shared/client-model";
+import { resolveLazerInstallPath } from "./lazer-path";
 import type {
   LibraryFacet,
   LibraryPage,
@@ -258,120 +261,151 @@ export class LibraryIndex {
   }
 }
 
-/** Consumes stdout incrementally; osu's database and hashed files are never modified. */
-export async function parseLibrary(
-  stream: Readable,
+/** Read a consistent library snapshot without modifying osu!'s database. */
+export async function loadLibraryFromRealm(
+  requestedPath?: string,
   onProgress?: (progress: LibraryProgress) => void,
+  signal?: AbortSignal,
   onSnapshot?: (index: LibraryIndex) => void,
 ): Promise<LibraryIndex> {
-  const sets: RawSet[] = [];
-  const maps: RecordData[] = [];
-  const collectionsByHash = new Map<string, Set<string>>();
-  const collectionNames = new Set<string>();
-  let installPath = "";
-  let records = 0;
-  let lastProgress = 0;
-  let nextSnapshot = 0;
-  let snapshotRecords = 0;
-  const publishSnapshot = async () => {
-    if (!onSnapshot || !isAbsolute(installPath) || !maps.length || !sets.length)
-      return;
-    const started = Date.now();
+  signal?.throwIfAborted();
+  const installPath = await resolveLazerInstallPath(requestedPath);
+  signal?.throwIfAborted();
+  const { default: Realm } = await import("realm");
+  signal?.throwIfAborted();
+  const realm = new Realm({
+    path: join(installPath, "client.realm"),
+    readOnly: true,
+    schemaVersion: 52,
+    disableFormatUpgrade: true,
+  });
+  try {
+    const sets: RawSet[] = [];
+    const maps: RecordData[] = [];
+    const collectionsByHash = new Map<string, Set<string>>();
+    const collectionNames = new Set<string>();
+    let records = 0;
+    let lastProgress = 0;
+    let nextSnapshot = 0;
+    const progress = async () => {
+      signal?.throwIfAborted();
+      if (Date.now() - lastProgress < 120) return;
+      onProgress?.({ phase: "reading", records });
+      lastProgress = Date.now();
+      if (onSnapshot && maps.length && Date.now() >= nextSnapshot) {
+        const started = Date.now();
+        onSnapshot(
+          await buildIndex(
+            installPath,
+            maps,
+            sets,
+            collectionsByHash,
+            collectionNames,
+            false,
+          ),
+        );
+        nextSnapshot = Date.now() + Math.max(500, (Date.now() - started) * 10);
+      }
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      signal?.throwIfAborted();
+    };
+    for (const collection of realm.objects<BeatmapCollection>(
+      "BeatmapCollection",
+    )) {
+      const name = collection.Name?.trim();
+      if (name) {
+        collectionNames.add(name);
+        for (const hash of collection.BeatmapMD5Hashes) {
+          if (!hash) continue;
+          const key = hash.toLowerCase();
+          const names = collectionsByHash.get(key) ?? new Set<string>();
+          names.add(name);
+          collectionsByHash.set(key, names);
+        }
+      }
+      records++;
+      await progress();
+    }
+    for (const set of realm.objects<BeatmapSet>("BeatmapSet")) {
+      if (set.DeletePending) continue;
+      const files = new Map<string, { hash: string; filename: string }>();
+      const beatmapDirectories = new Map<string, string>();
+      for (const usage of set.Files) {
+        const filename = usage.Filename;
+        const hash = usage.File?.Hash?.toLowerCase();
+        if (!filename || !hash || !isAssetHash(hash)) continue;
+        files.set(filenameKey(filename), { hash, filename });
+        if (filename.toLowerCase().endsWith(".osu"))
+          beatmapDirectories.set(hash, posix.dirname(filenameKey(filename)));
+      }
+      const beatmaps = Array.from(
+        set.Beatmaps,
+        (map) => map.MD5Hash?.toLowerCase() ?? "",
+      );
+      const onlineId = set.OnlineID;
+      const identity =
+        onlineId > 0
+          ? String(onlineId)
+          : `local-${createHash("sha256")
+              .update(
+                JSON.stringify([
+                  [...beatmaps].sort(),
+                  [...files.values()].map((file) => file.hash).sort(),
+                ]),
+              )
+              .digest("hex")
+              .slice(0, 20)}`;
+      sets.push({ identity, onlineId, files, beatmapDirectories, beatmaps });
+      for (const map of set.Beatmaps) {
+        maps.push({ ...detachBeatmap(map), SetIdentity: identity });
+        records++;
+        await progress();
+      }
+      records++;
+      await progress();
+    }
+    signal?.throwIfAborted();
+    onProgress?.({ phase: "indexing", records });
     const index = await buildIndex(
       installPath,
       maps,
       sets,
       collectionsByHash,
       collectionNames,
-      false,
     );
-    onSnapshot(index);
-    snapshotRecords = records;
-    // Limit snapshot work to roughly 10% of import time on large libraries.
-    nextSnapshot = Date.now() + Math.max(500, (Date.now() - started) * 10);
-    await new Promise<void>((resolve) => setImmediate(resolve));
-  };
-  const lines = createInterface({ input: stream, crlfDelay: Infinity });
-  try {
-    for await (const line of lines) {
-      if (!line.trim()) continue;
-      records++;
-      let data: RecordData;
-      try {
-        data = record(JSON.parse(line.replace(/^\uFEFF/, "")));
-      } catch {
-        throw new Error(`ofu returned invalid JSON at record ${records}.`);
-      }
-      if (data.Type === "DataInfo") installPath = string(data.LazerInstallPath);
-      if (data.Type === "Beatmap") maps.push(data);
-      if (data.Type === "Collection") {
-        const name = string(data.Name).trim();
-        if (name) {
-          collectionNames.add(name);
-          for (const hash of strings(data.BeatmapMD5Hashes)) {
-            const key = hash.toLowerCase();
-            const names = collectionsByHash.get(key) ?? new Set<string>();
-            names.add(name);
-            collectionsByHash.set(key, names);
-          }
-        }
-      }
-      if (data.Type === "BeatmapSet") {
-        const files = new Map<string, { hash: string; filename: string }>();
-        const beatmapDirectories = new Map<string, string>();
-        for (const [filename, hash] of Object.entries(record(data.Files))) {
-          if (typeof hash === "string" && isAssetHash(hash)) {
-            files.set(filenameKey(filename), {
-              hash: hash.toLowerCase(),
-              filename,
-            });
-            if (filename.toLowerCase().endsWith(".osu"))
-              beatmapDirectories.set(
-                hash.toLowerCase(),
-                posix.dirname(filenameKey(filename)),
-              );
-          }
-        }
-        const beatmaps = strings(data.Beatmaps).map((hash) =>
-          hash.toLowerCase(),
-        );
-        const onlineId = number(data.OnlineID);
-        const identity =
-          onlineId > 0
-            ? String(onlineId)
-            : `local-${createHash("sha256")
-                .update(
-                  JSON.stringify([
-                    [...beatmaps].sort(),
-                    [...files.values()].map((file) => file.hash).sort(),
-                  ]),
-                )
-                .digest("hex")
-                .slice(0, 20)}`;
-        sets.push({ identity, onlineId, files, beatmapDirectories, beatmaps });
-      }
-      if (Date.now() >= nextSnapshot) await publishSnapshot();
-      if (Date.now() - lastProgress >= 120) {
-        onProgress?.({ phase: "reading", records });
-        lastProgress = Date.now();
-      }
-    }
+    signal?.throwIfAborted();
+    return index;
   } finally {
-    lines.close();
+    realm.close();
   }
-  if (!installPath || !isAbsolute(installPath))
-    throw new Error(
-      "ofu did not return a valid absolute LazerInstallPath. Choose your osu!lazer directory and try again.",
-    );
-  if (records !== snapshotRecords) await publishSnapshot();
-  onProgress?.({ phase: "indexing", records });
-  return await buildIndex(
-    installPath,
-    maps,
-    sets,
-    collectionsByHash,
-    collectionNames,
-  );
+}
+
+function detachBeatmap(map: Beatmap): RecordData {
+  const metadata = map.Metadata;
+  return {
+    MD5Hash: map.MD5Hash,
+    OnlineMD5Hash: map.OnlineMD5Hash,
+    Hash: map.Hash,
+    BeatmapSet: map.BeatmapSet?.OnlineID,
+    Length: map.Length,
+    BPM: map.BPM,
+    StarRating: map.StarRating,
+    LastLocalUpdate: map.LastLocalUpdate?.toISOString(),
+    LastOnlineUpdate: map.LastOnlineUpdate?.toISOString(),
+    Metadata: metadata
+      ? {
+          Title: metadata.Title,
+          TitleUnicode: metadata.TitleUnicode,
+          Artist: metadata.Artist,
+          ArtistUnicode: metadata.ArtistUnicode,
+          Source: metadata.Source,
+          Tags: metadata.Tags,
+          UserTags: Array.from(metadata.UserTags),
+          AudioFile: metadata.AudioFile,
+          BackgroundFile: metadata.BackgroundFile,
+        }
+      : {},
+  };
 }
 
 async function buildIndex(
@@ -382,6 +416,7 @@ async function buildIndex(
   collectionNames: Set<string>,
   resolveVideos = true,
 ): Promise<LibraryIndex> {
+  const setsByIdentity = new Map(sets.map((set) => [set.identity, set]));
   const setsByHash = new Map<string, RawSet>();
   const setsByOnlineId = new Map<number, RawSet>();
   for (const set of sets) {
@@ -404,6 +439,7 @@ async function buildIndex(
       string(map.OnlineMD5Hash).toLowerCase(),
     ];
     const set =
+      setsByIdentity.get(string(map.SetIdentity)) ??
       hashes.map((hash) => setsByHash.get(hash)).find(Boolean) ??
       setsByOnlineId.get(number(map.BeatmapSet));
     const metadata = record(map.Metadata);
@@ -573,59 +609,4 @@ async function buildIndex(
     installPath,
     skippedCount,
   });
-}
-
-export async function loadLibraryFromOfu(
-  executable: string,
-  installPath?: string,
-  onProgress?: (progress: LibraryProgress) => void,
-  signal?: AbortSignal,
-  onSnapshot?: (index: LibraryIndex) => void,
-): Promise<LibraryIndex> {
-  const args = [
-    "export",
-    "ndjson",
-    "--info",
-    "--sets",
-    "--maps",
-    "--collections",
-  ];
-  if (installPath) args.push("--dir", installPath);
-  const child = spawn(executable, args, {
-    stdio: ["ignore", "pipe", "pipe"],
-    windowsHide: true,
-    signal,
-  });
-  let stderr = "";
-  child.stderr.on("data", (chunk: Buffer) => {
-    if (stderr.length < 16_384)
-      stderr += chunk.toString().slice(0, 16_384 - stderr.length);
-  });
-  const completion = new Promise<{ code: number | null; error?: Error }>(
-    (resolve) => {
-      child.once("error", (error) => resolve({ code: null, error }));
-      child.once("close", (code) => resolve({ code }));
-    },
-  );
-  let index: LibraryIndex | undefined;
-  let parsingError: unknown;
-  try {
-    index = await parseLibrary(child.stdout, onProgress, onSnapshot);
-  } catch (error) {
-    parsingError = error;
-    child.kill();
-  }
-  const result = await completion;
-  if (result.error)
-    throw new Error(
-      `Could not run ofu: ${result.error.message}. Try restarting the player and importing again.`,
-    );
-  if (result.code !== 0 && stderr.trim()) throw new Error(stderr.trim());
-  if (parsingError) throw parsingError;
-  if (result.code !== 0)
-    throw new Error(
-      stderr.trim() ||
-        `ofu exited with code ${result.code ?? "unknown"}. Close osu! if its database is locked, then retry.`,
-    );
-  return index!;
 }

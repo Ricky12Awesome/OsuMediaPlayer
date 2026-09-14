@@ -19,8 +19,7 @@ import type {
   TrackContextMenuAction,
   TrackContextMenuInfo,
 } from "../shared/types";
-import { LibraryIndex, loadLibraryFromOfu } from "./library";
-import { ensureOfu } from "./ofu";
+import { LibraryIndex, loadLibraryFromRealm } from "./library";
 import {
   mimeForFilename,
   resolveMediaFile,
@@ -66,8 +65,7 @@ let videoTranscoder: VideoTranscoder | null = null;
 let zoomStatusMenuItem: Electron.MenuItem | null = null;
 const rendererUrl = process.env.ELECTRON_RENDERER_URL;
 const zoomStages = [
-  25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400,
-  500,
+  25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400, 500,
 ] as const;
 
 function currentZoomPercent(): number {
@@ -303,35 +301,22 @@ function setupIPC(): void {
     }
     importController = new AbortController();
     pendingPath = installPath;
-    pendingLoad = ensureOfu(join(app.getPath("userData"), "ofu"), {
-      bundledDirectory: app.isPackaged
-        ? join(process.resourcesPath, "ofu")
-        : undefined,
-      signal: importController.signal,
-      onDownload: () =>
-        window?.webContents.send("library:progress", {
-          phase: "downloading",
-          records: 0,
-        }),
-    }).then((executable) =>
-      loadLibraryFromOfu(
-        executable,
-        installPath,
-        (progress) => {
-          if (window && !window.isDestroyed())
-            window.webContents.send("library:progress", progress);
-        },
-        importController!.signal,
-        (index) => {
-          library = index;
-          if (window && !window.isDestroyed())
-            window.webContents.send("library:progress", {
-              phase: "reading",
-              records: index.summary.beatmapCount,
-              summary: index.summary,
-            });
-        },
-      ),
+    pendingLoad = loadLibraryFromRealm(
+      installPath,
+      (progress) => {
+        if (window && !window.isDestroyed())
+          window.webContents.send("library:progress", progress);
+      },
+      importController!.signal,
+      (index) => {
+        library = index;
+        if (window && !window.isDestroyed())
+          window.webContents.send("library:progress", {
+            phase: "reading",
+            records: index.summary.beatmapCount,
+            summary: index.summary,
+          });
+      },
     );
     try {
       library = await pendingLoad;

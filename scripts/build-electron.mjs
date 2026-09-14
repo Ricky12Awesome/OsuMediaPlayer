@@ -9,7 +9,7 @@ const common = {
   format: "cjs",
   target: "node20",
   sourcemap: true,
-  external: ["electron"],
+  external: ["electron", "realm"],
   logLevel: "info",
 };
 
@@ -23,12 +23,5 @@ await Promise.all([
     ...common,
     entryPoints: ["src/preload/index.ts"],
     outfile: "dist-electron/preload.cjs",
-  }),
-  build({
-    ...common,
-    sourcemap: false,
-    external: ["electron", "builder-util"],
-    entryPoints: ["scripts/bundle-ofu.ts"],
-    outfile: "dist-electron/bundle-ofu.cjs",
   }),
 ]);
