@@ -9,6 +9,15 @@ import {
 } from "./visualizer-settings";
 
 const key = "osu-music-visualizer";
+
+function normalizeVisualizerValue(name: string, value: number): number {
+  return name === "rotation" ? Math.round(value * 4) / 4 : value;
+}
+
+function visualizerStep(name: string): number {
+  return name === "rotation" ? 0.25 : 1;
+}
+
 export function useVisualizerSettings() {
   const [settings, setSettings] = useState(() => {
     try {
@@ -189,6 +198,7 @@ export function VisualizerControls({
               ? ([
                   ["inwardLength", "Inward length", 0, 100, "%"],
                   ["radius", "Circle radius", 8, 45, "%"],
+                  ["rotation", "Circle rotation", -6, 6, ""],
                 ] as const)
               : []),
           ] as const
@@ -199,18 +209,26 @@ export function VisualizerControls({
                 {label.replace(" (%)", "")}
               </label>
               <output htmlFor={`visualizer-${name}`}>
-                {layoutSettings[name]}
-                {unit}
+                {name === "rotation" &&
+                normalizeVisualizerValue(name, layoutSettings[name]) === 0
+                  ? "Off"
+                  : `${normalizeVisualizerValue(name, layoutSettings[name])}${unit}`}
               </output>
             </div>
             <div className="visualizer-slider-control">
               <button
                 type="button"
                 aria-label={`Decrease ${label}`}
-                disabled={layoutSettings[name] <= min}
+                disabled={
+                  normalizeVisualizerValue(name, layoutSettings[name]) <= min
+                }
                 onClick={() =>
                   updateLayout({
-                    [name]: Math.max(min, layoutSettings[name] - 1),
+                    [name]: Math.max(
+                      min,
+                      normalizeVisualizerValue(name, layoutSettings[name]) -
+                        visualizerStep(name),
+                    ),
                   })
                 }
               >
@@ -222,25 +240,41 @@ export function VisualizerControls({
                 type="range"
                 min={min}
                 max={max}
-                step={1}
-                value={layoutSettings[name]}
-                aria-valuetext={`${layoutSettings[name]}${name === "bars" ? " bars" : unit}`}
+                step={visualizerStep(name)}
+                value={normalizeVisualizerValue(name, layoutSettings[name])}
+                aria-valuetext={
+                  name === "rotation" &&
+                  normalizeVisualizerValue(name, layoutSettings[name]) === 0
+                    ? "Off"
+                    : `${normalizeVisualizerValue(name, layoutSettings[name])}${name === "bars" ? " bars" : unit}`
+                }
                 style={
                   {
-                    "--slider-progress": `${((layoutSettings[name] - min) / (max - min)) * 100}%`,
+                    "--slider-progress": `${((normalizeVisualizerValue(name, layoutSettings[name]) - min) / (max - min)) * 100}%`,
                   } as CSSProperties
                 }
                 onChange={(e) =>
-                  updateLayout({ [name]: Number(e.target.value) })
+                  updateLayout({
+                    [name]: normalizeVisualizerValue(
+                      name,
+                      Number(e.target.value),
+                    ),
+                  })
                 }
               />
               <button
                 type="button"
                 aria-label={`Increase ${label}`}
-                disabled={layoutSettings[name] >= max}
+                disabled={
+                  normalizeVisualizerValue(name, layoutSettings[name]) >= max
+                }
                 onClick={() =>
                   updateLayout({
-                    [name]: Math.min(max, layoutSettings[name] + 1),
+                    [name]: Math.min(
+                      max,
+                      normalizeVisualizerValue(name, layoutSettings[name]) +
+                        visualizerStep(name),
+                    ),
                   })
                 }
               >
@@ -452,6 +486,12 @@ export function AudioVisualizer({
       const mirrorCircle =
         s.layout === "circle" && layoutSettings.mirrorVertically;
       const drawnBars = mirrorCircle ? barCount * 2 : barCount;
+      const rotationRpm = normalizeVisualizerValue(
+        "rotation",
+        layoutSettings.rotation,
+      );
+      const circleRotation =
+        s.layout === "circle" ? (time / 60000) * rotationRpm * Math.PI * 2 : 0;
       for (let i = 0; i < barCount; i++) {
         const sampleIndex = visualizerBarIndex(i, count, mirrored, flipped);
         const amplitude = amplitudes[offset + sampleIndex];
@@ -498,6 +538,21 @@ export function AudioVisualizer({
             vertices[reflected] = vertices[i * 12 + v * 2];
             vertices[reflected + 1] = -vertices[i * 12 + v * 2 + 1];
           }
+        }
+      }
+      if (s.layout === "circle" && circleRotation !== 0) {
+        // Rotate around the canvas center in pixel space. NDC x/y have
+        // different scales when the canvas is not square, so compensate for
+        // the aspect ratio while applying the clockwise screen-space turn.
+        const cosine = Math.cos(circleRotation);
+        const sine = Math.sin(circleRotation);
+        const heightToWidth = height / width;
+        const widthToHeight = width / height;
+        for (let i = 0; i < drawnBars * 12; i += 2) {
+          const x = vertices[i];
+          const y = vertices[i + 1];
+          vertices[i] = cosine * x + sine * heightToWidth * y;
+          vertices[i + 1] = -sine * widthToHeight * x + cosine * y;
         }
       }
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, vertices);

@@ -4,6 +4,7 @@ export interface VisualizerLayoutSettings {
   width: number;
   length: number;
   radius: number;
+  rotation: number;
   waveformMultiplier: number;
   waveformRetention: number;
   fftRetention: number;
@@ -27,6 +28,7 @@ function createDefaultLayout(): VisualizerLayoutSettings {
     width: 65,
     length: 70,
     radius: 23,
+    rotation: 0,
     waveformMultiplier: 10,
     waveformRetention: 200,
     fftRetention: 200,
@@ -72,10 +74,11 @@ function boundedNumber(
   fallback: number,
   min: number,
   max: number,
+  step = 1,
 ): number {
-  return typeof value === "number" && Number.isFinite(value)
-    ? Math.round(Math.max(min, Math.min(max, value)))
-    : fallback;
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+  const bounded = Math.max(min, Math.min(max, value));
+  return Math.round(bounded / step) * step;
 }
 
 function parseLayout(
@@ -94,6 +97,7 @@ function parseLayout(
     width: boundedNumber(value.width, fallback.width, 10, 100),
     length: boundedNumber(value.length, fallback.length, 10, 100),
     radius: boundedNumber(value.radius, fallback.radius, 8, 45),
+    rotation: boundedNumber(value.rotation, fallback.rotation, -6, 6, 0.25),
     waveformMultiplier: boundedNumber(
       value.waveformMultiplier,
       fallback.waveformMultiplier,
@@ -149,6 +153,7 @@ export function parseVisualizer(raw: string | null): VisualizerSettings {
         100,
       ),
       radius: boundedNumber(value.radius, defaultVisualizer.line.radius, 8, 45),
+      rotation: 0,
       waveformMultiplier: boundedNumber(
         value.waveformMultiplier,
         defaultVisualizer.line.waveformMultiplier,
@@ -175,6 +180,7 @@ export function parseVisualizer(raw: string | null): VisualizerSettings {
     const legacyCircle: VisualizerLayoutSettings = {
       ...legacyLine,
       radius: boundedNumber(value.circleRadius, legacyLine.radius, 8, 45),
+      rotation: boundedNumber(value.circleRotation, 0, -6, 6, 0.25),
       mirrored: booleanValue(value, "circleMirrored", legacyLine.mirrored),
       flipped: booleanValue(value, "circleFlipped", legacyLine.flipped),
       mirrorVertically: booleanValue(

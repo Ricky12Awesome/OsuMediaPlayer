@@ -32,6 +32,7 @@ test("visualizer settings bound rendering work and preserve supported options", 
     width: 10,
     length: 70,
     radius: 23,
+    rotation: 0,
     waveformMultiplier: 10,
     waveformRetention: 200,
     fftRetention: 200,
@@ -110,6 +111,37 @@ test("circle inward length is a persisted percentage capped at 100", () => {
   );
   assert.equal(
     parseVisualizer('{"circleInwardLength":-1}').circle.inwardLength,
+    0,
+  );
+});
+
+test("circle rotation is an independent bounded quarter-step setting", () => {
+  const settings = parseVisualizer(
+    JSON.stringify({
+      circle: { rotation: -3.5 },
+    }),
+  );
+  assert.equal(settings.circle.rotation, -3.5);
+  assert.equal(settings.line.rotation, 0);
+  assert.equal(
+    parseVisualizer('{"circle":{"rotation":100}}').circle.rotation,
+    6,
+  );
+  assert.equal(
+    parseVisualizer('{"circle":{"rotation":-100}}').circle.rotation,
+    -6,
+  );
+  assert.equal(
+    parseVisualizer('{"circle":{"rotation":5.6}}').circle.rotation,
+    5.5,
+  );
+  assert.equal(
+    parseVisualizer('{"circle":{"rotation":5.63}}').circle.rotation,
+    5.75,
+  );
+  assert.equal(parseVisualizer('{"circleRotation":45}').circle.rotation, 6);
+  assert.equal(
+    parseVisualizer('{"circle":{"rotation":"30"}}').circle.rotation,
     0,
   );
 });
