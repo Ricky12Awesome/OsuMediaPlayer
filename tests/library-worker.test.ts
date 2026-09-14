@@ -1,12 +1,20 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import test from "node:test";
 import { build } from "esbuild";
 import Realm from "realm";
 import { Schema } from "../src/shared/client-model";
-import { LibraryIndex, loadLibraryFromRealm } from "../src/main/library";
+import {
+  LibraryIndex,
+  loadLibraryFromRealm,
+  readLibraryFingerprint,
+} from "../src/main/library";
+import {
+  libraryCachePath,
+  libraryFingerprintsEqual,
+} from "../src/main/library-cache";
 import type { loadLibraryInWorker } from "../src/main/library-loader";
 import type { SortKey } from "../src/shared/types";
 
@@ -126,6 +134,78 @@ test("worker imports Realm and transfers every sort order; errors and cancellati
     } finally {
       direct.close();
     }
+    const cacheDirectory = join(directory, "library-cache");
+    const firstCached = await load(
+      directory,
+      undefined,
+      undefined,
+      undefined,
+      cacheDirectory,
+    );
+    const cacheFile = libraryCachePath(cacheDirectory, directory);
+    const cache = JSON.parse(await readFile(cacheFile, "utf8")) as {
+      fingerprint: {
+        beatmapSetCount: number;
+        beatmapCount: number;
+        latestDateAdded: number;
+      };
+      snapshot: {
+        indexed: { track: { title: string; artist: string } }[];
+      };
+    };
+    const fingerprint = await readLibraryFingerprint(directory);
+    assert.equal(firstCached.summary.trackCount, 3);
+    assert.deepEqual(cache.fingerprint, fingerprint.fingerprint);
+    assert.equal(cache.fingerprint.beatmapSetCount, 3);
+    assert.equal(cache.fingerprint.beatmapCount, 3);
+    cache.snapshot.indexed[0].track.title = "From disk cache";
+    cache.snapshot.indexed[0].track.artist = "Cached artist";
+    await writeFile(cacheFile, JSON.stringify(cache), "utf8");
+    const cached = await load(
+      directory,
+      undefined,
+      undefined,
+      undefined,
+      cacheDirectory,
+    );
+    assert.ok(
+      cached.query().items.some((track) => track.title === "From disk cache"),
+    );
+    assert.ok(
+      cached.query().items.some((track) => track.artist === "Cached artist"),
+    );
+    assert.equal(
+      libraryFingerprintsEqual(fingerprint.fingerprint, {
+        ...fingerprint.fingerprint,
+        beatmapCount: fingerprint.fingerprint.beatmapCount + 1,
+      }),
+      false,
+    );
+    const changedRealm = new Realm({
+      path: join(directory, "client.realm"),
+      schema: Schema,
+      schemaVersion: 52,
+    });
+    try {
+      changedRealm.write(() => {
+        changedRealm.objects("BeatmapSet")[0].DateAdded = new Date(
+          fingerprint.fingerprint.latestDateAdded + 1,
+        );
+      });
+    } finally {
+      changedRealm.close();
+    }
+    const rebuilt = await load(
+      directory,
+      undefined,
+      undefined,
+      undefined,
+      cacheDirectory,
+    );
+    assert.ok(
+      rebuilt.query().items.every((track) => track.title !== "From disk cache"),
+    );
+
     // Cancellation during reading and sorting must wait for graceful worker exit.
     for (const phase of ["reading", "indexing"] as const) {
       const controller = new AbortController();

@@ -1,5 +1,14 @@
 import Realm from "realm";
-import { loadLibraryFromRealm } from "./library";
+import {
+  loadLibraryFromRealm,
+  readLibraryFingerprint,
+  type LibraryFingerprint,
+} from "./library";
+import {
+  libraryCachePath,
+  readLibraryCache,
+  writeLibraryCache,
+} from "./library-cache";
 
 // Realm's native addon owns process-wide state. Keep it outside Electron's
 // main process rather than sharing that state across worker-thread environments.
@@ -35,8 +44,41 @@ const send = (message: unknown): Promise<void> => {
 };
 void (async () => {
   try {
+    const argument = process.argv[2];
+    let options: { installPath?: string; cacheDirectory?: string };
+    try {
+      options = JSON.parse(argument || "{}") as {
+        installPath?: string;
+        cacheDirectory?: string;
+      };
+    } catch {
+      // Keep direct invocations using the pre-cache single-path argument
+      // compatible with the worker's previous command-line contract.
+      options = { installPath: argument };
+    }
+    let resolvedPath = options.installPath;
+    let cacheFile: string | undefined;
+    let fingerprint: LibraryFingerprint | undefined;
+    if (options.cacheDirectory) {
+      const checked = await readLibraryFingerprint(
+        options.installPath,
+        controller.signal,
+      );
+      resolvedPath = checked.installPath;
+      fingerprint = checked.fingerprint;
+      cacheFile = libraryCachePath(options.cacheDirectory, resolvedPath);
+      const cached = await readLibraryCache(
+        cacheFile,
+        fingerprint,
+        controller.signal,
+      );
+      if (cached && cached.summary.installPath === resolvedPath) {
+        await send({ type: "complete", snapshot: cached });
+        return;
+      }
+    }
     const index = await loadLibraryFromRealm(
-      process.argv[2] || undefined,
+      resolvedPath,
       (progress) => void send({ type: "progress", progress }),
       controller.signal,
       (batch) => void send({ type: "batch", snapshot: batch.snapshot() }),
@@ -44,7 +86,18 @@ void (async () => {
     try {
       await index.prepareSortOrders(controller.signal);
       controller.signal.throwIfAborted();
-      await send({ type: "complete", snapshot: index.snapshot() });
+      const snapshot = index.snapshot();
+      await send({ type: "complete", snapshot });
+      // The snapshot is complete at this point. Finish persisting it even if
+      // the parent starts a graceful shutdown immediately afterward.
+      if (cacheFile && fingerprint) {
+        try {
+          await writeLibraryCache(cacheFile, fingerprint, snapshot);
+        } catch {
+          // Caching is an optimization. A read-only or full cache directory
+          // must never make a successfully loaded library fail.
+        }
+      }
     } finally {
       index.close();
     }

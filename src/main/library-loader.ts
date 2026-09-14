@@ -20,12 +20,13 @@ export function loadLibraryInWorker(
   onProgress?: (progress: LibraryProgress) => void,
   signal?: AbortSignal,
   onSnapshot?: (index: LibraryIndex) => void,
+  cacheDirectory?: string,
 ): Promise<LibraryIndex> {
   return new Promise((resolve, reject) => {
     signal?.throwIfAborted();
     const worker = fork(
       join(__dirname, "library-worker.cjs"),
-      installPath ? [installPath] : [],
+      [JSON.stringify({ installPath, cacheDirectory })],
       {
         // Electron's executable runs the loader as Node, including packaged builds.
         env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
@@ -61,9 +62,10 @@ export function loadLibraryInWorker(
       try {
         if (message.type === "progress") onProgress?.(message.progress);
         else if (message.type === "error") cancel(new Error(message.message));
-        else if (message.type === "complete")
+        else if (message.type === "complete") {
           completed = LibraryIndex.fromSnapshot(message.snapshot);
-        else {
+          onSnapshot?.(completed);
+        } else {
           streaming ??= new LibraryIndex([], new Map(), {
             ...message.snapshot.summary,
             trackCount: 0,

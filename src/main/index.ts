@@ -360,6 +360,7 @@ function setupIPC(): void {
             summary: index.summary,
           });
       },
+      join(app.getPath("userData"), "library-cache"),
     );
     try {
       const loaded = await pendingLoad;

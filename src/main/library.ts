@@ -2,7 +2,11 @@ import type Realm from "realm";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { posix, join } from "node:path";
-import type { Beatmap, BeatmapCollection } from "../shared/client-model";
+import type {
+  Beatmap,
+  BeatmapCollection,
+  BeatmapSet,
+} from "../shared/client-model";
 import { resolveLazerInstallPath } from "./lazer-path";
 import type {
   LibraryFacet,
@@ -37,6 +41,12 @@ export interface LibrarySnapshot {
   summary: LibrarySummary;
   indexed: IndexedTrack[];
   orders: Map<string, readonly string[]>;
+}
+
+export interface LibraryFingerprint {
+  beatmapSetCount: number;
+  beatmapCount: number;
+  latestDateAdded: number;
 }
 
 export type LibraryCancellation = Pick<AbortSignal, "throwIfAborted">;
@@ -416,6 +426,40 @@ export function sortedLibraryBeatmaps(realm: Realm, descending = false) {
     ["Metadata.TitleUnicode", descending],
     ["Metadata.Title", descending],
   ]);
+}
+
+/** Read the small Realm metadata fingerprint used to validate a disk cache. */
+export async function readLibraryFingerprint(
+  requestedPath?: string,
+  signal?: LibraryCancellation,
+): Promise<{ installPath: string; fingerprint: LibraryFingerprint }> {
+  signal?.throwIfAborted();
+  const installPath = await resolveLazerInstallPath(requestedPath);
+  signal?.throwIfAborted();
+  const { default: Realm } = await import("realm");
+  signal?.throwIfAborted();
+  const realm = new Realm({
+    path: join(installPath, "client.realm"),
+    readOnly: true,
+    schemaVersion: 52,
+    disableFormatUpgrade: true,
+  });
+  try {
+    signal?.throwIfAborted();
+    const sets = realm.objects<BeatmapSet>("BeatmapSet");
+    const latest = sets.sorted("DateAdded", true)[0];
+    const latestDateAdded = latest?.DateAdded?.getTime() ?? 0;
+    return {
+      installPath,
+      fingerprint: {
+        beatmapSetCount: sets.length,
+        beatmapCount: realm.objects<Beatmap>("Beatmap").length,
+        latestDateAdded: Number.isFinite(latestDateAdded) ? latestDateAdded : 0,
+      },
+    };
+  } finally {
+    realm.close();
+  }
 }
 
 type RealmSortDescriptor = [string, boolean];
