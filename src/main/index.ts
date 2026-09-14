@@ -14,6 +14,7 @@ import { readFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import type {
   LibraryQuery,
+  LibrarySummary,
   MediaAction,
   Track,
   TrackContextMenuAction,
@@ -131,6 +132,27 @@ function isTrusted(
 function requireTrusted(event: Electron.IpcMainInvokeEvent): void {
   if (!isTrusted(event))
     throw new Error("This request did not come from the player window.");
+}
+
+function isAbortError(error: unknown): boolean {
+  return (
+    (error instanceof DOMException && error.name === "AbortError") ||
+    (error instanceof Error &&
+      (error.name === "AbortError" ||
+        /\babort(?:ed|ing)?\b/i.test(error.message)))
+  );
+}
+
+function cancelledLibrarySummary(installPath?: string): LibrarySummary {
+  return {
+    trackCount: 0,
+    beatmapCount: 0,
+    collectionCount: 0,
+    collections: [],
+    tags: [],
+    installPath: installPath ?? "",
+    skippedCount: 0,
+  };
 }
 
 function createWindow(): void {
@@ -302,7 +324,17 @@ function setupIPC(): void {
       throw new Error("Choose an absolute osu!lazer directory path.");
     const installPath = requestedPath as string | undefined;
     if (pendingLoad) {
-      if (pendingPath === installPath) return (await pendingLoad).summary;
+      if (pendingPath === installPath) {
+        try {
+          return (await pendingLoad).summary;
+        } catch (error) {
+          // A duplicate request shares the original import promise. Handle its
+          // expected shutdown cancellation the same way as the original call.
+          if (quitting && isAbortError(error))
+            return library?.summary ?? cancelledLibrarySummary(installPath);
+          throw error;
+        }
+      }
       throw new Error(
         "A library import is already running. Wait for it to finish, then choose another folder.",
       );
@@ -343,6 +375,11 @@ function setupIPC(): void {
       // Restore the previous library if the new import fails or is cancelled.
       if (previousLibrary) library = previousLibrary;
       else library = null;
+      // Closing the app intentionally aborts the pending IPC request. Returning
+      // a harmless summary prevents Electron from reporting that expected
+      // cancellation as an unhandled handler error.
+      if (quitting && isAbortError(error))
+        return previousLibrary?.summary ?? cancelledLibrarySummary(installPath);
       throw error;
     } finally {
       pendingLoad = null;

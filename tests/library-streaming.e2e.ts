@@ -64,7 +64,7 @@ try {
   const bootstrap = join(directory, "bootstrap.html");
   await writeFile(bootstrap, "<!doctype html><title>Streaming test</title>");
 
-  for (const closeAt of ["complete", "reading", "indexing"] as const) {
+  for (const closeAt of ["complete", "early", "reading", "indexing"] as const) {
     const env: Record<string, string> = {
       ...process.env,
       ELECTRON_RENDERER_URL: pathToFileURL(bootstrap).href,
@@ -98,12 +98,17 @@ try {
             if ("summary" in progress)
               state.streamedCounts.push(progress.summary.trackCount);
             if (
+              (closeAt === "early" && progress.records > 0) ||
               (closeAt === "reading" && "summary" in progress) ||
               (closeAt === "indexing" && progress.phase === "indexing")
             ) {
               window.playerAPI!.windowControl("close");
             }
           });
+          // Exercise the shared-promise path: React can issue a second load
+          // before the first one has completed during a very early close.
+          if (closeAt === "early")
+            void window.playerAPI!.loadLibrary(installPath).catch(() => {});
         },
         { installPath: directory, closeAt },
       );
@@ -148,6 +153,10 @@ try {
       assert.equal(code, 0, stderr);
       assert.equal(signal, null, stderr);
       assert.doesNotMatch(stderr, /FATAL ERROR|Fatal error|SIGABRT/);
+      assert.doesNotMatch(
+        stderr,
+        /Error occurred in handler for 'library:load'/,
+      );
       console.log(`Library streaming / close during ${closeAt}: passed`);
     } finally {
       if (child.exitCode === null && child.signalCode === null)
