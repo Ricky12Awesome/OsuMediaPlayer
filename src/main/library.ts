@@ -1,5 +1,4 @@
 import type Realm from "realm";
-import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { posix, join } from "node:path";
 import type {
@@ -888,23 +887,9 @@ export async function loadLibraryFromRealm(
             beatmapDirectories.set(hash, posix.dirname(filenameKey(filename)));
         }
         const onlineId = source.OnlineID;
-        const linkedMaps = source.Beatmaps;
-        // Keep existing local track IDs so saved favorites remain valid.
-        const identity =
-          onlineId > 0
-            ? String(onlineId)
-            : `local-${createHash("sha256")
-                .update(
-                  JSON.stringify([
-                    Array.from(
-                      linkedMaps,
-                      (map) => map.MD5Hash?.toLowerCase() ?? "",
-                    ).sort(),
-                    [...files.values()].map((file) => file.hash).sort(),
-                  ]),
-                )
-                .digest("hex")
-                .slice(0, 20)}`;
+        if (typeof onlineId !== "number" || !Number.isInteger(onlineId))
+          continue;
+        const identity = String(onlineId);
         const set = { identity, onlineId, files, beatmapDirectories };
         sets.set(key, set);
         yield { map, set };

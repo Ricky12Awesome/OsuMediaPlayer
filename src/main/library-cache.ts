@@ -18,7 +18,7 @@ import type {
 import { assetUrl, isAssetHash, type MediaAsset } from "./media";
 import type { LibrarySummary, SortKey, Track } from "../shared/types";
 
-export const libraryCacheVersion = 2;
+export const libraryCacheVersion = 4;
 
 export interface LibraryCachePaths {
   directory: string;
@@ -28,60 +28,27 @@ export interface LibraryCachePaths {
   orders: string;
 }
 
-interface SerializedMedia {
-  hash: string;
-  filename: string;
+export interface LibraryRealmMetadata {
+  mtimeMs: number;
+  size: number;
 }
 
-interface SerializedTrack {
-  title: string;
-  titleUnicode?: string;
-  artist: string;
-  artistUnicode?: string;
-  source: string;
-  tags: string[];
-  duration: number;
-  bpm: number;
-  stars: number;
-  difficultyCount: number;
-  media: {
-    audio: SerializedMedia;
-    background?: SerializedMedia;
-    video?: SerializedMedia;
-  };
-  videoOffset?: number;
-  onlineId?: number;
-  md5Hash?: string;
-  addedAt: number;
-  beatmapHashes: string[];
-}
-
-interface SerializedCollection {
-  id: string;
-  name: string;
-  lastModified: number;
-  tracks: string[];
-}
-
-interface SerializedOrder {
-  sortby: string;
-  tracks: string[];
-}
-
-interface LibraryCacheManifest {
+export interface LibraryCacheManifest {
   version: number;
   fingerprint: LibraryFingerprint;
   collectionFingerprint: LibraryCollectionFingerprint;
   summary: LibrarySummary;
+  realm: LibraryRealmMetadata;
 }
 
 export interface LibraryCacheData {
   snapshot: LibrarySnapshot;
   fingerprint: LibraryFingerprint;
   collectionFingerprint: LibraryCollectionFingerprint;
+  realm: LibraryRealmMetadata;
 }
 
-const sortKeys = new Set<SortKey>([
+const sortKeyList: SortKey[] = [
   "title",
   "artist",
   "duration",
@@ -90,7 +57,41 @@ const sortKeys = new Set<SortKey>([
   "stars",
   "collection",
   "tags",
-]);
+];
+const sortKeyCodes = new Map(sortKeyList.map((key, index) => [key, index]));
+const sortKeysByCode = new Map(sortKeyList.map((key, index) => [index, key]));
+const trackReferenceBytes = 40;
+const md5Bytes = 16;
+const sha256Bytes = 32;
+const binaryVersion = 1;
+const tracksMagic = Buffer.from("OMTR");
+const collectionsMagic = Buffer.from("OMCL");
+const ordersMagic = Buffer.from("OMOR");
+const trackFlagTitleUnicode = 1 << 0;
+const trackFlagArtistUnicode = 1 << 1;
+const trackFlagMd5Hash = 1 << 2;
+const trackFlagBackground = 1 << 3;
+const trackFlagVideo = 1 << 4;
+const trackFlagVideoOffset = 1 << 5;
+const trackKnownFlags =
+  trackFlagTitleUnicode |
+  trackFlagArtistUnicode |
+  trackFlagMd5Hash |
+  trackFlagBackground |
+  trackFlagVideo |
+  trackFlagVideoOffset;
+
+interface DecodedTrack {
+  track: Track;
+  beatmapHashes: Set<string>;
+  assets: MediaAsset[];
+}
+
+interface DecodedTracks {
+  tracks: DecodedTrack[];
+  assets: Map<string, MediaAsset>;
+  ids: Set<string>;
+}
 
 export function libraryCachePath(
   cacheDirectory: string,
@@ -104,9 +105,9 @@ export function libraryCachePaths(directory: string): LibraryCachePaths {
   return {
     directory,
     manifest: join(directory, "manifest.json"),
-    tracks: join(directory, "tracks.json"),
-    collections: join(directory, "collections.ndjson"),
-    orders: join(directory, "orders.ndjson"),
+    tracks: join(directory, "tracks.bin"),
+    collections: join(directory, "collections.bin"),
+    orders: join(directory, "orders.bin"),
   };
 }
 
@@ -139,52 +140,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
-}
-
-function isStringArray(value: unknown): value is string[] {
-  return (
-    Array.isArray(value) && value.every((item) => typeof item === "string")
-  );
-}
-
-function isMedia(value: unknown): value is SerializedMedia {
-  return (
-    isRecord(value) &&
-    typeof value.hash === "string" &&
-    isAssetHash(value.hash) &&
-    typeof value.filename === "string"
-  );
-}
-
-function isBeatmapHash(value: string): boolean {
-  return /^[a-f\d]{32}$/i.test(value);
-}
-
-function isTrackFields(value: unknown): value is SerializedTrack {
-  if (!isRecord(value) || !isRecord(value.media)) return false;
-  return (
-    typeof value.title === "string" &&
-    (value.titleUnicode === undefined ||
-      typeof value.titleUnicode === "string") &&
-    typeof value.artist === "string" &&
-    (value.artistUnicode === undefined ||
-      typeof value.artistUnicode === "string") &&
-    typeof value.source === "string" &&
-    isStringArray(value.tags) &&
-    isFiniteNumber(value.duration) &&
-    isFiniteNumber(value.bpm) &&
-    isFiniteNumber(value.stars) &&
-    isFiniteNumber(value.difficultyCount) &&
-    isMedia(value.media.audio) &&
-    (value.media.background === undefined || isMedia(value.media.background)) &&
-    (value.media.video === undefined || isMedia(value.media.video)) &&
-    (value.videoOffset === undefined || isFiniteNumber(value.videoOffset)) &&
-    (value.onlineId === undefined || isFiniteNumber(value.onlineId)) &&
-    (value.md5Hash === undefined || typeof value.md5Hash === "string") &&
-    isFiniteNumber(value.addedAt) &&
-    isStringArray(value.beatmapHashes) &&
-    value.beatmapHashes.every(isBeatmapHash)
-  );
 }
 
 function isSummary(value: unknown): value is LibrarySummary {
@@ -226,17 +181,25 @@ function isCollectionFingerprint(
   );
 }
 
-function parseNdjson(contents: string): unknown[] | null {
-  try {
-    const values: unknown[] = [];
-    for (const line of contents.split(/\r?\n/)) {
-      if (!line.trim()) continue;
-      values.push(JSON.parse(line));
-    }
-    return values;
-  } catch {
+function isRealmMetadata(value: unknown): value is LibraryRealmMetadata {
+  return (
+    isRecord(value) &&
+    isFiniteNumber(value.mtimeMs) &&
+    isFiniteNumber(value.size)
+  );
+}
+
+function parseManifest(value: unknown): LibraryCacheManifest | null {
+  if (
+    !isRecord(value) ||
+    value.version !== libraryCacheVersion ||
+    !isFingerprint(value.fingerprint) ||
+    !isCollectionFingerprint(value.collectionFingerprint) ||
+    !isSummary(value.summary) ||
+    !isRealmMetadata(value.realm)
+  )
     return null;
-  }
+  return value as unknown as LibraryCacheManifest;
 }
 
 function normalize(value: string): string {
@@ -265,108 +228,568 @@ function trackSearch(track: Track): string {
   );
 }
 
-function serializeMedia(
-  assets: ReadonlyMap<string, MediaAsset>,
-  hash: string | undefined,
-): SerializedMedia | undefined {
-  if (!hash) return undefined;
-  const asset = assets.get(hash);
-  if (!asset) throw new Error(`Missing indexed media asset ${hash}.`);
-  return { hash: asset.hash, filename: asset.filename };
+function dataView(data: Buffer): DataView {
+  return new DataView(data.buffer, data.byteOffset, data.byteLength);
 }
 
-function serializeTracks(
-  snapshot: LibrarySnapshot,
-): Record<string, SerializedTrack> {
-  const tracks: Record<string, SerializedTrack> = {};
-  for (const item of snapshot.indexed) {
-    const track = item.track;
-    const audio = serializeMedia(snapshot.assets, track.audioHash);
-    if (!audio) throw new Error(`Track ${track.id} has no audio asset.`);
-    tracks[track.id] = {
-      title: track.title,
-      titleUnicode: track.titleUnicode,
-      artist: track.artist,
-      artistUnicode: track.artistUnicode,
-      source: track.source,
-      tags: [...track.tags],
-      duration: track.duration,
-      bpm: track.bpm,
-      stars: track.stars,
-      difficultyCount: track.difficultyCount,
-      media: {
-        audio,
-        background: serializeMedia(snapshot.assets, track.backgroundHash),
-        video: serializeMedia(snapshot.assets, track.videoHash),
-      },
-      videoOffset: track.videoOffset,
-      onlineId: track.onlineId,
-      md5Hash: track.md5Hash,
-      addedAt: track.addedAt,
-      beatmapHashes: [...item.beatmapHashes],
-    };
+class BinaryWriter {
+  private readonly chunks: Buffer[] = [];
+  private size = 0;
+
+  writeBytes(value: Buffer): void {
+    this.chunks.push(value);
+    this.size += value.length;
   }
-  return tracks;
+
+  writeUint16(value: number): void {
+    const data = Buffer.alloc(2);
+    data.writeUInt16LE(value, 0);
+    this.writeBytes(data);
+  }
+
+  writeUint32(value: number): void {
+    const data = Buffer.alloc(4);
+    data.writeUInt32LE(value, 0);
+    this.writeBytes(data);
+  }
+
+  writeBigInt64(value: bigint): void {
+    const data = Buffer.alloc(8);
+    dataView(data).setBigInt64(0, value, true);
+    this.writeBytes(data);
+  }
+
+  writeBigUint64(value: bigint): void {
+    const data = Buffer.alloc(8);
+    dataView(data).setBigUint64(0, value, true);
+    this.writeBytes(data);
+  }
+
+  writeFloat64(value: number): void {
+    const data = Buffer.alloc(8);
+    dataView(data).setFloat64(0, value, true);
+    this.writeBytes(data);
+  }
+
+  writeString(value: string): void {
+    const data = Buffer.from(value, "utf16le");
+    if (data.length > 0xffff || data.length % 2 !== 0)
+      throw new Error("Cache string exceeds the UTF-16 binary length limit.");
+    this.writeUint16(data.length);
+    this.writeBytes(data);
+  }
+
+  toBuffer(): Buffer {
+    return Buffer.concat(this.chunks, this.size);
+  }
+}
+
+class BinaryReader {
+  private readonly view: DataView;
+  private offset = 0;
+
+  constructor(private readonly data: Buffer) {
+    this.view = dataView(data);
+  }
+
+  get remaining(): number {
+    return this.data.length - this.offset;
+  }
+
+  readBytes(length: number): Buffer | null {
+    if (!Number.isSafeInteger(length) || length < 0 || length > this.remaining)
+      return null;
+    const value = this.data.subarray(this.offset, this.offset + length);
+    this.offset += length;
+    return value;
+  }
+
+  readUint16(): number | null {
+    if (this.remaining < 2) return null;
+    const value = this.view.getUint16(this.offset, true);
+    this.offset += 2;
+    return value;
+  }
+
+  readUint32(): number | null {
+    if (this.remaining < 4) return null;
+    const value = this.view.getUint32(this.offset, true);
+    this.offset += 4;
+    return value;
+  }
+
+  readBigInt64(): bigint | null {
+    if (this.remaining < 8) return null;
+    const value = this.view.getBigInt64(this.offset, true);
+    this.offset += 8;
+    return value;
+  }
+
+  readBigUint64(): bigint | null {
+    if (this.remaining < 8) return null;
+    const value = this.view.getBigUint64(this.offset, true);
+    this.offset += 8;
+    return value;
+  }
+
+  readFloat64(): number | null {
+    if (this.remaining < 8) return null;
+    const value = this.view.getFloat64(this.offset, true);
+    this.offset += 8;
+    return value;
+  }
+
+  readString(): string | null {
+    const byteLength = this.readUint16();
+    if (byteLength === null || byteLength % 2 !== 0) return null;
+    const value = this.readBytes(byteLength);
+    return value?.toString("utf16le") ?? null;
+  }
+}
+
+function hashBuffer(value: string, bytes: number): Buffer | null {
+  const expectedLength = bytes * 2;
+  if (value.length !== expectedLength || !/^[a-f\d]+$/i.test(value))
+    return null;
+  return Buffer.from(value, "hex");
+}
+
+function assetForHash(
+  assets: ReadonlyMap<string, MediaAsset>,
+  hash: string | undefined,
+): MediaAsset | null {
+  if (!hash || !isAssetHash(hash)) return null;
+  const asset = assets.get(hash) ?? assets.get(hash.toLowerCase());
+  return asset && isAssetHash(asset.hash)
+    ? { hash: asset.hash.toLowerCase(), filename: asset.filename }
+    : null;
+}
+
+function serializeTracks(snapshot: LibrarySnapshot): Buffer | null {
+  const chunks: Buffer[] = [binaryHeader(tracksMagic, snapshot.indexed.length)];
+  const seen = new Set<string>();
+  try {
+    for (const item of snapshot.indexed) {
+      const track = item.track;
+      const identity = parseTrackId(track.id);
+      const audio = assetForHash(snapshot.assets, track.audioHash);
+      if (
+        !identity ||
+        !audio ||
+        audio.hash !== identity.hash.toLowerCase() ||
+        seen.has(track.id) ||
+        !Number.isFinite(track.duration) ||
+        !Number.isFinite(track.bpm) ||
+        !Number.isFinite(track.stars) ||
+        !Number.isSafeInteger(track.difficultyCount) ||
+        track.difficultyCount < 0 ||
+        track.difficultyCount > 0xffffffff ||
+        !Number.isSafeInteger(track.addedAt) ||
+        track.addedAt < 0
+      )
+        return null;
+      seen.add(track.id);
+      const background = assetForHash(snapshot.assets, track.backgroundHash);
+      if (track.backgroundHash && !background) return null;
+      const video = assetForHash(snapshot.assets, track.videoHash);
+      if (track.videoHash && !video) return null;
+      const md5Hash = track.md5Hash
+        ? hashBuffer(track.md5Hash, md5Bytes)
+        : null;
+      if (track.md5Hash && !md5Hash) return null;
+      const beatmapHashes = [...item.beatmapHashes].map((hash) =>
+        hashBuffer(hash, md5Bytes),
+      );
+      if (beatmapHashes.some((hash) => !hash)) return null;
+      if (
+        track.videoOffset !== undefined &&
+        !Number.isFinite(track.videoOffset)
+      )
+        return null;
+      let flags = 0;
+      if (track.titleUnicode !== undefined) flags |= trackFlagTitleUnicode;
+      if (track.artistUnicode !== undefined) flags |= trackFlagArtistUnicode;
+      if (md5Hash) flags |= trackFlagMd5Hash;
+      if (background) flags |= trackFlagBackground;
+      if (video) flags |= trackFlagVideo;
+      if (track.videoOffset !== undefined) flags |= trackFlagVideoOffset;
+
+      const record = new BinaryWriter();
+      record.writeBigInt64(identity.onlineId);
+      record.writeBytes(hashBuffer(identity.hash, sha256Bytes)!);
+      record.writeUint16(flags);
+      record.writeString(track.title);
+      if (track.titleUnicode !== undefined)
+        record.writeString(track.titleUnicode);
+      record.writeString(track.artist);
+      if (track.artistUnicode !== undefined)
+        record.writeString(track.artistUnicode);
+      record.writeString(track.source);
+      record.writeFloat64(track.duration);
+      record.writeFloat64(track.bpm);
+      record.writeFloat64(track.stars);
+      record.writeUint32(track.difficultyCount);
+      record.writeBigUint64(BigInt(track.addedAt));
+      if (md5Hash) record.writeBytes(md5Hash);
+      record.writeString(audio.filename);
+      if (background) {
+        record.writeString(background.filename);
+        record.writeBytes(hashBuffer(background.hash, sha256Bytes)!);
+      }
+      if (video) {
+        record.writeString(video.filename);
+        record.writeBytes(hashBuffer(video.hash, sha256Bytes)!);
+      }
+      if (track.videoOffset !== undefined)
+        record.writeFloat64(track.videoOffset);
+      record.writeUint32(track.tags.length);
+      for (const tag of track.tags) record.writeString(tag);
+      record.writeUint32(beatmapHashes.length);
+      for (const hash of beatmapHashes) record.writeBytes(hash!);
+      const bytes = record.toBuffer();
+      if (bytes.length > 0xffffffff) return null;
+      const length = Buffer.alloc(4);
+      length.writeUInt32LE(bytes.length, 0);
+      chunks.push(length, bytes);
+    }
+    return Buffer.concat(chunks);
+  } catch {
+    return null;
+  }
+}
+
+function binaryHeader(magic: Buffer, recordCount: number): Buffer {
+  const header = Buffer.alloc(10);
+  magic.copy(header, 0);
+  header.writeUInt16LE(binaryVersion, 4);
+  header.writeUInt32LE(recordCount, 6);
+  return header;
+}
+
+function parseTrackId(
+  trackId: string,
+): { onlineId: bigint; hash: string } | null {
+  const hash = trackId.slice(-64);
+  const identity = trackId.slice(0, -65);
+  if (!isAssetHash(hash) || !/^-?\d+$/.test(identity)) return null;
+  try {
+    const onlineId = BigInt(identity);
+    if (onlineId < -(1n << 63n) || onlineId > (1n << 63n) - 1n) return null;
+    return { onlineId, hash };
+  } catch {
+    return null;
+  }
+}
+
+function encodeTrackReference(trackId: string): Buffer | null {
+  const parsed = parseTrackId(trackId);
+  if (!parsed) return null;
+  const reference = Buffer.alloc(trackReferenceBytes);
+  dataView(reference).setBigInt64(0, parsed.onlineId, true);
+  Buffer.from(parsed.hash, "hex").copy(reference, 8);
+  return reference;
+}
+
+function decodeTrackReference(data: Buffer, offset: number): string | null {
+  if (offset < 0 || offset + trackReferenceBytes > data.length) return null;
+  const view = dataView(data);
+  const onlineId = view.getBigInt64(offset, true).toString();
+  const hash = data
+    .subarray(offset + 8, offset + trackReferenceBytes)
+    .toString("hex");
+  return `${onlineId}-${hash}`;
+}
+
+function deserializeTrackRecord(data: Buffer): DecodedTrack | null {
+  const reader = new BinaryReader(data);
+  const onlineId = reader.readBigInt64();
+  const audioHash = reader.readBytes(sha256Bytes)?.toString("hex");
+  const flags = reader.readUint16();
+  if (
+    onlineId === null ||
+    !audioHash ||
+    flags === null ||
+    flags & ~trackKnownFlags
+  )
+    return null;
+  const title = reader.readString();
+  const titleUnicode =
+    flags & trackFlagTitleUnicode ? reader.readString() : undefined;
+  const artist = reader.readString();
+  const artistUnicode =
+    flags & trackFlagArtistUnicode ? reader.readString() : undefined;
+  const source = reader.readString();
+  const duration = reader.readFloat64();
+  const bpm = reader.readFloat64();
+  const stars = reader.readFloat64();
+  const difficultyCount = reader.readUint32();
+  const addedAt = reader.readBigUint64();
+  const md5Hash =
+    flags & trackFlagMd5Hash
+      ? reader.readBytes(md5Bytes)?.toString("hex")
+      : undefined;
+  const audioFilename = reader.readString();
+  if (
+    title === null ||
+    (flags & trackFlagTitleUnicode && titleUnicode === null) ||
+    artist === null ||
+    (flags & trackFlagArtistUnicode && artistUnicode === null) ||
+    source === null ||
+    duration === null ||
+    !Number.isFinite(duration) ||
+    bpm === null ||
+    !Number.isFinite(bpm) ||
+    stars === null ||
+    !Number.isFinite(stars) ||
+    difficultyCount === null ||
+    addedAt === null ||
+    addedAt > BigInt(Number.MAX_SAFE_INTEGER) ||
+    (flags & trackFlagMd5Hash && !md5Hash) ||
+    audioFilename === null
+  )
+    return null;
+
+  let background: MediaAsset | undefined;
+  if (flags & trackFlagBackground) {
+    const filename = reader.readString();
+    const hash = reader.readBytes(sha256Bytes)?.toString("hex");
+    if (filename === null || !hash) return null;
+    background = { hash, filename };
+  }
+  let video: MediaAsset | undefined;
+  if (flags & trackFlagVideo) {
+    const filename = reader.readString();
+    const hash = reader.readBytes(sha256Bytes)?.toString("hex");
+    if (filename === null || !hash) return null;
+    video = { hash, filename };
+  }
+  let videoOffset: number | undefined;
+  if (flags & trackFlagVideoOffset) {
+    videoOffset = reader.readFloat64() ?? undefined;
+    if (videoOffset === undefined || !Number.isFinite(videoOffset)) return null;
+  }
+  const tagCount = reader.readUint32();
+  if (tagCount === null) return null;
+  const tags: string[] = [];
+  for (let index = 0; index < tagCount; index++) {
+    const tag = reader.readString();
+    if (tag === null) return null;
+    tags.push(tag);
+  }
+  const beatmapHashCount = reader.readUint32();
+  if (beatmapHashCount === null) return null;
+  const beatmapHashes: string[] = [];
+  for (let index = 0; index < beatmapHashCount; index++) {
+    const hash = reader.readBytes(md5Bytes)?.toString("hex");
+    if (!hash) return null;
+    beatmapHashes.push(hash);
+  }
+  if (reader.remaining !== 0) return null;
+
+  const audio: MediaAsset = { hash: audioHash, filename: audioFilename };
+  const track: Track = {
+    id: `${onlineId.toString()}-${audioHash}`,
+    title,
+    titleUnicode: titleUnicode ?? undefined,
+    artist,
+    artistUnicode: artistUnicode ?? undefined,
+    source,
+    tags,
+    collections: [],
+    duration,
+    bpm,
+    stars,
+    difficultyCount,
+    audioUrl: assetUrl(audio.hash),
+    audioHash: audio.hash,
+    artworkUrl: background ? assetUrl(background.hash) : undefined,
+    backgroundHash: background?.hash,
+    videoUrl: video ? assetUrl(video.hash) : undefined,
+    videoHash: video?.hash,
+    videoOffset,
+    onlineId: onlineId > 0n ? Number(onlineId) : undefined,
+    md5Hash: md5Hash ?? undefined,
+    addedAt: Number(addedAt),
+  };
+  return {
+    track,
+    beatmapHashes: new Set(beatmapHashes),
+    assets: [
+      audio,
+      ...(background ? [background] : []),
+      ...(video ? [video] : []),
+    ],
+  };
+}
+
+function deserializeTracks(data: Buffer): DecodedTracks | null {
+  const header = parseBinaryHeader(data, tracksMagic);
+  if (!header) return null;
+  const reader = new BinaryReader(data.subarray(header.offset));
+  const tracks: DecodedTrack[] = [];
+  const assets = new Map<string, MediaAsset>();
+  const ids = new Set<string>();
+  for (let index = 0; index < header.count; index++) {
+    const length = reader.readUint32();
+    if (length === null) return null;
+    const record = reader.readBytes(length);
+    const decoded = record ? deserializeTrackRecord(record) : null;
+    if (!decoded || ids.has(decoded.track.id)) return null;
+    ids.add(decoded.track.id);
+    tracks.push(decoded);
+    for (const asset of decoded.assets) assets.set(asset.hash, asset);
+  }
+  return reader.remaining === 0 ? { tracks, assets, ids } : null;
+}
+
+function encodeCollectionId(id: string): Buffer | null {
+  const hex = id.replaceAll("-", "");
+  return /^[a-f\d]{32}$/i.test(hex) ? Buffer.from(hex, "hex") : null;
+}
+
+function formatCollectionId(hex: string): string {
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(
+    12,
+    16,
+  )}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+function decodeCollectionId(data: Buffer, offset: number): string | null {
+  if (offset < 0 || offset + 16 > data.length) return null;
+  return formatCollectionId(data.subarray(offset, offset + 16).toString("hex"));
 }
 
 function serializeCollections(
   collections: readonly LibraryCollection[],
-): string {
-  return collections
-    .map((collection) =>
-      JSON.stringify({
-        id: collection.id,
-        name: collection.name,
-        lastModified: collection.lastModified,
-        tracks: collection.trackIds,
-      } satisfies SerializedCollection),
-    )
-    .join("\n");
+): Buffer | null {
+  const chunks: Buffer[] = [binaryHeader(collectionsMagic, collections.length)];
+  for (const collection of collections) {
+    const id = encodeCollectionId(collection.id);
+    const name = Buffer.from(collection.name, "utf16le");
+    if (!id || name.length % 2 !== 0 || name.length > 0xffff) return null;
+    if (collection.trackIds.length > 0xffffffff) return null;
+    const header = Buffer.alloc(2 + 4);
+    header.writeUInt16LE(name.length, 0);
+    header.writeUInt32LE(collection.trackIds.length, 2);
+    chunks.push(id, header, name);
+    for (const trackId of collection.trackIds) {
+      const reference = encodeTrackReference(trackId);
+      if (!reference) return null;
+      chunks.push(reference);
+    }
+  }
+  return Buffer.concat(chunks);
 }
 
 function serializeOrders(
   orders: ReadonlyMap<string, readonly string[]>,
-): string {
-  return [...orders]
-    .filter(([key]) => key.endsWith(":ascending"))
-    .map(([key, tracks]) =>
-      JSON.stringify({
-        sortby: key.slice(0, -":ascending".length),
-        tracks: [...tracks],
-      } satisfies SerializedOrder),
-    )
-    .join("\n");
+): Buffer | null {
+  const canonical = [...orders].filter(([key]) => key.endsWith(":ascending"));
+  const chunks: Buffer[] = [binaryHeader(ordersMagic, canonical.length)];
+  for (const [key, tracks] of canonical) {
+    const sortby = key.slice(0, -":ascending".length) as SortKey;
+    const code = sortKeyCodes.get(sortby);
+    if (code === undefined || tracks.length > 0xffffffff) return null;
+    const header = Buffer.alloc(1 + 4);
+    header.writeUInt8(code, 0);
+    header.writeUInt32LE(tracks.length, 1);
+    chunks.push(header);
+    for (const trackId of tracks) {
+      const reference = encodeTrackReference(trackId);
+      if (!reference) return null;
+      chunks.push(reference);
+    }
+  }
+  return Buffer.concat(chunks);
+}
+
+function parseBinaryHeader(
+  data: Buffer,
+  magic: Buffer,
+): { offset: number; count: number } | null {
+  if (data.length < 10 || !data.subarray(0, 4).equals(magic)) return null;
+  const view = dataView(data);
+  if (view.getUint16(4, true) !== binaryVersion) return null;
+  return { offset: 10, count: view.getUint32(6, true) };
+}
+
+function deserializeCollections(
+  data: Buffer,
+  collectionFingerprint: LibraryCollectionFingerprint,
+  trackIds: ReadonlySet<string>,
+): LibraryCollection[] | null {
+  const header = parseBinaryHeader(data, collectionsMagic);
+  if (!header) return null;
+  const result: LibraryCollection[] = [];
+  let offset = header.offset;
+  const seen = new Set<string>();
+  const view = dataView(data);
+  for (let index = 0; index < header.count; index++) {
+    const id = decodeCollectionId(data, offset);
+    if (!id || seen.has(id)) return null;
+    seen.add(id);
+    offset += 16;
+    if (offset + 6 > data.length) return null;
+    const nameLength = view.getUint16(offset, true);
+    const trackCount = view.getUint32(offset + 2, true);
+    offset += 6;
+    const nameBytes = nameLength;
+    if (nameBytes % 2 !== 0) return null;
+    if (offset + nameBytes > data.length) return null;
+    const name = data.subarray(offset, offset + nameBytes).toString("utf16le");
+    offset += nameBytes;
+    const lastModified = collectionFingerprint[id];
+    if (!isFiniteNumber(lastModified)) return null;
+    const tracks: string[] = [];
+    for (let trackIndex = 0; trackIndex < trackCount; trackIndex++) {
+      const trackId = decodeTrackReference(data, offset);
+      if (!trackId || !trackIds.has(trackId)) return null;
+      tracks.push(trackId);
+      offset += trackReferenceBytes;
+    }
+    result.push({ id, name, lastModified, trackIds: tracks });
+  }
+  return offset === data.length ? result : null;
+}
+
+function deserializeOrders(
+  data: Buffer,
+  trackIds: ReadonlySet<string>,
+): Map<string, readonly string[]> | null {
+  const header = parseBinaryHeader(data, ordersMagic);
+  if (!header) return null;
+  const result = new Map<string, readonly string[]>();
+  let offset = header.offset;
+  const view = dataView(data);
+  for (let index = 0; index < header.count; index++) {
+    if (offset + 5 > data.length) return null;
+    const code = view.getUint8(offset);
+    const sortby = sortKeysByCode.get(code);
+    const trackCount = view.getUint32(offset + 1, true);
+    offset += 5;
+    if (!sortby || result.has(`${sortby}:ascending`)) return null;
+    const tracks: string[] = [];
+    for (let trackIndex = 0; trackIndex < trackCount; trackIndex++) {
+      const trackId = decodeTrackReference(data, offset);
+      if (!trackId || !trackIds.has(trackId)) return null;
+      tracks.push(trackId);
+      offset += trackReferenceBytes;
+    }
+    result.set(`${sortby}:ascending`, tracks);
+  }
+  return offset === data.length ? result : null;
 }
 
 function deserializeSnapshot(
-  tracksValue: unknown,
-  collectionsValue: unknown[],
-  ordersValue: unknown[],
+  tracksValue: DecodedTracks | null,
+  collectionsValue: LibraryCollection[] | null,
+  ordersValue: Map<string, readonly string[]> | null,
   summary: LibrarySummary,
 ): LibrarySnapshot | null {
-  if (!isRecord(tracksValue)) return null;
-  const collections: LibraryCollection[] = [];
+  if (!tracksValue || !collectionsValue || !ordersValue) return null;
+  const collections = collectionsValue;
   const collectionNamesByTrack = new Map<string, string[]>();
-  const collectionIds = new Set<string>();
-  for (const value of collectionsValue) {
-    if (
-      !isRecord(value) ||
-      typeof value.id !== "string" ||
-      typeof value.name !== "string" ||
-      !isFiniteNumber(value.lastModified) ||
-      !isStringArray(value.tracks) ||
-      collectionIds.has(value.id)
-    ) {
-      return null;
-    }
-    collectionIds.add(value.id);
-    const collection: LibraryCollection = {
-      id: value.id,
-      name: value.name,
-      lastModified: value.lastModified,
-      trackIds: [...new Set(value.tracks)],
-    };
-    collections.push(collection);
+  for (const collection of collections) {
     for (const id of collection.trackIds) {
       const names = collectionNamesByTrack.get(id) ?? [];
       names.push(collection.name);
@@ -374,72 +797,34 @@ function deserializeSnapshot(
     }
   }
 
-  const assets = new Map<string, MediaAsset>();
   const indexed: LibrarySnapshot["indexed"] = [];
-  for (const [id, value] of Object.entries(tracksValue)) {
-    if (!isTrackFields(value)) return null;
+  for (const decoded of tracksValue.tracks) {
+    const track = decoded.track;
     const collectionsForTrack = [
-      ...new Set(collectionNamesByTrack.get(id) ?? []),
+      ...new Set(collectionNamesByTrack.get(track.id) ?? []),
     ];
-    const audio = value.media.audio;
-    const background = value.media.background;
-    const video = value.media.video;
-    for (const media of [audio, background, video]) {
-      if (media) assets.set(media.hash, { ...media });
-    }
-    const track: Track = {
-      id,
-      title: value.title,
-      titleUnicode: value.titleUnicode,
-      artist: value.artist,
-      artistUnicode: value.artistUnicode,
-      source: value.source,
-      tags: [...value.tags],
-      collections: collectionsForTrack,
-      duration: value.duration,
-      bpm: value.bpm,
-      stars: value.stars,
-      difficultyCount: value.difficultyCount,
-      audioUrl: assetUrl(audio.hash),
-      audioHash: audio.hash,
-      artworkUrl: background ? assetUrl(background.hash) : undefined,
-      backgroundHash: background?.hash,
-      videoUrl: video ? assetUrl(video.hash) : undefined,
-      videoHash: video?.hash,
-      videoOffset: value.videoOffset,
-      onlineId: value.onlineId,
-      md5Hash: value.md5Hash,
-      addedAt: value.addedAt,
-    };
+    track.collections = collectionsForTrack;
     indexed.push({
       track,
       search: trackSearch(track),
       tags: new Set(track.tags.map(normalize)),
       collections: new Set(collectionsForTrack.map(normalize)),
-      beatmapHashes: new Set(value.beatmapHashes),
+      beatmapHashes: decoded.beatmapHashes,
     });
   }
   if (summary.trackCount !== indexed.length) return null;
-
-  const orders = new Map<string, readonly string[]>();
-  for (const value of ordersValue) {
-    if (
-      !isRecord(value) ||
-      typeof value.sortby !== "string" ||
-      !sortKeys.has(value.sortby as SortKey) ||
-      !isStringArray(value.tracks) ||
-      orders.has(`${value.sortby}:ascending`)
-    ) {
-      return null;
-    }
-    orders.set(`${value.sortby}:ascending`, [...value.tracks]);
-  }
-  return { assets, summary, indexed, orders, collections };
+  return {
+    assets: tracksValue.assets,
+    summary,
+    indexed,
+    orders: ordersValue,
+    collections,
+  };
 }
 
 export async function readLibraryCache(
   directory: string,
-  fingerprint: LibraryFingerprint,
+  fingerprint?: LibraryFingerprint,
   signal?: LibraryCancellation,
 ): Promise<LibraryCacheData | null> {
   signal?.throwIfAborted();
@@ -452,27 +837,26 @@ export async function readLibraryCache(
       ordersContents,
     ] = await Promise.all([
       readFile(paths.manifest, "utf8"),
-      readFile(paths.tracks, "utf8"),
-      readFile(paths.collections, "utf8"),
-      readFile(paths.orders, "utf8"),
+      readFile(paths.tracks),
+      readFile(paths.collections),
+      readFile(paths.orders),
     ]);
     signal?.throwIfAborted();
-    const manifestValue: unknown = JSON.parse(manifestContents);
-    const tracksValue: unknown = JSON.parse(tracksContents);
-    const collectionsValue = parseNdjson(collectionsContents);
-    const ordersValue = parseNdjson(ordersContents);
+    const manifest = parseManifest(JSON.parse(manifestContents));
     if (
-      !isRecord(manifestValue) ||
-      manifestValue.version !== libraryCacheVersion ||
-      !isFingerprint(manifestValue.fingerprint) ||
-      !isCollectionFingerprint(manifestValue.collectionFingerprint) ||
-      !isSummary(manifestValue.summary) ||
-      !libraryFingerprintsEqual(manifestValue.fingerprint, fingerprint) ||
-      !collectionsValue ||
-      !ordersValue
+      !manifest ||
+      (fingerprint &&
+        !libraryFingerprintsEqual(manifest.fingerprint, fingerprint))
     )
       return null;
-    const manifest = manifestValue as unknown as LibraryCacheManifest;
+    const tracksValue = deserializeTracks(tracksContents);
+    const trackIds = tracksValue?.ids ?? new Set<string>();
+    const collectionsValue = deserializeCollections(
+      collectionsContents,
+      manifest.collectionFingerprint,
+      trackIds,
+    );
+    const ordersValue = deserializeOrders(ordersContents, trackIds);
     const snapshot = deserializeSnapshot(
       tracksValue,
       collectionsValue,
@@ -491,6 +875,7 @@ export async function readLibraryCache(
       snapshot,
       fingerprint: manifest.fingerprint,
       collectionFingerprint: manifest.collectionFingerprint,
+      realm: manifest.realm,
     };
   } catch {
     signal?.throwIfAborted();
@@ -498,10 +883,36 @@ export async function readLibraryCache(
   }
 }
 
+export async function readLibraryCacheManifest(
+  directory: string,
+  signal?: LibraryCancellation,
+): Promise<LibraryCacheManifest | null> {
+  signal?.throwIfAborted();
+  try {
+    const contents = await readFile(
+      libraryCachePaths(directory).manifest,
+      "utf8",
+    );
+    signal?.throwIfAborted();
+    return parseManifest(JSON.parse(contents));
+  } catch {
+    signal?.throwIfAborted();
+    return null;
+  }
+}
+
+export function libraryRealmMetadataEqual(
+  left: LibraryRealmMetadata,
+  right: LibraryRealmMetadata,
+): boolean {
+  return left.mtimeMs === right.mtimeMs && left.size === right.size;
+}
+
 export async function writeLibraryCache(
   directory: string,
   fingerprint: LibraryFingerprint,
   collectionFingerprint: LibraryCollectionFingerprint,
+  realm: LibraryRealmMetadata,
   snapshot: LibrarySnapshot,
   signal?: LibraryCancellation,
 ): Promise<void> {
@@ -515,21 +926,20 @@ export async function writeLibraryCache(
       fingerprint,
       collectionFingerprint,
       summary: snapshot.summary,
+      realm,
     };
     const tracks = serializeTracks(snapshot);
     const collections = serializeCollections(snapshot.collections);
     const orders = serializeOrders(snapshot.orders);
+    if (!tracks || !collections || !orders)
+      throw new Error("Could not encode the library cache binary files.");
     await mkdir(temporary, { recursive: true });
     signal?.throwIfAborted();
     await Promise.all([
       writeFile(paths.manifest, JSON.stringify(manifest), "utf8"),
-      writeFile(paths.tracks, JSON.stringify(tracks), "utf8"),
-      writeFile(
-        paths.collections,
-        collections ? `${collections}\n` : "",
-        "utf8",
-      ),
-      writeFile(paths.orders, orders ? `${orders}\n` : "", "utf8"),
+      writeFile(paths.tracks, tracks),
+      writeFile(paths.collections, collections),
+      writeFile(paths.orders, orders),
     ]);
     signal?.throwIfAborted();
     await rm(directory, { recursive: true, force: true });

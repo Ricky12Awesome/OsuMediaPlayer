@@ -1,4 +1,6 @@
 import Realm from "realm";
+import { stat } from "node:fs/promises";
+import { join } from "node:path";
 import {
   LibraryIndex,
   readLibraryCollections,
@@ -6,11 +8,15 @@ import {
   readLibraryFingerprints,
   type LibraryFingerprint,
 } from "./library";
+import { resolveLazerInstallPath } from "./lazer-path";
 import {
   collectionFingerprintsEqual,
   libraryCachePath,
+  libraryRealmMetadataEqual,
+  readLibraryCacheManifest,
   readLibraryCache,
   writeLibraryCache,
+  type LibraryRealmMetadata,
 } from "./library-cache";
 
 // Realm's native addon owns process-wide state. Keep it outside Electron's
@@ -63,20 +69,38 @@ void (async () => {
     let cacheDirectory: string | undefined;
     let fingerprint: LibraryFingerprint | undefined;
     let collectionFingerprint: Record<string, number> | undefined;
+    let realmMetadata: LibraryRealmMetadata | undefined;
     if (options.cacheDirectory) {
-      const checked = await readLibraryFingerprints(
-        options.installPath,
-        controller.signal,
-      );
-      resolvedPath = checked.installPath;
-      fingerprint = checked.fingerprint;
-      collectionFingerprint = checked.collectionFingerprint;
+      resolvedPath = await resolveLazerInstallPath(options.installPath);
+      const realm = await stat(join(resolvedPath, "client.realm"));
+      realmMetadata = { mtimeMs: realm.mtimeMs, size: realm.size };
       cacheDirectory = libraryCachePath(options.cacheDirectory, resolvedPath);
-      const cached = await readLibraryCache(
+      const manifest = await readLibraryCacheManifest(
         cacheDirectory,
-        fingerprint,
         controller.signal,
       );
+      let cached =
+        manifest &&
+        manifest.summary.installPath === resolvedPath &&
+        libraryRealmMetadataEqual(manifest.realm, realmMetadata)
+          ? await readLibraryCache(cacheDirectory, undefined, controller.signal)
+          : null;
+      if (!cached) {
+        const checked = await readLibraryFingerprints(
+          resolvedPath,
+          controller.signal,
+        );
+        fingerprint = checked.fingerprint;
+        collectionFingerprint = checked.collectionFingerprint;
+        cached = await readLibraryCache(
+          cacheDirectory,
+          fingerprint,
+          controller.signal,
+        );
+      } else {
+        fingerprint = cached.fingerprint;
+        collectionFingerprint = cached.collectionFingerprint;
+      }
       if (cached && cached.snapshot.summary.installPath === resolvedPath) {
         const index = LibraryIndex.fromSnapshot(cached.snapshot);
         if (
@@ -94,7 +118,7 @@ void (async () => {
             }
           }
           const collections = await readLibraryCollections(
-            checked.installPath,
+            resolvedPath,
             trackIdsByMd5,
             controller.signal,
           );
@@ -105,6 +129,7 @@ void (async () => {
               cacheDirectory,
               fingerprint,
               collectionFingerprint,
+              realmMetadata,
               index.snapshot(),
             );
           } catch {
@@ -130,14 +155,22 @@ void (async () => {
       await send({ type: "complete", snapshot });
       // The snapshot is complete at this point. Finish persisting it even if
       // the parent starts a graceful shutdown immediately afterward.
-      if (cacheDirectory && fingerprint && collectionFingerprint) {
+      if (
+        cacheDirectory &&
+        fingerprint &&
+        collectionFingerprint &&
+        realmMetadata
+      ) {
         try {
-          await writeLibraryCache(
-            cacheDirectory,
-            fingerprint,
-            collectionFingerprint,
-            snapshot,
-          );
+          const currentRealm = await stat(join(resolvedPath!, "client.realm"));
+          if (libraryRealmMetadataEqual(currentRealm, realmMetadata))
+            await writeLibraryCache(
+              cacheDirectory,
+              fingerprint,
+              collectionFingerprint,
+              realmMetadata,
+              snapshot,
+            );
         } catch {
           // Caching is an optimization. A read-only or full cache directory
           // must never make a successfully loaded library fail.

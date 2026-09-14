@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import test from "node:test";
@@ -15,6 +15,8 @@ import {
   libraryCachePath,
   libraryCachePaths,
   libraryFingerprintsEqual,
+  readLibraryCache,
+  writeLibraryCache,
 } from "../src/main/library-cache";
 import type { loadLibraryInWorker } from "../src/main/library-loader";
 import type { SortKey } from "../src/shared/types";
@@ -151,6 +153,7 @@ test("worker imports Realm and transfers canonical sort orders; errors and cance
     );
     const cachePath = libraryCachePath(cacheDirectory, directory);
     const cacheFiles = libraryCachePaths(cachePath);
+    const fingerprint = await readLibraryFingerprint(directory);
     const manifest = JSON.parse(
       await readFile(cacheFiles.manifest, "utf8"),
     ) as {
@@ -160,36 +163,52 @@ test("worker imports Realm and transfers canonical sort orders; errors and cance
         latestDateAdded: number;
       };
       collectionFingerprint: Record<string, number>;
+      realm: { mtimeMs: number; size: number };
     };
-    const tracks = JSON.parse(
-      await readFile(cacheFiles.tracks, "utf8"),
-    ) as Record<
-      string,
-      { title: string; artist: string; beatmapHashes: string[] }
-    >;
-    const collectionLines = (await readFile(cacheFiles.collections, "utf8"))
-      .trim()
-      .split("\n")
-      .filter(Boolean)
-      .map((line) => JSON.parse(line) as { name: string; tracks: string[] });
-    const orderLines = (await readFile(cacheFiles.orders, "utf8"))
-      .trim()
-      .split("\n")
-      .filter(Boolean)
-      .map((line) => JSON.parse(line) as { sortby: string; tracks: string[] });
-    const fingerprint = await readLibraryFingerprint(directory);
+    const tracksBinary = await readFile(cacheFiles.tracks);
+    const collectionsBinary = await readFile(cacheFiles.collections);
+    const ordersBinary = await readFile(cacheFiles.orders);
+    const cachedData = await readLibraryCache(
+      cachePath,
+      fingerprint.fingerprint,
+    );
+    assert.ok(cachedData);
     assert.equal(firstCached.summary.trackCount, 3);
     assert.deepEqual(manifest.fingerprint, fingerprint.fingerprint);
     assert.equal(manifest.fingerprint.beatmapSetCount, 3);
     assert.equal(manifest.fingerprint.beatmapCount, 3);
-    assert.equal(collectionLines.length, 1);
-    assert.equal(collectionLines[0].name, "Favorites");
-    assert.equal(orderLines.length, 8);
-    assert.ok(orderLines.every(({ sortby }) => !sortby.includes(":")));
-    const firstTrackId = Object.keys(tracks)[0];
-    tracks[firstTrackId].title = "From disk cache";
-    tracks[firstTrackId].artist = "Cached artist";
-    await writeFile(cacheFiles.tracks, JSON.stringify(tracks), "utf8");
+    assert.ok(Number.isFinite(manifest.realm.mtimeMs));
+    assert.ok(Number.isFinite(manifest.realm.size));
+    assert.equal(tracksBinary.subarray(0, 4).toString(), "OMTR");
+    assert.equal(collectionsBinary.subarray(0, 4).toString(), "OMCL");
+    assert.equal(ordersBinary.subarray(0, 4).toString(), "OMOR");
+    assert.equal(cachedData.snapshot.collections.length, 1);
+    assert.equal(cachedData.snapshot.collections[0].name, "Favorites");
+    assert.equal(cachedData.snapshot.orders.size, 8);
+    const firstTrack = cachedData.snapshot.indexed[0].track;
+    const firstTrackId = firstTrack.id;
+    firstTrack.title = "From disk cache";
+    firstTrack.artist = "Cached artist";
+    firstTrack.titleUnicode = "キャッシュタイトル";
+    firstTrack.artistUnicode = "キャッシュアーティスト";
+    firstTrack.backgroundHash = "b".repeat(64);
+    firstTrack.videoHash = "c".repeat(64);
+    firstTrack.videoOffset = 1.25;
+    cachedData.snapshot.assets.set(firstTrack.backgroundHash, {
+      hash: firstTrack.backgroundHash,
+      filename: "background.jpg",
+    });
+    cachedData.snapshot.assets.set(firstTrack.videoHash, {
+      hash: firstTrack.videoHash,
+      filename: "video.mp4",
+    });
+    await writeLibraryCache(
+      cachePath,
+      cachedData.fingerprint,
+      cachedData.collectionFingerprint,
+      cachedData.realm,
+      cachedData.snapshot,
+    );
     const cached = await load(
       directory,
       undefined,
@@ -203,6 +222,17 @@ test("worker imports Realm and transfers canonical sort orders; errors and cance
     assert.ok(
       cached.query().items.some((track) => track.artist === "Cached artist"),
     );
+    assert.equal(
+      cached.getTrack(firstTrackId)?.titleUnicode,
+      "キャッシュタイトル",
+    );
+    assert.equal(
+      cached.getTrack(firstTrackId)?.artistUnicode,
+      "キャッシュアーティスト",
+    );
+    assert.equal(cached.getTrack(firstTrackId)?.videoOffset, 1.25);
+    assert.equal(cached.assets.get("b".repeat(64))?.filename, "background.jpg");
+    assert.equal(cached.assets.get("c".repeat(64))?.filename, "video.mp4");
     assert.equal(cached.snapshot().orders.size, 8);
     assert.equal(
       libraryFingerprintsEqual(fingerprint.fingerprint, {
@@ -246,9 +276,9 @@ test("worker imports Realm and transfers canonical sort orders; errors and cance
         .query({ collection: "Favorites" })
         .items.map((track) => track.id),
       [
-        Object.entries(tracks).find(([, track]) =>
-          track.beatmapHashes.includes("2".repeat(32)),
-        )?.[0],
+        cachedData.snapshot.indexed.find((item) =>
+          item.beatmapHashes.has("2".repeat(32)),
+        )?.track.id,
       ],
     );
 
