@@ -87,5 +87,8 @@
     "asarUnpack": [
       "node_modules/realm/**/*"
     ]
+  },
+  "allowScripts": {
+    "realm@20.2.0": true
   }
 }
