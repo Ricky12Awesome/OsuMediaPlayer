@@ -75,6 +75,11 @@ try {
         line: { ...defaultVisualizer.line, ...(settings.line || {}) },
         circle: { ...defaultVisualizer.circle, ...(settings.circle || {}) },
       };
+      merged.profiles = { ...defaultVisualizer.profiles };
+      for (const layout of ["line", "circle"]) {
+        const profile = merged[layout];
+        merged.profiles[`${layout}-${profile.mode}`] = profile;
+      }
       root.render(
         React.createElement(AudioVisualizer, {
           analyser,
@@ -105,7 +110,12 @@ try {
       window.vertexCount = 0;
       window.renderVisualizer({
         layout: "circle",
-        circle: { mode, mirrorVertically: true },
+        circle: {
+          mode,
+          mirrored: true,
+          mirrorVertically: true,
+          rotation: 0,
+        },
       });
     }, mode);
     await page.waitForFunction(

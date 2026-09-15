@@ -13,6 +13,7 @@ import type {
 } from "../../shared/types";
 import {
   cloneQueueQuery,
+  defaultPlaybackSettings,
   navigateRandomHistory,
   navigateShuffleHistory,
   nextQueueIndex,
@@ -53,6 +54,7 @@ export interface PlayerState {
   cycleRepeat: () => void;
   playVideos: boolean;
   setPlayVideos: React.Dispatch<React.SetStateAction<boolean>>;
+  resetPlaybackSettings: () => void;
   error: string | null;
   clearError: () => void;
   loading: boolean;
@@ -501,6 +503,13 @@ export function usePlayer(
       ),
     [],
   );
+  const resetPlaybackSettings = useCallback(() => {
+    setVolumeState(defaultPlaybackSettings.volume);
+    setMuted(defaultPlaybackSettings.muted);
+    setShuffle(defaultPlaybackSettings.shuffle);
+    setRepeat(defaultPlaybackSettings.repeat);
+    setPlayVideos(defaultPlaybackSettings.playVideos);
+  }, []);
 
   const controls = useRef({
     navigate,
@@ -782,6 +791,7 @@ export function usePlayer(
     cycleRepeat,
     playVideos,
     setPlayVideos,
+    resetPlaybackSettings,
     error,
     clearError: () => setError(null),
     loading,

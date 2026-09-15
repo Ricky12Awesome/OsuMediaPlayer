@@ -14,36 +14,92 @@ export interface VisualizerLayoutSettings {
   inwardLength: number;
 }
 
+export type VisualizerProfileKey =
+  "circle-fft" | "circle-waveform" | "line-fft" | "line-waveform";
+
 export interface VisualizerSettings {
   enabled: boolean;
   layout: "line" | "circle";
   line: VisualizerLayoutSettings;
   circle: VisualizerLayoutSettings;
+  profiles: Record<VisualizerProfileKey, VisualizerLayoutSettings>;
 }
 
-function createDefaultLayout(): VisualizerLayoutSettings {
+function createDefaultLayout(
+  overrides: Partial<VisualizerLayoutSettings> = {},
+): VisualizerLayoutSettings {
   return {
     mode: "fft",
     bars: 64,
-    width: 65,
-    length: 70,
-    radius: 23,
-    rotation: 0,
-    waveformMultiplier: 10,
-    waveformRetention: 200,
-    fftRetention: 200,
+    width: 50,
+    length: 33,
+    radius: 40,
+    rotation: 0.5,
+    waveformMultiplier: 2,
+    waveformRetention: 50,
+    fftRetention: 15,
     mirrored: true,
+    flipped: true,
+    mirrorVertically: true,
+    inwardLength: 0,
+    ...overrides,
+  };
+}
+
+const defaultVisualizerProfiles: Record<
+  VisualizerProfileKey,
+  VisualizerLayoutSettings
+> = {
+  "circle-fft": createDefaultLayout({ inwardLength: 100, flipped: false }),
+  "circle-waveform": createDefaultLayout({
+    mode: "waveform",
+    bars: 138,
+    length: 50,
+    mirrored: false,
     flipped: false,
     mirrorVertically: false,
-    inwardLength: 0,
-  };
+    inwardLength: 100,
+  }),
+  "line-fft": createDefaultLayout({ bars: 48 }),
+  "line-waveform": createDefaultLayout({
+    mode: "waveform",
+    bars: 48,
+    length: 50,
+  }),
+};
+
+function cloneVisualizerProfiles(): Record<
+  VisualizerProfileKey,
+  VisualizerLayoutSettings
+> {
+  return Object.fromEntries(
+    Object.entries(defaultVisualizerProfiles).map(([key, settings]) => [
+      key,
+      { ...settings },
+    ]),
+  ) as Record<VisualizerProfileKey, VisualizerLayoutSettings>;
+}
+
+export function visualizerProfileKey(
+  layout: "line" | "circle",
+  mode: "fft" | "waveform",
+): VisualizerProfileKey {
+  return `${layout}-${mode}` as VisualizerProfileKey;
+}
+
+function withVisualizerMode(
+  settings: VisualizerLayoutSettings,
+  mode: "fft" | "waveform",
+): VisualizerLayoutSettings {
+  return { ...settings, mode };
 }
 
 export const defaultVisualizer: VisualizerSettings = {
   enabled: true,
-  layout: "line",
-  line: createDefaultLayout(),
-  circle: createDefaultLayout(),
+  layout: "circle",
+  line: { ...defaultVisualizerProfiles["line-fft"] },
+  circle: { ...defaultVisualizerProfiles["circle-waveform"] },
+  profiles: cloneVisualizerProfiles(),
 };
 
 function cloneDefaultVisualizer(): VisualizerSettings {
@@ -52,7 +108,19 @@ function cloneDefaultVisualizer(): VisualizerSettings {
     layout: defaultVisualizer.layout,
     line: { ...defaultVisualizer.line },
     circle: { ...defaultVisualizer.circle },
+    profiles: cloneVisualizerProfiles(),
   };
+}
+
+export function getVisualizerLayoutSettings(
+  settings: VisualizerSettings,
+): VisualizerLayoutSettings {
+  const layoutSettings = settings[settings.layout];
+  return (
+    settings.profiles[
+      visualizerProfileKey(settings.layout, layoutSettings.mode)
+    ] ?? layoutSettings
+  );
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -142,7 +210,7 @@ export function parseVisualizer(raw: string | null): VisualizerSettings {
         ? value.mode
         : defaultVisualizer.line.mode;
     const legacyLine: VisualizerLayoutSettings = {
-      ...createDefaultLayout(),
+      ...defaultVisualizer.line,
       mode: legacyMode,
       bars: boundedNumber(value.bars, defaultVisualizer.line.bars, 8, 256),
       width: boundedNumber(value.width, defaultVisualizer.line.width, 10, 100),
@@ -153,7 +221,7 @@ export function parseVisualizer(raw: string | null): VisualizerSettings {
         100,
       ),
       radius: boundedNumber(value.radius, defaultVisualizer.line.radius, 8, 45),
-      rotation: 0,
+      rotation: defaultVisualizer.line.rotation,
       waveformMultiplier: boundedNumber(
         value.waveformMultiplier,
         defaultVisualizer.line.waveformMultiplier,
@@ -178,9 +246,20 @@ export function parseVisualizer(raw: string | null): VisualizerSettings {
       inwardLength: boundedNumber(value.inwardLength, 0, 0, 100),
     };
     const legacyCircle: VisualizerLayoutSettings = {
+      ...defaultVisualizer.circle,
       ...legacyLine,
+      mode:
+        value.mode === "waveform" || value.mode === "fft"
+          ? legacyMode
+          : defaultVisualizer.circle.mode,
       radius: boundedNumber(value.circleRadius, legacyLine.radius, 8, 45),
-      rotation: boundedNumber(value.circleRotation, 0, -6, 6, 0.25),
+      rotation: boundedNumber(
+        value.circleRotation,
+        defaultVisualizer.circle.rotation,
+        -6,
+        6,
+        0.25,
+      ),
       mirrored: booleanValue(value, "circleMirrored", legacyLine.mirrored),
       flipped: booleanValue(value, "circleFlipped", legacyLine.flipped),
       mirrorVertically: booleanValue(
@@ -191,11 +270,31 @@ export function parseVisualizer(raw: string | null): VisualizerSettings {
       inwardLength: boundedNumber(value.circleInwardLength, 0, 0, 100),
     };
 
+    const line = parseLayout(value.line, legacyLine);
+    const circle = parseLayout(value.circle, legacyCircle);
+    const storedProfiles = record(value.profiles);
+    const hasStoredProfiles = Object.keys(storedProfiles).some((key) =>
+      Object.hasOwn(defaultVisualizerProfiles, key),
+    );
+    const profiles = hasStoredProfiles
+      ? (Object.fromEntries(
+          Object.entries(defaultVisualizerProfiles).map(([key, fallback]) => [
+            key,
+            parseLayout(storedProfiles[key], fallback),
+          ]),
+        ) as Record<VisualizerProfileKey, VisualizerLayoutSettings>)
+      : {
+          "circle-fft": withVisualizerMode(circle, "fft"),
+          "circle-waveform": withVisualizerMode(circle, "waveform"),
+          "line-fft": withVisualizerMode(line, "fft"),
+          "line-waveform": withVisualizerMode(line, "waveform"),
+        };
     return {
       enabled: booleanValue(value, "enabled", true),
       layout: value.layout === "circle" ? "circle" : "line",
-      line: parseLayout(value.line, legacyLine),
-      circle: parseLayout(value.circle, legacyCircle),
+      line,
+      circle,
+      profiles,
     };
   } catch {
     return cloneDefaultVisualizer();

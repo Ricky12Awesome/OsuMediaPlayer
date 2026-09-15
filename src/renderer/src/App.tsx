@@ -79,8 +79,9 @@ import {
   useVisualizerSettings,
 } from "./AudioVisualizer";
 import { usePlayer } from "./usePlayer";
+import { parseVisualizer } from "./visualizer-settings";
 
-const defaultPosition = "bottom-left";
+const defaultPosition = "top-left";
 const defaultLibraryPosition = "right";
 const positions = [
   "top-left",
@@ -277,10 +278,10 @@ export function App({
     },
   );
   const [transportLayout, setTransportLayout] = useState<TransportLayout>(() =>
-    readStorage<string>("osu-music-transport-layout", "controls-left") ===
-    "controls-centered"
-      ? "controls-centered"
-      : "controls-left",
+    readStorage<string>("osu-music-transport-layout", "controls-centered") ===
+    "controls-left"
+      ? "controls-left"
+      : "controls-centered",
   );
   const [showNowPlayingTitleArtist, setShowNowPlayingTitleArtist] = useState(
     () => readStorage("osu-music-show-now-playing-title-artist", true),
@@ -303,6 +304,8 @@ export function App({
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [settingsResetConfirmation, setSettingsResetConfirmation] =
+    useState(false);
   const [zoomPercent, setZoomPercent] = useState(100);
   const [zoomIndicatorVisible, setZoomIndicatorVisible] = useState(false);
   const [captionDragging, setCaptionDragging] = useState(false);
@@ -319,6 +322,7 @@ export function App({
   const searchRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const cacheCancelButtonRef = useRef<HTMLButtonElement>(null);
+  const settingsResetCancelButtonRef = useRef<HTMLButtonElement>(null);
   const captionRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLElement>(null);
   const libraryRef = useRef<HTMLElement>(null);
@@ -639,7 +643,7 @@ export function App({
         (["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(target.tagName) ||
           target.isContentEditable);
       const inTransport = Boolean(target?.closest(".transport"));
-      if (cacheConfirmation) return;
+      if (cacheConfirmation || settingsResetConfirmation) return;
       if (event.key === "F11") {
         event.preventDefault();
         api.windowControl("fullscreen");
@@ -784,6 +788,7 @@ export function App({
     settingsOpen,
     shortcutsOpen,
     cacheConfirmation,
+    settingsResetConfirmation,
   ]);
 
   const query = useMemo<LibraryQuery>(
@@ -984,6 +989,34 @@ export function App({
     }
   }, [cacheConfirmation, clearingCache]);
 
+  const requestSettingsReset = useCallback(() => {
+    setSettingsResetConfirmation(true);
+    setSettingsOpen(false);
+  }, []);
+
+  const cancelSettingsReset = useCallback(() => {
+    setSettingsResetConfirmation(false);
+    setSettingsOpen(true);
+  }, []);
+
+  const confirmSettingsReset = useCallback(() => {
+    player.resetPlaybackSettings();
+    setVisualizer(parseVisualizer(null));
+    setSort("title");
+    setDescending(false);
+    setCaptionPosition(defaultPosition);
+    setSidebarHidden(false);
+    setLibraryPosition(defaultLibraryPosition);
+    setTransportLayout("controls-centered");
+    setShowNowPlayingTitleArtist(true);
+    setArtworkThemeEnabled(true);
+    setLibraryWidth(430);
+    setVisualizerOpen(false);
+    setCacheNotice(null);
+    setSettingsResetConfirmation(false);
+    setSettingsOpen(true);
+  }, [player.resetPlaybackSettings]);
+
   useEffect(() => {
     if (!settingsOpen) return;
     let cancelled = false;
@@ -1011,6 +1044,18 @@ export function App({
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [cacheConfirmation, cancelCacheClear]);
+
+  useEffect(() => {
+    if (!settingsResetConfirmation) return;
+    settingsResetCancelButtonRef.current?.focus();
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      cancelSettingsReset();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [cancelSettingsReset, settingsResetConfirmation]);
 
   const clearFilters = () => {
     setSearchDraft("");
@@ -2166,6 +2211,22 @@ export function App({
                 </p>
               )}
             </div>
+            <div className="settings-block reset-settings-setting">
+              <span className="settings-label">
+                <RefreshCw size={16} /> SETTINGS
+              </span>
+              <p>
+                Restore playback, layout, appearance, sorting, and visualizer
+                preferences to their original defaults.
+              </p>
+              <button
+                type="button"
+                className="secondary-button settings-reset-button"
+                onClick={requestSettingsReset}
+              >
+                <RefreshCw size={15} /> Reset settings
+              </button>
+            </div>
           </>
         )}
       </dialog>
@@ -2213,6 +2274,55 @@ export function App({
                 onClick={() => void confirmCacheClear()}
               >
                 <Trash2 size={15} /> Delete cache
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+      {settingsResetConfirmation && (
+        <div
+          className="cache-confirmation-layer"
+          onPointerDown={(event) => {
+            if (event.target === event.currentTarget) cancelSettingsReset();
+          }}
+        >
+          <section
+            className="cache-confirmation"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="settings-reset-confirmation-title"
+            aria-describedby="settings-reset-confirmation-description"
+          >
+            <div className="cache-confirmation-heading">
+              <span className="cache-confirmation-icon" aria-hidden="true">
+                <RefreshCw size={19} />
+              </span>
+              <div>
+                <h2 id="settings-reset-confirmation-title">
+                  Reset settings to defaults?
+                </h2>
+                <p id="settings-reset-confirmation-description">
+                  Playback, layout, appearance, sorting, and visualizer
+                  preferences will be restored. Your library folder, favorites,
+                  and cached files will be kept.
+                </p>
+              </div>
+            </div>
+            <div className="cache-confirmation-actions">
+              <button
+                ref={settingsResetCancelButtonRef}
+                type="button"
+                className="secondary-button"
+                onClick={cancelSettingsReset}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="danger-button"
+                onClick={confirmSettingsReset}
+              >
+                <RefreshCw size={15} /> Reset settings
               </button>
             </div>
           </section>
