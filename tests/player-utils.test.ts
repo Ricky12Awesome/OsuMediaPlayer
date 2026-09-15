@@ -74,14 +74,27 @@ test("random forward navigation drops forward history and can reverse", () => {
 test("stored playback settings are clamped and validated", () => {
   assert.deepEqual(
     parsePlaybackSettings(
-      JSON.stringify({ volume: 2, muted: true, shuffle: true, repeat: "one" }),
+      JSON.stringify({
+        volume: 2,
+        muted: true,
+        shuffle: true,
+        repeat: "one",
+        playVideos: false,
+      }),
     ),
-    { volume: 1, muted: true, shuffle: true, repeat: "one" },
+    {
+      volume: 1,
+      muted: true,
+      shuffle: true,
+      repeat: "one",
+      playVideos: false,
+    },
   );
   assert.deepEqual(parsePlaybackSettings("{bad"), {
     volume: 0.75,
     muted: false,
     shuffle: false,
     repeat: "off",
+    playVideos: true,
   });
 });

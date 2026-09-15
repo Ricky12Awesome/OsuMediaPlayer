@@ -51,6 +51,8 @@ export interface PlayerState {
   setShuffle: React.Dispatch<React.SetStateAction<boolean>>;
   repeat: RepeatMode;
   cycleRepeat: () => void;
+  playVideos: boolean;
+  setPlayVideos: React.Dispatch<React.SetStateAction<boolean>>;
   error: string | null;
   clearError: () => void;
   loading: boolean;
@@ -96,6 +98,7 @@ export function usePlayer(api: PlayerAPI): PlayerState {
   const [muted, setMuted] = useState(settings.muted);
   const [shuffle, setShuffle] = useState(settings.shuffle);
   const [repeat, setRepeat] = useState(settings.repeat);
+  const [playVideos, setPlayVideos] = useState(settings.playVideos);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -111,13 +114,19 @@ export function usePlayer(api: PlayerAPI): PlayerState {
   const generation = useRef(0);
   const mounted = useRef(false);
   const latestModes = useRef({ shuffle, repeat });
+  const playVideosRef = useRef(playVideos);
 
   latestModes.current = { shuffle, repeat };
+  playVideosRef.current = playVideos;
 
   const syncVideo = useCallback(
     (autoPlay = !audio.paused) => {
       const video = videoRef.current;
       const current = activeTrack.current;
+      if (!playVideosRef.current) {
+        video?.pause();
+        return;
+      }
       if (!video || !current?.videoUrl) return;
       const time = audio.currentTime - (current.videoOffset ?? 0);
       if (time < 0) {
@@ -237,13 +246,13 @@ export function usePlayer(api: PlayerAPI): PlayerState {
       setPlaying(false);
       setError(null);
       setVideoUrl(null);
-      setVideoLoading(Boolean(nextTrack.videoUrl));
+      setVideoLoading(playVideos && Boolean(nextTrack.videoUrl));
       setVideoError(null);
       audio.src = nextTrack.audioUrl;
       audio.load();
       if (autoPlay) void resumeGeneration(id);
     },
-    [audio, resumeGeneration],
+    [audio, playVideos, resumeGeneration],
   );
 
   const playTrack = useCallback(
@@ -501,12 +510,12 @@ export function usePlayer(api: PlayerAPI): PlayerState {
     try {
       localStorage.setItem(
         settingsKey,
-        JSON.stringify({ volume, muted, shuffle, repeat }),
+        JSON.stringify({ volume, muted, shuffle, repeat, playVideos }),
       );
     } catch {
       // Local storage is optional.
     }
-  }, [audio, muted, repeat, shuffle, volume]);
+  }, [audio, muted, playVideos, repeat, shuffle, volume]);
 
   useEffect(() => {
     mounted.current = true;
@@ -650,7 +659,8 @@ export function usePlayer(api: PlayerAPI): PlayerState {
   useEffect(() => {
     let active = true;
     setVideoError(null);
-    if (!track?.videoUrl) {
+    if (!playVideos || !track?.videoUrl) {
+      videoRef.current?.pause();
       setVideoUrl(null);
       setVideoLoading(false);
       return;
@@ -680,7 +690,7 @@ export function usePlayer(api: PlayerAPI): PlayerState {
     return () => {
       active = false;
     };
-  }, [api, track?.id, track?.videoUrl]);
+  }, [api, playVideos, track?.id, track?.videoUrl]);
 
   const handleVideoError = useCallback(() => {
     setVideoUrl(null);
@@ -761,6 +771,8 @@ export function usePlayer(api: PlayerAPI): PlayerState {
     setShuffle,
     repeat,
     cycleRepeat,
+    playVideos,
+    setPlayVideos,
     error,
     clearError: () => setError(null),
     loading,
