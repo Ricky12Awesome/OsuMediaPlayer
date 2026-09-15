@@ -317,81 +317,92 @@ function assetKindForAction(
 }
 
 function setupIPC(): void {
-  ipcMain.handle("library:load", async (event, requestedPath: unknown) => {
-    requireTrusted(event);
-    if (quitting) throw new Error("The player is closing.");
-    if (pendingIndexCacheClear) await pendingIndexCacheClear;
-    if (
-      requestedPath !== undefined &&
-      (typeof requestedPath !== "string" || !isAbsolute(requestedPath))
-    )
-      throw new Error("Choose an absolute osu!lazer directory path.");
-    const installPath = requestedPath as string | undefined;
-    if (pendingLoad) {
-      if (pendingPath === installPath) {
-        try {
-          return (await pendingLoad).summary;
-        } catch (error) {
-          // A duplicate request shares the original import promise. Handle its
-          // expected shutdown cancellation the same way as the original call.
-          if (quitting && isAbortError(error))
-            return library?.summary ?? cancelledLibrarySummary(installPath);
-          throw error;
-        }
-      }
-      throw new Error(
-        "A library import is already running. Wait for it to finish, then choose another folder.",
-      );
-    }
-    importController = new AbortController();
-    pendingPath = installPath;
-    const previousLibrary = library;
-    pendingLoad = loadLibraryInWorker(
-      installPath,
-      (progress) => {
-        if (window && !window.isDestroyed())
-          window.webContents.send("library:progress", progress);
-      },
-      importController!.signal,
-      (index) => {
-        // Keep the previous library available for rollback if streaming fails.
-        // If loading is cancelled, the callback can then restore it.
-        library = index;
-        if (window && !window.isDestroyed())
-          window.webContents.send("library:progress", {
-            phase: "reading",
-            records: index.summary.beatmapCount,
-            summary: index.summary,
-          });
-      },
-      join(app.getPath("userData"), "library-cache"),
-    );
-    try {
-      const loaded = await pendingLoad;
+  ipcMain.handle(
+    "library:load",
+    async (event, requestedPath: unknown, priorityTrackId: unknown) => {
+      requireTrusted(event);
+      if (quitting) throw new Error("The player is closing.");
+      if (pendingIndexCacheClear) await pendingIndexCacheClear;
       if (
-        previousLibrary &&
-        previousLibrary !== loaded &&
-        !previousLibrary.sharesRealm(loaded)
+        requestedPath !== undefined &&
+        (typeof requestedPath !== "string" || !isAbsolute(requestedPath))
       )
-        previousLibrary.close();
-      replaceLibrary(loaded);
-      return loaded.summary;
-    } catch (error) {
-      // Restore the previous library if the new import fails or is cancelled.
-      if (previousLibrary) library = previousLibrary;
-      else library = null;
-      // Closing the app intentionally aborts the pending IPC request. Returning
-      // a harmless summary prevents Electron from reporting that expected
-      // cancellation as an unhandled handler error.
-      if (quitting && isAbortError(error))
-        return previousLibrary?.summary ?? cancelledLibrarySummary(installPath);
-      throw error;
-    } finally {
-      pendingLoad = null;
-      pendingPath = undefined;
-      importController = null;
-    }
-  });
+        throw new Error("Choose an absolute osu!lazer directory path.");
+      const installPath = requestedPath as string | undefined;
+      if (
+        priorityTrackId !== undefined &&
+        (typeof priorityTrackId !== "string" || priorityTrackId.length > 256)
+      )
+        throw new Error("Invalid saved track ID.");
+      if (pendingLoad) {
+        if (pendingPath === installPath) {
+          try {
+            return (await pendingLoad).summary;
+          } catch (error) {
+            // A duplicate request shares the original import promise. Handle its
+            // expected shutdown cancellation the same way as the original call.
+            if (quitting && isAbortError(error))
+              return library?.summary ?? cancelledLibrarySummary(installPath);
+            throw error;
+          }
+        }
+        throw new Error(
+          "A library import is already running. Wait for it to finish, then choose another folder.",
+        );
+      }
+      importController = new AbortController();
+      pendingPath = installPath;
+      const previousLibrary = library;
+      pendingLoad = loadLibraryInWorker(
+        installPath,
+        (progress) => {
+          if (window && !window.isDestroyed())
+            window.webContents.send("library:progress", progress);
+        },
+        importController!.signal,
+        (index) => {
+          // Keep the previous library available for rollback if streaming fails.
+          // If loading is cancelled, the callback can then restore it.
+          library = index;
+          if (window && !window.isDestroyed())
+            window.webContents.send("library:progress", {
+              phase: "reading",
+              records: index.summary.beatmapCount,
+              summary: index.summary,
+            });
+        },
+        join(app.getPath("userData"), "library-cache"),
+        priorityTrackId as string | undefined,
+      );
+      try {
+        const loaded = await pendingLoad;
+        if (
+          previousLibrary &&
+          previousLibrary !== loaded &&
+          !previousLibrary.sharesRealm(loaded)
+        )
+          previousLibrary.close();
+        replaceLibrary(loaded);
+        return loaded.summary;
+      } catch (error) {
+        // Restore the previous library if the new import fails or is cancelled.
+        if (previousLibrary) library = previousLibrary;
+        else library = null;
+        // Closing the app intentionally aborts the pending IPC request. Returning
+        // a harmless summary prevents Electron from reporting that expected
+        // cancellation as an unhandled handler error.
+        if (quitting && isAbortError(error))
+          return (
+            previousLibrary?.summary ?? cancelledLibrarySummary(installPath)
+          );
+        throw error;
+      } finally {
+        pendingLoad = null;
+        pendingPath = undefined;
+        importController = null;
+      }
+    },
+  );
   ipcMain.handle("cache:usage", async (event) => {
     requireTrusted(event);
     const [index, video] = await Promise.all([

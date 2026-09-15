@@ -144,6 +144,68 @@ export interface BeatmapVideoEvent {
   offset: number;
 }
 
+interface PriorityTrackId {
+  onlineId: number;
+  audioHash: string;
+}
+
+function parsePriorityTrackId(
+  value: string | undefined,
+): PriorityTrackId | null {
+  const match = /^(\d+)-([a-f\d]{64})$/i.exec(value ?? "");
+  if (!match) return null;
+  const onlineId = Number(match[1]);
+  return Number.isSafeInteger(onlineId) && onlineId > 0
+    ? { onlineId, audioHash: match[2].toLowerCase() }
+    : null;
+}
+
+/** Find the saved song without materializing the rest of the library first. */
+function priorityBeatmap(
+  realm: Realm,
+  priorityTrackId: string | undefined,
+  signal?: LibraryCancellation,
+): Beatmap | undefined {
+  const priority = parsePriorityTrackId(priorityTrackId);
+  if (!priority) return undefined;
+  const candidates = realm
+    .objects<Beatmap>("Beatmap")
+    .filtered(
+      "BeatmapSet != nil AND BeatmapSet.DeletePending == false AND BeatmapSet.OnlineID == $0",
+      priority.onlineId,
+    );
+  for (const map of candidates) {
+    signal?.throwIfAborted();
+    const source = map.BeatmapSet;
+    const audioFilename = map.Metadata?.AudioFile;
+    if (!source || !audioFilename) continue;
+    const beatmapHash = string(map.Hash).toLowerCase();
+    let directory = ".";
+    for (const usage of source.Files) {
+      const filename = usage.Filename;
+      const hash = usage.File?.Hash?.toLowerCase();
+      if (filename?.toLowerCase().endsWith(".osu") && hash === beatmapHash) {
+        directory = posix.dirname(filenameKey(filename));
+        break;
+      }
+    }
+    const expectedPaths = new Set([
+      filenameKey(posix.join(directory, audioFilename.replaceAll("\\", "/"))),
+      filenameKey(audioFilename),
+    ]);
+    if (
+      [...source.Files].some(
+        (usage) =>
+          usage.File?.Hash?.toLowerCase() === priority.audioHash &&
+          usage.Filename &&
+          expectedPaths.has(filenameKey(usage.Filename)),
+      )
+    )
+      return map;
+  }
+  return undefined;
+}
+
 /** Reads the first background-video event from an osu! beatmap. */
 export function parseBeatmapVideoEvent(
   contents: string,
@@ -904,6 +966,7 @@ export async function loadLibraryFromRealm(
   onProgress?: (progress: LibraryProgress) => void,
   signal?: LibraryCancellation,
   onBatch?: (index: LibraryIndex) => void,
+  priorityTrackId?: string,
 ): Promise<LibraryIndex> {
   signal?.throwIfAborted();
   const installPath = await resolveLazerInstallPath(requestedPath);
@@ -946,10 +1009,18 @@ export async function loadLibraryFromRealm(
       }
     }
     const sortedMaps = sortedLibraryBeatmaps(realm);
+    const priorityMap = priorityBeatmap(realm, priorityTrackId, signal);
+    const priorityMapId = priorityMap?.ID.toHexString();
     // Filter in Realm and traverse its links directly, without a detached copy of every difficulty.
     function* beatmaps(): Generator<{ map: Beatmap; set: RawSet }> {
       const sets = new Map<string, RawSet>();
-      for (const map of sortedMaps) {
+      function* prioritizedMaps(): Generator<Beatmap> {
+        if (priorityMap) yield priorityMap;
+        for (const map of sortedMaps) {
+          if (map.ID.toHexString() !== priorityMapId) yield map;
+        }
+      }
+      for (const map of prioritizedMaps()) {
         signal?.throwIfAborted();
         const source = map.BeatmapSet!;
         const key = source.ID.toHexString();
@@ -996,6 +1067,7 @@ export async function loadLibraryFromRealm(
       signal,
       onBatch,
       realm,
+      priorityTrackId,
     );
     handedOff = true;
     return index;
@@ -1014,6 +1086,7 @@ async function buildIndex(
   signal?: LibraryCancellation,
   onBatch?: (index: LibraryIndex) => void,
   realm?: Realm,
+  priorityTrackId?: string,
 ): Promise<LibraryIndex> {
   const tracks = new Map<string, Track>();
   const assets = new Map<string, MediaAsset>();
@@ -1190,13 +1263,36 @@ async function buildIndex(
           videos.find(([path]) => posix.dirname(path) === directory)?.[1] ??
           videos.find(([path]) => path.startsWith(localPrefix))?.[1] ??
           videos[0][1];
-        pendingVideos.push({
-          track,
-          set,
-          directory,
-          beatmapHash: string(map.Hash).toLowerCase(),
-          fallback,
-        });
+        const beatmapHash = string(map.Hash).toLowerCase();
+        if (id === priorityTrackId) {
+          // The saved track is streamed before the rest of the library. Read
+          // its event file now so its video is ready with that first batch.
+          const event = await readBeatmapVideoEvent(installPath, beatmapHash);
+          const referenced = event
+            ? (set.files.get(
+                filenameKey(posix.join(directory, event.filename)),
+              ) ?? set.files.get(filenameKey(event.filename)))
+            : undefined;
+          const video =
+            referenced && isVideoFilename(referenced.filename)
+              ? referenced
+              : fallback;
+          track.videoUrl = assetUrl(video.hash);
+          track.videoHash = video.hash;
+          track.videoOffset = referenced && event ? event.offset : 0;
+          assets.set(video.hash, {
+            hash: video.hash,
+            filename: video.filename,
+          });
+        } else {
+          pendingVideos.push({
+            track,
+            set,
+            directory,
+            beatmapHash,
+            fallback,
+          });
+        }
       }
     }
     if (onBatch) changedTracks.set(id, tracks.get(id)!);

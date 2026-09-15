@@ -54,7 +54,11 @@ const send = (message: unknown): Promise<void> => {
 void (async () => {
   try {
     const argument = process.argv[2];
-    let options: { installPath?: string; cacheDirectory?: string };
+    let options: {
+      installPath?: string;
+      cacheDirectory?: string;
+      priorityTrackId?: string;
+    };
     try {
       options = JSON.parse(argument || "{}") as {
         installPath?: string;
@@ -90,7 +94,12 @@ void (async () => {
               manifest,
             )
           : null;
-      if (!cached) {
+      // With no manifest there cannot be a cache hit. Avoid walking the
+      // entire Realm just to calculate a fingerprint before the first import:
+      // on a cold filesystem that duplicates the work of the import and
+      // delays its first streamed songs. We calculate it after the snapshot
+      // has been delivered, before persisting the newly-built cache.
+      if (!cached && manifest) {
         const checked = await readLibraryFingerprints(
           resolvedPath,
           controller.signal,
@@ -103,7 +112,7 @@ void (async () => {
           controller.signal,
           manifest ?? undefined,
         );
-      } else {
+      } else if (cached) {
         fingerprint = cached.fingerprint;
         collectionFingerprint = cached.collectionFingerprint;
       }
@@ -112,7 +121,7 @@ void (async () => {
         if (
           !collectionFingerprintsEqual(
             cached.collectionFingerprint,
-            collectionFingerprint,
+            collectionFingerprint ?? cached.collectionFingerprint,
           )
         ) {
           const trackIdsByMd5 = new Map<string, Set<string>>();
@@ -133,8 +142,8 @@ void (async () => {
           try {
             await writeLibraryCache(
               cacheDirectory,
-              fingerprint,
-              collectionFingerprint,
+              fingerprint ?? cached.fingerprint,
+              collectionFingerprint ?? cached.collectionFingerprint,
               realmMetadata,
               index.snapshot(),
             );
@@ -153,6 +162,7 @@ void (async () => {
       (progress) => void send({ type: "progress", progress }),
       controller.signal,
       (batch) => void send({ type: "batch", snapshot: batch.snapshot() }),
+      options.priorityTrackId,
     );
     try {
       await index.prepareSortOrders(controller.signal);
@@ -161,13 +171,18 @@ void (async () => {
       await send({ type: "complete", snapshot });
       // The snapshot is complete at this point. Finish persisting it even if
       // the parent starts a graceful shutdown immediately afterward.
-      if (
-        cacheDirectory &&
-        fingerprint &&
-        collectionFingerprint &&
-        realmMetadata
-      ) {
+      if (cacheDirectory && realmMetadata) {
         try {
+          // A cache miss without a manifest intentionally defers this scan so
+          // cold startup can begin streaming immediately.
+          if (!fingerprint || !collectionFingerprint) {
+            const checked = await readLibraryFingerprints(
+              resolvedPath,
+              controller.signal,
+            );
+            fingerprint = checked.fingerprint;
+            collectionFingerprint = checked.collectionFingerprint;
+          }
           const currentRealm = await stat(join(resolvedPath!, "client.realm"));
           if (libraryRealmMetadataEqual(currentRealm, realmMetadata))
             await writeLibraryCache(

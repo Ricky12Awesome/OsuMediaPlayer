@@ -8,7 +8,8 @@ import type {
 } from "../shared/types";
 
 const api: PlayerAPI = {
-  loadLibrary: (installPath) => ipcRenderer.invoke("library:load", installPath),
+  loadLibrary: (installPath, priorityTrackId) =>
+    ipcRenderer.invoke("library:load", installPath, priorityTrackId),
   queryLibrary: (query) => ipcRenderer.invoke("library:query", query),
   getTrack: (id) => ipcRenderer.invoke("library:track", id),
   getTrackLocation: (id, query?: LibraryQuery) =>

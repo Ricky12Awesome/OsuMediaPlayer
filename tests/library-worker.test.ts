@@ -54,6 +54,10 @@ test("worker imports Realm and transfers canonical sort orders; errors and cance
           Protected: false,
           Files: [
             { Filename: "song.mp3", File: { Hash: String(i + 1).repeat(64) } },
+            {
+              Filename: "video.mp4",
+              File: { Hash: String(i + 4).repeat(64) },
+            },
           ],
           Beatmaps: [
             {
@@ -146,6 +150,24 @@ test("worker imports Realm and transfers canonical sort orders; errors and cance
       assert.deepEqual(
         loaded.getTrack(loaded.query().items[0].id),
         direct.query().items[0],
+      );
+
+      const priorityBatches: LibraryIndex[] = [];
+      await load(
+        directory,
+        undefined,
+        undefined,
+        (index) =>
+          priorityBatches.push(
+            LibraryIndex.fromSnapshot(structuredClone(index.snapshot())),
+          ),
+        undefined,
+        `3-${"3".repeat(64)}`,
+      );
+      assert.equal(priorityBatches[0].query().items[0]?.title, "Middle");
+      assert.equal(
+        priorityBatches[0].query().items[0]?.videoHash,
+        "6".repeat(64),
       );
     } finally {
       direct.close();
