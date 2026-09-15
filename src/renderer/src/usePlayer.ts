@@ -20,6 +20,11 @@ import {
   parsePlaybackSettings,
   type ShuffleHistory,
 } from "./player-utils";
+import {
+  fallbackMediaArtwork,
+  resolveMediaArtwork,
+  type ResolvedMediaArtwork,
+} from "./media-artwork";
 
 const settingsKey = "osu-music-player:settings";
 
@@ -738,24 +743,65 @@ export function usePlayer(
   }, [syncVideo, track?.videoOffset, videoUrl]);
 
   useEffect(() => {
-    if (!navigator.mediaSession) return;
+    const mediaSession = navigator.mediaSession;
+    if (!mediaSession) return;
     if (!track) {
-      navigator.mediaSession.metadata = null;
-      navigator.mediaSession.playbackState = "none";
+      mediaSession.metadata = null;
+      mediaSession.playbackState = "none";
       try {
-        navigator.mediaSession.setPositionState();
+        mediaSession.setPositionState();
       } catch {
         // Ignore unsupported position state.
       }
       return;
     }
-    if (typeof MediaMetadata !== "undefined")
-      navigator.mediaSession.metadata = new MediaMetadata({
+    if (typeof MediaMetadata === "undefined") return;
+
+    let cancelled = false;
+    let ownedArtworkUrl: string | undefined;
+    const setMetadata = (artwork?: ResolvedMediaArtwork) => {
+      if (cancelled) return;
+      mediaSession.metadata = new MediaMetadata({
         title: track.title,
         artist: track.artist,
         album: track.source || "osu! music",
-        artwork: track.artworkUrl ? [{ src: track.artworkUrl }] : [],
+        artwork: artwork
+          ? [
+              {
+                src: artwork.url,
+                sizes: "512x512",
+                ...(artwork.type ? { type: artwork.type } : {}),
+              },
+            ]
+          : [],
       });
+    };
+    const artworkUrl = track.backgroundHash ? track.artworkUrl : undefined;
+
+    // Keep track metadata even when there is no background, but never provide
+    // an actual background candidate in that case.
+    setMetadata(fallbackMediaArtwork);
+    if (!artworkUrl) return;
+
+    const controller = new AbortController();
+    void resolveMediaArtwork(artworkUrl, controller.signal)
+      .then((artwork) => {
+        if (cancelled) {
+          if (artwork?.owned) URL.revokeObjectURL(artwork.url);
+          return;
+        }
+        if (artwork?.owned) ownedArtworkUrl = artwork.url;
+        setMetadata(artwork);
+      })
+      .catch(() => {
+        if (!cancelled) setMetadata(fallbackMediaArtwork);
+      });
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      if (ownedArtworkUrl) URL.revokeObjectURL(ownedArtworkUrl);
+    };
   }, [track]);
 
   useEffect(() => {
