@@ -115,12 +115,7 @@ export type LibraryProgress =
     };
 
 export type MediaAction =
-  | "stop"
-  | "play"
-  | "pause"
-  | "toggle"
-  | "next"
-  | "previous";
+  "stop" | "play" | "pause" | "toggle" | "next" | "previous";
 
 export type CacheKind = "index" | "video";
 
@@ -130,7 +125,10 @@ export interface CacheUsage {
 }
 
 export interface PlayerAPI {
-  loadLibrary: (installPath?: string) => Promise<LibrarySummary>;
+  loadLibrary: (
+    installPath?: string,
+    priorityTrackId?: string,
+  ) => Promise<LibrarySummary>;
   queryLibrary: (query?: LibraryQuery) => Promise<LibraryPage>;
   getTrack: (id: string) => Promise<Track | null>;
   getTrackLocation?: (
@@ -141,7 +139,9 @@ export interface PlayerAPI {
   getCacheUsage: () => Promise<CacheUsage>;
   clearCache: (kind: CacheKind) => Promise<void>;
   chooseLibrary: () => Promise<string | null>;
-  onLibraryProgress: (listener: (progress: LibraryProgress) => void) => () => void;
+  onLibraryProgress: (
+    listener: (progress: LibraryProgress) => void,
+  ) => () => void;
   onMediaAction: (listener: (action: MediaAction) => void) => () => void;
   onFullscreenChange: (listener: (active: boolean) => void) => () => void;
   onZoomChange: (listener: (percent: number) => void) => () => void;
@@ -152,7 +152,9 @@ export interface PlayerAPI {
     trackId: string,
     action: TrackContextMenuAction,
   ) => Promise<void>;
-  windowControl: (action: "minimize" | "maximize" | "fullscreen" | "close") => void;
+  windowControl: (
+    action: "minimize" | "maximize" | "fullscreen" | "close",
+  ) => void;
   platform: string;
 }
 

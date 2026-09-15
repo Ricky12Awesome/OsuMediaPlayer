@@ -217,8 +217,9 @@ export function App() {
   const [importing, setImporting] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [clearingCache, setClearingCache] = useState<CacheKind | null>(null);
-  const [cacheConfirmation, setCacheConfirmation] =
-    useState<CacheKind | null>(null);
+  const [cacheConfirmation, setCacheConfirmation] = useState<CacheKind | null>(
+    null,
+  );
   const [cacheNotice, setCacheNotice] = useState<{
     kind: "success" | "error";
     message: string;
@@ -339,7 +340,11 @@ export function App() {
       setImporting(true);
       setLoadError("");
       try {
-        const next = await api.loadLibrary(installPath);
+        const savedId = readStorage<unknown>(lastPlayedTrackKey, null);
+        const next = await api.loadLibrary(
+          installPath,
+          typeof savedId === "string" ? savedId : undefined,
+        );
         setSummary(next);
         setRevision((value) => value + 1);
         writeStorage("osu-music-library-path", next.installPath);
@@ -790,22 +795,26 @@ export function App() {
 
   const cueFirstTrack = useCallback(
     (track: Track) => {
-      // Wait for the complete import. A streamed first page may not contain
-      // the saved track yet and would otherwise make it look deleted.
-      if (importing || trackInitialized.current) return;
-      trackInitialized.current = true;
-      const request = ++initialTrackRestore.current;
+      if (trackInitialized.current) return;
       const savedId = readStorage<unknown>(lastPlayedTrackKey, null);
+      // Without a saved song, wait until all sorts are stable before choosing
+      // the first result. A saved song can be restored as soon as its streamed
+      // batch arrives, which makes uncached startup ready much sooner.
       if (typeof savedId !== "string" || !savedId) {
+        if (importing) return;
+        trackInitialized.current = true;
         player.cueTrack(track, query, 0);
         return;
       }
 
+      const request = ++initialTrackRestore.current;
       const restore = api.getTrackLocation
         ? api.getTrackLocation(savedId, query)
-        : api.getTrack(savedId).then((savedTrack) =>
-            savedTrack ? { track: savedTrack, index: 0 } : null,
-          );
+        : api
+            .getTrack(savedId)
+            .then((savedTrack) =>
+              savedTrack ? { track: savedTrack, index: 0 } : null,
+            );
       void restore
         .then((location) => {
           if (
@@ -814,18 +823,26 @@ export function App() {
           )
             return;
           if (!location) {
+            // The saved song may be in a later streamed batch. Keep trying
+            // until import completes before treating the saved ID as stale.
+            if (importing) return;
             removeStorage(lastPlayedTrackKey);
+            trackInitialized.current = true;
             player.cueTrack(track, query, 0);
             return;
           }
+          trackInitialized.current = true;
           player.cueTrack(location.track, query, location.index);
         })
         .catch(() => {
           if (
             request === initialTrackRestore.current &&
-            queryKey === queryKeyRef.current
-          )
+            queryKey === queryKeyRef.current &&
+            !importing
+          ) {
+            trackInitialized.current = true;
             player.cueTrack(track, query, 0);
+          }
         });
     },
     [api, importing, player.cueTrack, query],
@@ -1521,7 +1538,8 @@ export function App() {
               <span>
                 <i />
                 {importing
-                  ? (summary?.trackCount ?? 0).toLocaleString() + " songs loaded"
+                  ? (summary?.trackCount ?? 0).toLocaleString() +
+                    " songs loaded"
                   : resultTotal.toLocaleString() +
                     (hasFilters ? " songs found" : " songs in your library")}
               </span>

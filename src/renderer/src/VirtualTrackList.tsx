@@ -343,6 +343,25 @@ export function VirtualTrackList({
       select(followCurrentTrackIndex, true);
   }, [followCurrentTrackIndex, select]);
 
+  // Streamed batches can insert songs ahead of the current one. Resolve its
+  // location from the latest index so selection stays on the playing/saved
+  // song while the rest of the library continues loading.
+  useEffect(() => {
+    if (!currentTrackId || !api.getTrackLocation) return;
+    let cancelled = false;
+    void api
+      .getTrackLocation(currentTrackId, query)
+      .then((location) => {
+        if (!cancelled && location) select(location.index, true);
+      })
+      .catch(() => {
+        // The song may not have reached this streamed snapshot yet.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [api, cache, currentTrackId, query, select]);
+
   const getTrack = (index: number) => {
     const page = Math.floor(index / pageSize);
     return (cache.pages.get(page) ?? cache.stalePages.get(page))?.[
