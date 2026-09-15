@@ -122,6 +122,10 @@ export function libraryCachePaths(directory: string): LibraryCachePaths {
   };
 }
 
+export async function clearLibraryCache(cacheDirectory: string): Promise<void> {
+  await rm(cacheDirectory, { recursive: true, force: true });
+}
+
 export function libraryFingerprintsEqual(
   left: LibraryFingerprint,
   right: LibraryFingerprint,

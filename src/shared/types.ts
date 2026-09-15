@@ -114,6 +114,13 @@ export type MediaAction =
   | "next"
   | "previous";
 
+export type CacheKind = "index" | "video";
+
+export interface CacheUsage {
+  index: number;
+  video: number;
+}
+
 export interface PlayerAPI {
   loadLibrary: (installPath?: string) => Promise<LibrarySummary>;
   queryLibrary: (query?: LibraryQuery) => Promise<LibraryPage>;
@@ -123,6 +130,8 @@ export interface PlayerAPI {
     query?: LibraryQuery,
   ) => Promise<TrackLocation | null>;
   prepareVideo: (trackId: string) => Promise<string | null>;
+  getCacheUsage: () => Promise<CacheUsage>;
+  clearCache: (kind: CacheKind) => Promise<void>;
   chooseLibrary: () => Promise<string | null>;
   onLibraryProgress: (listener: (progress: LibraryProgress) => void) => () => void;
   onMediaAction: (listener: (action: MediaAction) => void) => () => void;

@@ -265,7 +265,8 @@
   display: none;
 }
 .primary-button,
-.secondary-button {
+.secondary-button,
+.danger-button {
   background: var(--pink);
   color: var(--button-foreground);
   border-radius: 7px;
@@ -287,6 +288,13 @@
 }
 .secondary-button:hover {
   background: #ffffff0d;
+}
+.danger-button {
+  color: #fff4f7;
+  background: #bd3f60;
+}
+.danger-button:hover:not(:disabled) {
+  background: #d45172;
 }
 .error-state > .primary-button {
   margin-top: 10px;
