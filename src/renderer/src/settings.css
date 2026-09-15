@@ -60,6 +60,12 @@
 .cache-setting {
   margin-top: 24px;
 }
+.reset-settings-setting {
+  margin-top: 24px;
+}
+.settings-reset-button {
+  margin-top: 14px;
+}
 .cache-setting > p:not(.cache-notice) {
   margin-bottom: 0;
 }

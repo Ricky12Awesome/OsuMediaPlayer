@@ -2,10 +2,12 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   type VisualizerLayoutSettings,
   type VisualizerSettings,
+  getVisualizerLayoutSettings,
   parseVisualizer,
   fftLeadingOffset,
   retainWaveform,
   visualizerBarIndex,
+  visualizerProfileKey,
 } from "./visualizer-settings";
 
 const key = "osu-music-visualizer";
@@ -43,12 +45,19 @@ export function VisualizerControls({
   settings: VisualizerSettings;
   onChange: (settings: VisualizerSettings) => void;
 }) {
-  const layoutSettings = settings[settings.layout];
+  const layoutSettings = getVisualizerLayoutSettings(settings);
   const updateLayout = (patch: Partial<VisualizerLayoutSettings>) =>
-    onChange({
-      ...settings,
-      [settings.layout]: { ...layoutSettings, ...patch },
-    });
+    (() => {
+      const next = { ...layoutSettings, ...patch };
+      onChange({
+        ...settings,
+        [settings.layout]: next,
+        profiles: {
+          ...settings.profiles,
+          [visualizerProfileKey(settings.layout, next.mode)]: next,
+        },
+      });
+    })();
   const toggleGlobal = (title: string, description: string) => (
     <button
       type="button"
@@ -120,7 +129,8 @@ export function VisualizerControls({
                 onChange({
                   ...settings,
                   layout,
-                  [layout]: { ...settings[layout], mode },
+                  [layout]:
+                    settings.profiles[visualizerProfileKey(layout, mode)],
                 })
               }
             >
@@ -371,7 +381,7 @@ export function AudioVisualizer({
     const samples = new Uint8Array(sampleSize);
     const waveform = new Float32Array(sampleSize);
     const retained = new Float32Array(256);
-    const initialLayoutSettings = settings[settings.layout];
+    const initialLayoutSettings = getVisualizerLayoutSettings(settings);
     let previousMode = initialLayoutSettings.mode;
     let previousBars = initialLayoutSettings.bars;
     let previousLayout = settings.layout;

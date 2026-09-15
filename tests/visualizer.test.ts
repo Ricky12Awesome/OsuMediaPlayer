@@ -12,6 +12,46 @@ test("visualizer settings recover from invalid storage", () => {
   for (const value of [null, "{", "null", "42"])
     assert.deepEqual(parseVisualizer(value), defaultVisualizer);
 });
+
+test("visualizer defaults use the circle waveform profile", () => {
+  assert.equal(defaultVisualizer.layout, "circle");
+  assert.equal(defaultVisualizer.circle.mode, "waveform");
+  for (const layout of [defaultVisualizer.line, defaultVisualizer.circle]) {
+    assert.equal(layout.width, 50);
+    assert.equal(layout.radius, 40);
+    assert.equal(layout.rotation, 0.5);
+    assert.equal(layout.waveformRetention, 50);
+    assert.equal(layout.fftRetention, 15);
+  }
+  assert.equal(defaultVisualizer.profiles["circle-fft"].bars, 64);
+  assert.equal(defaultVisualizer.profiles["circle-fft"].length, 33);
+  assert.equal(defaultVisualizer.profiles["circle-fft"].fftRetention, 15);
+  assert.equal(defaultVisualizer.profiles["circle-fft"].inwardLength, 100);
+  assert.equal(defaultVisualizer.profiles["circle-fft"].mirrored, true);
+  assert.equal(defaultVisualizer.profiles["circle-fft"].flipped, false);
+  assert.equal(defaultVisualizer.profiles["circle-fft"].mirrorVertically, true);
+  assert.equal(defaultVisualizer.profiles["circle-waveform"].bars, 138);
+  assert.equal(defaultVisualizer.profiles["circle-waveform"].length, 50);
+  assert.equal(
+    defaultVisualizer.profiles["circle-waveform"].waveformMultiplier,
+    2,
+  );
+  assert.equal(
+    defaultVisualizer.profiles["circle-waveform"].waveformRetention,
+    50,
+  );
+  assert.equal(defaultVisualizer.profiles["circle-waveform"].mirrored, false);
+  assert.equal(defaultVisualizer.profiles["line-fft"].bars, 48);
+  assert.equal(defaultVisualizer.profiles["line-fft"].length, 33);
+  assert.equal(defaultVisualizer.profiles["line-fft"].flipped, true);
+  assert.equal(defaultVisualizer.profiles["line-waveform"].bars, 48);
+  assert.equal(defaultVisualizer.profiles["line-waveform"].length, 50);
+  assert.equal(
+    defaultVisualizer.profiles["line-waveform"].waveformMultiplier,
+    2,
+  );
+});
+
 test("visualizer settings bound rendering work and preserve supported options", () => {
   const settings = parseVisualizer(
     JSON.stringify({
@@ -30,12 +70,12 @@ test("visualizer settings bound rendering work and preserve supported options", 
     mode: "waveform",
     bars: 256,
     width: 10,
-    length: 70,
-    radius: 23,
-    rotation: 0,
-    waveformMultiplier: 10,
-    waveformRetention: 200,
-    fftRetention: 200,
+    length: 33,
+    radius: 40,
+    rotation: 0.5,
+    waveformMultiplier: 2,
+    waveformRetention: 50,
+    fftRetention: 15,
     mirrored: false,
     flipped: false,
     mirrorVertically: false,
@@ -122,7 +162,7 @@ test("circle rotation is an independent bounded quarter-step setting", () => {
     }),
   );
   assert.equal(settings.circle.rotation, -3.5);
-  assert.equal(settings.line.rotation, 0);
+  assert.equal(settings.line.rotation, 0.5);
   assert.equal(
     parseVisualizer('{"circle":{"rotation":100}}').circle.rotation,
     6,
@@ -142,7 +182,7 @@ test("circle rotation is an independent bounded quarter-step setting", () => {
   assert.equal(parseVisualizer('{"circleRotation":45}').circle.rotation, 6);
   assert.equal(
     parseVisualizer('{"circle":{"rotation":"30"}}').circle.rotation,
-    0,
+    0.5,
   );
 });
 
