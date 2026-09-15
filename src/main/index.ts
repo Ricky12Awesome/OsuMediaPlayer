@@ -399,6 +399,19 @@ function setupIPC(): void {
     requireTrusted(event);
     return typeof id === "string" ? (library?.getTrack(id) ?? null) : null;
   });
+  ipcMain.handle(
+    "library:track-location",
+    (event, id: unknown, input: unknown) => {
+      requireTrusted(event);
+      if (typeof id !== "string" || !library) return null;
+      if (
+        input !== undefined &&
+        (!input || typeof input !== "object" || Array.isArray(input))
+      )
+        throw new Error("Invalid library query.");
+      return library.getTrackLocation(id, input as LibraryQuery | undefined);
+    },
+  );
   ipcMain.handle("video:prepare", async (event, trackId: unknown) => {
     requireTrusted(event);
     if (typeof trackId !== "string") throw new Error("Invalid track ID.");
