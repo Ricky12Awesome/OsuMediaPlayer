@@ -46,7 +46,9 @@ test("worker imports Realm and transfers canonical sort orders; errors and cance
         const set = fixture.create("BeatmapSet", {
           ID: new Realm.BSON.UUID(),
           OnlineID: i + 1,
-          DateAdded: new Date(),
+          DateAdded: new Date(2025, 2, i + 1),
+          DateSubmitted: new Date(2025, 3, i + 1),
+          DateRanked: new Date(2025, 4, i + 1),
           Status: 0,
           DeletePending: false,
           Protected: false,
@@ -67,6 +69,7 @@ test("worker imports Realm and transfers canonical sort orders; errors and cance
               BPM: 100 + i,
               StarRating: 5 - i,
               LastLocalUpdate: new Date(2025, 0, i + 1),
+              LastPlayed: new Date(2025, 1, i + 1),
               Metadata: {
                 PreviewTime: 0,
                 Title: ["Zulu", "Alpha", "Middle"][i],
@@ -113,13 +116,17 @@ test("worker imports Realm and transfers canonical sort orders; errors and cance
       assert.deepEqual(batches.at(-1)!.index.query(), loaded.query());
       assert.equal(loaded.summary.trackCount, 3);
       assert.ok(progress.length);
-      assert.equal(loaded.snapshot().orders.size, 8);
+      assert.equal(loaded.snapshot().orders.size, 12);
       for (const sort of [
         "title",
         "artist",
         "duration",
         "bpm",
         "added",
+        "dateAdded",
+        "dateSubmitted",
+        "dateRanked",
+        "lastPlayed",
         "stars",
         "collection",
         "tags",
@@ -199,7 +206,7 @@ test("worker imports Realm and transfers canonical sort orders; errors and cance
     assert.equal(cachedData.snapshot.collections[0].name, "Favorites");
     assert.equal(collections[cachedData.snapshot.collections[0].id], 1);
     assert.deepEqual(tags, { pop: 1, jazz: 1, rock: 1 });
-    assert.equal(cachedData.snapshot.orders.size, 8);
+    assert.equal(cachedData.snapshot.orders.size, 12);
     const firstTrack = cachedData.snapshot.indexed[0].track;
     const firstTrackId = firstTrack.id;
     firstTrack.title = "From disk cache";
@@ -248,7 +255,7 @@ test("worker imports Realm and transfers canonical sort orders; errors and cance
     assert.equal(cached.getTrack(firstTrackId)?.videoOffset, 1.25);
     assert.equal(cached.assets.get("b".repeat(64))?.filename, "background.jpg");
     assert.equal(cached.assets.get("c".repeat(64))?.filename, "video.mp4");
-    assert.equal(cached.snapshot().orders.size, 8);
+    assert.equal(cached.snapshot().orders.size, 12);
     assert.equal(
       libraryFingerprintsEqual(fingerprint.fingerprint, {
         ...fingerprint.fingerprint,

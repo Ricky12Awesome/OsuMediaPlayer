@@ -107,6 +107,10 @@ const sortOptions: Array<{ value: SortKey; label: string }> = [
   { value: "title", label: "Title" },
   { value: "artist", label: "Artist" },
   { value: "added", label: "Last updated" },
+  { value: "dateAdded", label: "Date added" },
+  { value: "dateSubmitted", label: "Date submitted" },
+  { value: "dateRanked", label: "Date ranked" },
+  { value: "lastPlayed", label: "Last played" },
   { value: "duration", label: "Length" },
   { value: "bpm", label: "BPM" },
   { value: "stars", label: "Difficulty" },
@@ -1129,7 +1133,13 @@ export function App() {
 
   const changeSort = (next: SortKey) => {
     setSort(next);
-    setDescending(next === "added");
+    setDescending(
+      next === "added" ||
+        next === "dateAdded" ||
+        next === "dateSubmitted" ||
+        next === "dateRanked" ||
+        next === "lastPlayed",
+    );
   };
 
   const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {

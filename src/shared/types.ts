@@ -6,6 +6,10 @@ export type SortKey =
   | "duration"
   | "bpm"
   | "added"
+  | "dateAdded"
+  | "dateSubmitted"
+  | "dateRanked"
+  | "lastPlayed"
   | "stars"
   | "collection"
   | "tags";
@@ -33,6 +37,10 @@ export interface Track {
   onlineId?: number;
   md5Hash?: string;
   addedAt: number;
+  dateAddedAt?: number;
+  dateSubmittedAt?: number;
+  dateRankedAt?: number;
+  lastPlayedAt?: number;
 }
 
 export interface LibraryFacet {
