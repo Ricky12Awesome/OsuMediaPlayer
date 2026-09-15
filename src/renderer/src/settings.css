@@ -223,8 +223,24 @@
   color: var(--pink-text);
 }
 .artwork-theme-setting,
-.now-playing-display-setting {
+.now-playing-display-setting,
+.video-encoding-setting {
   margin-top: 24px;
+}
+.video-encoding-fields {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+  display: grid;
+}
+.video-encoding-fields label {
+  color: #927e9e;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  font-size: 9px;
+  font-weight: 800;
+  display: flex;
 }
 .settings-toggle {
   color: #927e9e;

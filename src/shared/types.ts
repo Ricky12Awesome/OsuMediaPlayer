@@ -124,6 +124,33 @@ export interface CacheUsage {
   video: number;
 }
 
+export type VideoEncodingQuality =
+  "very-low" | "low" | "medium" | "high" | "very-high";
+export type VideoEncodingCodec =
+  "auto" | "av1" | "hevc" | "h264-hardware" | "h264-software";
+
+export type VideoMaxFps = 0 | 24 | 30 | 60;
+
+export interface VideoEncodingSettings {
+  codec: VideoEncodingCodec;
+  quality: VideoEncodingQuality;
+  maxFps: VideoMaxFps;
+  forceRemux: boolean;
+}
+
+export interface VideoEncodingStatus {
+  hash: string;
+  encoding: boolean;
+  /** The HLS stream has been finalized into its cached MP4. */
+  finalized?: boolean;
+}
+
+export interface PreparedVideo {
+  url: string;
+  /** True only while the URL is serving the shared HLS playlist. */
+  streaming: boolean;
+}
+
 export interface PlayerAPI {
   loadLibrary: (
     installPath?: string,
@@ -137,7 +164,11 @@ export interface PlayerAPI {
     id: string,
     query?: LibraryQuery,
   ) => Promise<TrackLocation | null>;
-  prepareVideo: (trackId: string) => Promise<string | null>;
+  prepareVideo: (
+    trackId: string,
+    settings?: VideoEncodingSettings,
+  ) => Promise<PreparedVideo | null>;
+  completeVideoStream: (hash: string) => Promise<void>;
   getCacheUsage: () => Promise<CacheUsage>;
   clearCache: (kind: CacheKind) => Promise<void>;
   chooseLibrary: () => Promise<string | null>;
@@ -145,6 +176,9 @@ export interface PlayerAPI {
     listener: (progress: LibraryProgress) => void,
   ) => () => void;
   onMediaAction: (listener: (action: MediaAction) => void) => () => void;
+  onVideoEncodingChange: (
+    listener: (status: VideoEncodingStatus) => void,
+  ) => () => void;
   onFullscreenChange: (listener: (active: boolean) => void) => () => void;
   onZoomChange: (listener: (percent: number) => void) => () => void;
   getTrackContextMenuInfo: (
