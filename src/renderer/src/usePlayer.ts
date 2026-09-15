@@ -132,6 +132,8 @@ export function usePlayer(
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [videoStreaming, setVideoStreaming] = useState(false);
+  const [videoSourceRevision, setVideoSourceRevision] = useState(0);
   const [videoLoading, setVideoLoading] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [encodingHash, setEncodingHash] = useState<string | null>(null);
@@ -172,7 +174,7 @@ export function usePlayer(
       const target = Number.isFinite(videoDuration)
         ? Math.min(time, Math.max(0, videoDuration - 0.01))
         : time;
-      if (Math.abs(video.currentTime - target) > 0.3) {
+      if (!video.seeking && Math.abs(video.currentTime - target) > 0.3) {
         try {
           video.currentTime = target;
         } catch {
@@ -205,6 +207,7 @@ export function usePlayer(
     setLoading(false);
     setError(null);
     setVideoUrl(null);
+    setVideoStreaming(false);
     setVideoLoading(false);
     setVideoError(null);
   }, [audio]);
@@ -277,6 +280,7 @@ export function usePlayer(
       setPlaying(false);
       setError(null);
       setVideoUrl(null);
+      setVideoStreaming(false);
       setVideoLoading(playVideos && Boolean(nextTrack.videoUrl));
       setVideoError(null);
       audio.src = nextTrack.audioUrl;
@@ -733,6 +737,13 @@ export function usePlayer(
             ? null
             : current,
       );
+      if (
+        status.finalized &&
+        activeTrack.current?.videoHash?.toLowerCase() === status.hash
+      ) {
+        setVideoStreaming(false);
+        setVideoSourceRevision((revision) => revision + 1);
+      }
     });
   }, [api]);
 
@@ -742,6 +753,7 @@ export function usePlayer(
     if (!playVideos || !track?.videoUrl) {
       videoRef.current?.pause();
       setVideoUrl(null);
+      setVideoStreaming(false);
       setVideoLoading(false);
       return;
     }
@@ -755,7 +767,8 @@ export function usePlayer(
       })
       .then((prepared) => {
         if (active && activeTrack.current?.id === track.id) {
-          setVideoUrl(prepared);
+          setVideoUrl(prepared?.url ?? null);
+          setVideoStreaming(prepared?.streaming ?? false);
           setVideoLoading(false);
           if (!prepared)
             setVideoError("The beatmap video could not be prepared.");
@@ -797,25 +810,30 @@ export function usePlayer(
     video.muted = true;
     video.preload = "metadata";
     const sync = () => syncVideo();
-    video.addEventListener("loadedmetadata", sync);
-    video.addEventListener("canplay", sync);
     let hls: import("hls.js").default | null = null;
     let disposed = false;
-    let isHlsStream = false;
+    let isManagedVideo = false;
     try {
       const source = new URL(videoUrl);
-      isHlsStream =
+      isManagedVideo =
         source.protocol === "osu-media:" && source.host === "video-cache";
     } catch {
       // Let the media element report a malformed direct URL normally.
     }
+    const loadedMetadata = () => {
+      sync();
+      if (!videoStreaming && isManagedVideo && track?.videoHash)
+        void api.completeVideoStream(track.videoHash);
+    };
+    video.removeEventListener("loadedmetadata", sync);
+    video.addEventListener("loadedmetadata", loadedMetadata);
     const loadNative = () => {
       if (disposed) return;
       video.src = videoUrl;
       video.load();
       sync();
     };
-    if (isHlsStream) {
+    if (videoStreaming) {
       void import("hls.js/light")
         .then(({ default: Hls }) => {
           if (disposed) return;
@@ -824,12 +842,16 @@ export function usePlayer(
             return;
           }
           const instance = new Hls({
+            backBufferLength: 20,
             enableWorker: false,
+            maxBufferLength: 20,
+            maxMaxBufferLength: 60,
+            startFragPrefetch: true,
             startPosition: 0,
           });
           hls = instance;
           instance.on(Hls.Events.ERROR, (_event, data) => {
-            if (data.fatal) handleVideoError();
+            if (!disposed && data.fatal) handleVideoError();
           });
           instance.loadSource(videoUrl);
           instance.attachMedia(video);
@@ -840,14 +862,23 @@ export function usePlayer(
     }
     return () => {
       disposed = true;
-      video.removeEventListener("loadedmetadata", sync);
+      video.removeEventListener("loadedmetadata", loadedMetadata);
       video.removeEventListener("canplay", sync);
       video.pause();
       hls?.destroy();
       video.removeAttribute("src");
       video.load();
     };
-  }, [handleVideoError, syncVideo, track?.videoOffset, videoUrl]);
+  }, [
+    api,
+    handleVideoError,
+    syncVideo,
+    track?.videoHash,
+    track?.videoOffset,
+    videoSourceRevision,
+    videoStreaming,
+    videoUrl,
+  ]);
 
   useEffect(() => {
     const mediaSession = navigator.mediaSession;

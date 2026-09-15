@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ChangeEvent,
   type CSSProperties,
   type KeyboardEvent,
   type PointerEvent,
@@ -138,6 +139,7 @@ const defaultApi: PlayerAPI = {
   queryLibrary: async () => ({ items: [], total: 0, offset: 0 }),
   getTrack: async () => null,
   prepareVideo: async () => null,
+  completeVideoStream: async () => {},
   getCacheUsage: async () => {
     throw new Error("Cache management is only available in the desktop app.");
   },
@@ -319,6 +321,7 @@ export function App({
   const [seekPreview, setSeekPreview] = useState<SeekPreview | null>(null);
   const [seekTooltipPreview, setSeekTooltipPreview] =
     useState<SeekPreview | null>(null);
+  const [scrubTime, setScrubTime] = useState<number | null>(null);
   const [resizing, setResizing] = useState(false);
   const [trackContextMenu, setTrackContextMenu] =
     useState<TrackContextMenuState | null>(null);
@@ -337,6 +340,8 @@ export function App({
   const zoomInitialized = useRef(false);
   const focusSearchAfterSidebar = useRef(false);
   const seekPreviewClearTimer = useRef<number | null>(null);
+  const scrubPointer = useRef<number | null>(null);
+  const scrubTimeRef = useRef<number | null>(null);
   const resizeStart = useRef<{ x: number; width: number } | null>(null);
   const trackInitialized = useRef(Boolean(initialTrack));
   const initialTrackRestore = useRef(0);
@@ -592,6 +597,12 @@ export function App({
     },
     [],
   );
+
+  useEffect(() => {
+    scrubPointer.current = null;
+    scrubTimeRef.current = null;
+    setScrubTime(null);
+  }, [player.track?.id]);
 
   const focusSearch = useCallback(() => {
     if (isDesktop && sidebarHidden) {
@@ -1161,6 +1172,36 @@ export function App({
     );
   };
   const duration = player.duration || player.track?.duration || 0;
+  const displayedTime = scrubTime ?? player.currentTime;
+  const beginScrubbing = (event: PointerEvent<HTMLInputElement>) => {
+    if (!player.track) return;
+    scrubPointer.current = event.pointerId;
+    const next = Number(event.currentTarget.value);
+    scrubTimeRef.current = next;
+    setScrubTime(next);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+  const updateScrubbing = (event: ChangeEvent<HTMLInputElement>) => {
+    const next = Number(event.currentTarget.value);
+    if (scrubPointer.current === null) {
+      player.seek(next);
+      return;
+    }
+    scrubTimeRef.current = next;
+    setScrubTime(next);
+  };
+  const finishScrubbing = (event: PointerEvent<HTMLInputElement>) => {
+    if (
+      scrubPointer.current === null ||
+      scrubPointer.current !== event.pointerId
+    )
+      return;
+    const next = scrubTimeRef.current ?? Number(event.currentTarget.value);
+    scrubPointer.current = null;
+    scrubTimeRef.current = null;
+    setScrubTime(null);
+    player.seek(next);
+  };
   const cancelSeekPreviewClear = () => {
     if (seekPreviewClearTimer.current !== null) {
       window.clearTimeout(seekPreviewClearTimer.current);
@@ -1197,7 +1238,7 @@ export function App({
     setSeekTooltipPreview(null);
   };
   const currentProgress = duration
-    ? Math.max(0, Math.min(100, (player.currentTime / duration) * 100))
+    ? Math.max(0, Math.min(100, (displayedTime / duration) * 100))
     : 0;
   const previewPosition = seekPreview?.position ?? currentProgress;
   const tooltipPosition =
@@ -1675,7 +1716,7 @@ export function App({
               } as CSSProperties
             }
           >
-            {formatDuration(player.currentTime)} / {formatDuration(duration)}
+            {formatDuration(displayedTime)} / {formatDuration(duration)}
           </span>
           {seekTooltipPreview && (
             <span
@@ -1696,13 +1737,11 @@ export function App({
             min="0"
             max={duration || 1}
             step="0.1"
-            value={Math.min(player.currentTime, duration || 1)}
+            value={Math.min(displayedTime, duration || 1)}
             disabled={!player.track}
             aria-label="Seek"
             aria-valuetext={
-              formatDuration(player.currentTime) +
-              " of " +
-              formatDuration(duration)
+              formatDuration(displayedTime) + " of " + formatDuration(duration)
             }
             style={
               {
@@ -1712,8 +1751,12 @@ export function App({
               } as CSSProperties
             }
             onFocus={resetSeekPreview}
+            onPointerDown={beginScrubbing}
             onPointerMove={updateSeekPreview}
-            onChange={(event) => player.seek(Number(event.target.value))}
+            onPointerUp={finishScrubbing}
+            onPointerCancel={finishScrubbing}
+            onLostPointerCapture={finishScrubbing}
+            onChange={updateScrubbing}
           />
         </div>
 

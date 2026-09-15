@@ -56,10 +56,10 @@ test("an existing shared HLS stream is reused and served through the hash URL", 
     } as unknown as LibraryIndex;
     const transcoder = new VideoTranscoder(cache, "missing-ffmpeg");
 
-    assert.equal(
-      await transcoder.prepare(library, "track"),
-      convertedVideoUrl(hash),
-    );
+    assert.deepEqual(await transcoder.prepare(library, "track"), {
+      url: convertedVideoUrl(hash),
+      streaming: true,
+    });
     const playlist = await transcoder.serve(
       new Request(convertedVideoUrl(hash)),
     );

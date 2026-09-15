@@ -6,6 +6,7 @@ import type {
   VideoEncodingQuality,
   VideoEncodingSettings,
   VideoEncodingStatus,
+  PreparedVideo,
 } from "../shared/types";
 import type { LibraryIndex } from "./library";
 import { isAssetHash, resolveMediaFile, streamMediaFile } from "./media";
@@ -211,6 +212,8 @@ export class VideoTranscoder {
   private active: EncodingSession | null = null;
   private encoderNames: Promise<Set<string>> | null = null;
   private transition: Promise<void> = Promise.resolve();
+  private pendingCleanupHash: string | null = null;
+  private cleanupTimer: NodeJS.Timeout | null = null;
   private cacheGeneration = 0;
   private clearPromise: Promise<void> | null = null;
 
@@ -256,7 +259,7 @@ export class VideoTranscoder {
     library: LibraryIndex | null,
     trackId: string,
     inputSettings?: VideoEncodingSettings,
-  ): Promise<string | null> {
+  ): Promise<PreparedVideo | null> {
     if (this.clearPromise) await this.clearPromise;
     const track = library?.getTrack(trackId);
     if (!library || !track?.videoUrl) return null;
@@ -264,7 +267,8 @@ export class VideoTranscoder {
     if (!hash) return null;
     const asset = library.assets.get(hash);
     if (!asset) return null;
-    if (!videoNeedsConversion(asset.filename)) return track.videoUrl;
+    if (!videoNeedsConversion(asset.filename))
+      return { url: track.videoUrl, streaming: false };
 
     const generation = this.cacheGeneration;
     const preparation = await this.locked(async () => {
@@ -272,10 +276,16 @@ export class VideoTranscoder {
         throw new Error("The video cache was cleared.");
       await mkdir(this.cacheDirectory, { recursive: true });
       const destination = join(this.cacheDirectory, `${hash}.mp4`);
-      if (await this.rememberCached(hash, destination))
-        return { ready: null as Promise<void> | null };
-
       const streamHash = await this.readStreamHash();
+      if (await this.rememberCached(hash, destination)) {
+        if (
+          streamHash === hash &&
+          !(this.active?.hash === hash && this.active.encoding)
+        )
+          await this.removeStreamFiles(hash);
+        return { ready: null as Promise<void> | null };
+      }
+
       if (streamHash === hash) {
         if (this.active?.hash === hash) return { ready: this.active.ready };
         if (await fileHasContents(this.playlist))
@@ -299,7 +309,11 @@ export class VideoTranscoder {
     if (preparation.ready) await preparation.ready;
     if (generation !== this.cacheGeneration)
       throw new Error("The video cache was cleared.");
-    return convertedVideoUrl(hash);
+    return {
+      url: convertedVideoUrl(hash),
+      streaming:
+        !this.ready.has(hash) && (await this.readStreamHash()) === hash,
+    };
   }
 
   private async rememberCached(
@@ -417,6 +431,7 @@ export class VideoTranscoder {
     };
     this.active = session;
     this.onStatus?.({ hash, encoding: true });
+    let finalized = false;
     session.done = this.encodeToHls(
       session,
       source,
@@ -425,6 +440,10 @@ export class VideoTranscoder {
       resolveReady,
       rejectReady,
     )
+      .then(async () => {
+        if (session.cancelled || generation !== this.cacheGeneration) return;
+        finalized = await this.finalizeStream(hash, generation, true);
+      })
       .catch((error: unknown) => {
         rejectReady(
           error instanceof Error ? error : new Error("Video encoding failed."),
@@ -444,7 +463,7 @@ export class VideoTranscoder {
           });
           await rm(this.metadataFile, { force: true });
         }
-        this.onStatus?.({ hash, encoding: false });
+        this.onStatus?.({ hash, encoding: false, finalized });
       });
     return session;
   }
@@ -502,6 +521,14 @@ export class VideoTranscoder {
         "-pix_fmt",
         "yuv420p",
       ];
+    const keyframeInterval = settings.maxFps === 24 ? 24 : 30;
+    output.push(
+      "-g",
+      String(keyframeInterval),
+      "-keyint_min",
+      String(keyframeInterval),
+    );
+    if (encoder.family === "nvenc") output.push("-forced-idr", "1");
     if (encoder.codec === "hevc") output.push("-tag:v", "hvc1");
     return { beforeInput, output, filter: frameFilters.join(",") };
   }
@@ -512,7 +539,7 @@ export class VideoTranscoder {
       "-f",
       "hls",
       "-hls_time",
-      "2",
+      "1",
       "-hls_list_size",
       "0",
       "-hls_playlist_type",
@@ -577,7 +604,7 @@ export class VideoTranscoder {
           encoder.name,
           ...options.output,
           "-force_key_frames",
-          "expr:gte(t,n_forced*2)",
+          "expr:gte(t,n_forced*1)",
           ...this.hlsOutputArguments(),
         ],
       });
@@ -670,65 +697,102 @@ export class VideoTranscoder {
     }
     if (generation !== this.cacheGeneration)
       throw new Error("The video cache was cleared.");
-    if (await fileHasContents(this.playlist)) {
-      const destination = join(this.cacheDirectory, `${hash}.mp4`);
-      if (!(await this.rememberCached(hash, destination))) {
-        const temporary = join(
-          this.cacheDirectory,
-          `${hash}.${process.pid}.${randomUUID()}.partial.mp4`,
+    await this.finalizeStream(hash, generation, false);
+  }
+
+  private async finalizeStream(
+    hash: string,
+    generation: number,
+    waitForRenderer: boolean,
+  ): Promise<boolean> {
+    if (
+      generation !== this.cacheGeneration ||
+      !(await fileHasContents(this.playlist))
+    )
+      return false;
+    const destination = join(this.cacheDirectory, `${hash}.mp4`);
+    if (!(await this.rememberCached(hash, destination))) {
+      const temporary = join(
+        this.cacheDirectory,
+        `${hash}.${process.pid}.${randomUUID()}.partial.mp4`,
+      );
+      try {
+        const { result } = runProcess(
+          this.executable,
+          [
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-nostdin",
+            "-y",
+            "-i",
+            this.playlist,
+            "-map",
+            "0:v:0",
+            "-an",
+            "-c:v",
+            "copy",
+            "-movflags",
+            "+faststart",
+            temporary,
+          ],
+          this.children,
         );
-        try {
-          const { result } = runProcess(
-            this.executable,
-            [
-              "-hide_banner",
-              "-loglevel",
-              "error",
-              "-nostdin",
-              "-y",
-              "-i",
-              this.playlist,
-              "-map",
-              "0:v:0",
-              "-an",
-              "-c:v",
-              "copy",
-              "-movflags",
-              "+faststart",
-              temporary,
-            ],
-            this.children,
+        const completed = await result;
+        if (completed.code !== 0)
+          throw new Error(
+            completed.stderr.trim() ||
+              "Could not finalize the previous video stream.",
           );
-          const completed = await result;
-          if (completed.code !== 0)
-            throw new Error(
-              completed.stderr.trim() ||
-                "Could not finalize the previous video stream.",
-            );
-          const converted = await stat(temporary);
-          if (!converted.isFile() || converted.size === 0)
-            throw new Error(
-              "FFmpeg did not finalize the previous video stream.",
-            );
-          await rename(temporary, destination);
-          this.ready.set(hash, {
-            filename: destination,
-            size: converted.size,
-          });
-        } finally {
-          await rm(temporary, { force: true }).catch(() => {});
-        }
+        const converted = await stat(temporary);
+        if (!converted.isFile() || converted.size === 0)
+          throw new Error("FFmpeg did not finalize the previous video stream.");
+        await rename(temporary, destination);
+        this.ready.set(hash, { filename: destination, size: converted.size });
+      } finally {
+        await rm(temporary, { force: true }).catch(() => {});
       }
     }
+    if (this.active?.hash === hash) this.active = null;
+    if (waitForRenderer) this.deferStreamCleanup(hash);
+    else await this.removeStreamFiles(hash);
+    return true;
+  }
+
+  private deferStreamCleanup(hash: string): void {
+    if (this.cleanupTimer) clearTimeout(this.cleanupTimer);
+    this.pendingCleanupHash = hash;
+    this.cleanupTimer = setTimeout(() => {
+      void this.locked(() => this.removeStreamFiles(hash));
+    }, 15_000);
+    this.cleanupTimer.unref();
+  }
+
+  private async removeStreamFiles(hash: string): Promise<void> {
+    if (this.pendingCleanupHash === hash) {
+      this.pendingCleanupHash = null;
+      if (this.cleanupTimer) {
+        clearTimeout(this.cleanupTimer);
+        this.cleanupTimer = null;
+      }
+    }
+    if ((await this.readStreamHash()) !== hash) return;
     await rm(this.streamDirectory, { recursive: true, force: true });
     await rm(this.metadataFile, { force: true });
-    if (this.active?.hash === hash) this.active = null;
+  }
+
+  async completeStream(hash: string): Promise<void> {
+    if (!isAssetHash(hash)) return;
+    await this.locked(() => this.removeStreamFiles(hash.toLowerCase()));
   }
 
   async clearCache(): Promise<void> {
     if (this.clearPromise) return this.clearPromise;
     this.cacheGeneration += 1;
     this.ready.clear();
+    if (this.cleanupTimer) clearTimeout(this.cleanupTimer);
+    this.cleanupTimer = null;
+    this.pendingCleanupHash = null;
     const clear = this.locked(async () => {
       if (this.active?.encoding) {
         this.active.cancelled = true;
@@ -831,6 +895,8 @@ export class VideoTranscoder {
   }
 
   dispose(): void {
+    if (this.cleanupTimer) clearTimeout(this.cleanupTimer);
+    this.cleanupTimer = null;
     if (this.active) this.active.cancelled = true;
     for (const child of this.children) child.kill();
     this.children.clear();

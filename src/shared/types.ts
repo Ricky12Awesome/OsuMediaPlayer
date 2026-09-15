@@ -138,6 +138,14 @@ export interface VideoEncodingSettings {
 export interface VideoEncodingStatus {
   hash: string;
   encoding: boolean;
+  /** The HLS stream has been finalized into its cached MP4. */
+  finalized?: boolean;
+}
+
+export interface PreparedVideo {
+  url: string;
+  /** True only while the URL is serving the shared HLS playlist. */
+  streaming: boolean;
 }
 
 export interface PlayerAPI {
@@ -156,7 +164,8 @@ export interface PlayerAPI {
   prepareVideo: (
     trackId: string,
     settings?: VideoEncodingSettings,
-  ) => Promise<string | null>;
+  ) => Promise<PreparedVideo | null>;
+  completeVideoStream: (hash: string) => Promise<void>;
   getCacheUsage: () => Promise<CacheUsage>;
   clearCache: (kind: CacheKind) => Promise<void>;
   chooseLibrary: () => Promise<string | null>;
