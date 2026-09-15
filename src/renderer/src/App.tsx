@@ -43,12 +43,15 @@ import {
   SlidersHorizontal,
   Sparkles,
   Tag,
+  Trash2,
   Volume1,
   Volume2,
   VolumeX,
   X,
 } from "lucide-react";
 import type {
+  CacheKind,
+  CacheUsage,
   LibraryQuery,
   LibrarySummary,
   PlayerAPI,
@@ -124,6 +127,12 @@ const defaultApi: PlayerAPI = {
   queryLibrary: async () => ({ items: [], total: 0, offset: 0 }),
   getTrack: async () => null,
   prepareVideo: async () => null,
+  getCacheUsage: async () => {
+    throw new Error("Cache management is only available in the desktop app.");
+  },
+  clearCache: async () => {
+    throw new Error("Cache management is only available in the desktop app.");
+  },
   chooseLibrary: async () => null,
   onLibraryProgress: () => () => {},
   onMediaAction: () => () => {},
@@ -181,12 +190,36 @@ function isLibraryPosition(value: unknown): value is LibraryPosition {
   return value === "left" || value === "right";
 }
 
+function cacheName(kind: CacheKind): string {
+  return kind === "index" ? "Index cache" : "Video cache";
+}
+
+function formatCacheSize(bytes: number | undefined): string {
+  if (bytes === undefined) return "—";
+  if (bytes === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  const unit = Math.min(
+    Math.floor(Math.log(bytes) / Math.log(1024)),
+    units.length - 1,
+  );
+  const value = bytes / 1024 ** unit;
+  return `${value.toFixed(unit === 0 || value >= 10 ? 0 : 1)} ${units[unit]}`;
+}
+
 export function App() {
   const player = usePlayer(api);
   const [visualizer, setVisualizer] = useVisualizerSettings();
   const [summary, setSummary] = useState<LibrarySummary | null>(null);
   const [importing, setImporting] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const [clearingCache, setClearingCache] = useState<CacheKind | null>(null);
+  const [cacheConfirmation, setCacheConfirmation] =
+    useState<CacheKind | null>(null);
+  const [cacheNotice, setCacheNotice] = useState<{
+    kind: "success" | "error";
+    message: string;
+  } | null>(null);
+  const [cacheUsage, setCacheUsage] = useState<CacheUsage | null>(null);
   const [revision, setRevision] = useState(0);
   const [resultTotal, setResultTotal] = useState(0);
   const [isDesktop, setIsDesktop] = useState(() => window.innerWidth > 760);
@@ -268,6 +301,7 @@ export function App() {
     useState<TrackContextMenuState | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const cacheCancelButtonRef = useRef<HTMLButtonElement>(null);
   const captionRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLElement>(null);
   const libraryRef = useRef<HTMLElement>(null);
@@ -578,6 +612,7 @@ export function App() {
         (["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(target.tagName) ||
           target.isContentEditable);
       const inTransport = Boolean(target?.closest(".transport"));
+      if (cacheConfirmation) return;
       if (event.key === "F11") {
         event.preventDefault();
         api.windowControl("fullscreen");
@@ -721,6 +756,7 @@ export function App() {
     visualizerOpen,
     settingsOpen,
     shortcutsOpen,
+    cacheConfirmation,
   ]);
 
   const query = useMemo<LibraryQuery>(
@@ -863,6 +899,79 @@ export function App() {
       await loadLibrary(path);
     }
   }, [loadLibrary]);
+
+  const requestCacheClear = useCallback(
+    (kind: CacheKind) => {
+      if (clearingCache || (kind === "index" && importing)) return;
+      setCacheConfirmation(kind);
+      setSettingsOpen(false);
+    },
+    [clearingCache, importing],
+  );
+
+  const cancelCacheClear = useCallback(() => {
+    setCacheConfirmation(null);
+    setSettingsOpen(true);
+  }, []);
+
+  const confirmCacheClear = useCallback(async () => {
+    const kind = cacheConfirmation;
+    if (!kind || clearingCache) return;
+    setCacheConfirmation(null);
+    setClearingCache(kind);
+    setCacheNotice(null);
+    try {
+      await api.clearCache(kind);
+      setCacheNotice({
+        kind: "success",
+        message: `${cacheName(kind)} deleted.`,
+      });
+    } catch (reason) {
+      setCacheNotice({
+        kind: "error",
+        message:
+          reason instanceof Error
+            ? reason.message
+            : `Could not delete the ${kind} cache.`,
+      });
+    } finally {
+      setClearingCache(null);
+      setSettingsOpen(true);
+      try {
+        setCacheUsage(await api.getCacheUsage());
+      } catch {
+        setCacheUsage(null);
+      }
+    }
+  }, [cacheConfirmation, clearingCache]);
+
+  useEffect(() => {
+    if (!settingsOpen) return;
+    let cancelled = false;
+    void api
+      .getCacheUsage()
+      .then((usage) => {
+        if (!cancelled) setCacheUsage(usage);
+      })
+      .catch(() => {
+        if (!cancelled) setCacheUsage(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [settingsOpen]);
+
+  useEffect(() => {
+    if (!cacheConfirmation) return;
+    cacheCancelButtonRef.current?.focus();
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      cancelCacheClear();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [cacheConfirmation, cancelCacheClear]);
 
   const clearFilters = () => {
     setSearchDraft("");
@@ -1952,9 +2061,95 @@ export function App() {
                 <strong>{summary?.collectionCount ?? "—"}</strong> collections
               </span>
             </div>
+            <div className="settings-block cache-setting">
+              <span className="settings-label">
+                <Trash2 size={16} /> CACHE
+              </span>
+              <p>
+                Delete cached files to force them to be rebuilt when needed.
+              </p>
+              <div className="cache-actions">
+                {(["index", "video"] as CacheKind[]).map((kind) => {
+                  const active = clearingCache === kind;
+                  const disabled =
+                    clearingCache !== null || (kind === "index" && importing);
+                  return (
+                    <button
+                      key={kind}
+                      type="button"
+                      className="danger-button cache-button"
+                      disabled={disabled}
+                      onClick={() => requestCacheClear(kind)}
+                    >
+                      <strong>
+                        {active && <LoaderCircle className="spin" size={13} />}
+                        {active ? "Deleting…" : cacheName(kind)}
+                      </strong>
+                      <span className="cache-button-usage">
+                        {formatCacheSize(cacheUsage?.[kind])}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              {cacheNotice && (
+                <p className={`cache-notice ${cacheNotice.kind}`} role="status">
+                  {cacheNotice.message}
+                </p>
+              )}
+            </div>
           </>
         )}
       </dialog>
+      {cacheConfirmation && (
+        <div
+          className="cache-confirmation-layer"
+          onPointerDown={(event) => {
+            if (event.target === event.currentTarget) cancelCacheClear();
+          }}
+        >
+          <section
+            className="cache-confirmation"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="cache-confirmation-title"
+            aria-describedby="cache-confirmation-description"
+          >
+            <div className="cache-confirmation-heading">
+              <span className="cache-confirmation-icon" aria-hidden="true">
+                <Trash2 size={19} />
+              </span>
+              <div>
+                <h2 id="cache-confirmation-title">
+                  Delete {cacheName(cacheConfirmation).toLowerCase()}?
+                </h2>
+                <p id="cache-confirmation-description">
+                  {cacheConfirmation === "index"
+                    ? "The library index will be rebuilt from your osu!lazer files the next time you refresh."
+                    : "Converted video files will be generated again when they are needed."}
+                </p>
+              </div>
+            </div>
+            <div className="cache-confirmation-actions">
+              <button
+                ref={cacheCancelButtonRef}
+                type="button"
+                className="secondary-button"
+                onClick={cancelCacheClear}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="danger-button"
+                onClick={() => void confirmCacheClear()}
+              >
+                <Trash2 size={15} /> Delete cache
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

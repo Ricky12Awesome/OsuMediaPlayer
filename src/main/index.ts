@@ -21,6 +21,8 @@ import type {
   TrackContextMenuInfo,
 } from "../shared/types";
 import { LibraryIndex } from "./library";
+import { directorySize } from "./cache";
+import { clearLibraryCache } from "./library-cache";
 import { loadLibraryInWorker, waitForLibraryWorkers } from "./library-loader";
 import {
   mimeForFilename,
@@ -61,6 +63,7 @@ protocol.registerSchemesAsPrivileged([
 let window: BrowserWindow | null = null;
 let library: LibraryIndex | null = null;
 let pendingLoad: Promise<LibraryIndex> | null = null;
+let pendingIndexCacheClear: Promise<void> | null = null;
 let pendingPath: string | undefined;
 let importController: AbortController | null = null;
 let videoTranscoder: VideoTranscoder | null = null;
@@ -317,6 +320,7 @@ function setupIPC(): void {
   ipcMain.handle("library:load", async (event, requestedPath: unknown) => {
     requireTrusted(event);
     if (quitting) throw new Error("The player is closing.");
+    if (pendingIndexCacheClear) await pendingIndexCacheClear;
     if (
       requestedPath !== undefined &&
       (typeof requestedPath !== "string" || !isAbsolute(requestedPath))
@@ -386,6 +390,39 @@ function setupIPC(): void {
       pendingLoad = null;
       pendingPath = undefined;
       importController = null;
+    }
+  });
+  ipcMain.handle("cache:usage", async (event) => {
+    requireTrusted(event);
+    const [index, video] = await Promise.all([
+      directorySize(join(app.getPath("userData"), "library-cache")),
+      directorySize(join(app.getPath("userData"), "video-cache")),
+    ]);
+    return { index, video };
+  });
+  ipcMain.handle("cache:clear", async (event, kind: unknown) => {
+    requireTrusted(event);
+    if (quitting) throw new Error("The player is closing.");
+    if (kind !== "index" && kind !== "video")
+      throw new Error("Choose a valid cache to clear.");
+    if (kind === "video") {
+      await videoTranscoder?.clearCache();
+      return;
+    }
+    if (pendingLoad)
+      throw new Error(
+        "Wait for the current library import to finish before clearing the cache.",
+      );
+    if (pendingIndexCacheClear) return pendingIndexCacheClear;
+
+    const clear = clearLibraryCache(
+      join(app.getPath("userData"), "library-cache"),
+    );
+    pendingIndexCacheClear = clear;
+    try {
+      await clear;
+    } finally {
+      if (pendingIndexCacheClear === clear) pendingIndexCacheClear = null;
     }
   });
   ipcMain.handle("library:query", (event, input: unknown) => {

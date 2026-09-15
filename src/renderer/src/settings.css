@@ -57,6 +57,122 @@
   margin-top: 19px;
   display: flex;
 }
+.cache-setting {
+  margin-top: 24px;
+}
+.cache-setting > p:not(.cache-notice) {
+  margin-bottom: 0;
+}
+.cache-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+  display: grid;
+}
+.cache-button {
+  color: #ffd0dc;
+  text-align: left;
+  background: #3a1c2b;
+  border: 1px solid #bd3f60;
+  border-radius: 7px;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 11px;
+  display: flex;
+}
+.cache-button:hover:not(:disabled) {
+  background: #472031;
+  border-color: #d45172;
+}
+.cache-button strong {
+  color: #ffd0dc;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  display: flex;
+}
+.cache-button-usage {
+  color: #e4a5b7;
+  text-align: right;
+  white-space: nowrap;
+  font-size: 9px;
+}
+.cache-notice {
+  margin: 10px 0 0;
+}
+.cache-notice.success {
+  color: #b8d6bd;
+}
+.cache-notice.error {
+  color: #e4a5b7;
+}
+.cache-confirmation-layer {
+  z-index: 1000;
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: #0c0717b5;
+  -webkit-backdrop-filter: blur(7px);
+  backdrop-filter: blur(7px);
+}
+.cache-confirmation {
+  color: #eaddf0;
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  width: min(410px, 100%);
+  padding: 24px;
+  box-shadow: 0 25px 120px #0009;
+  animation: 0.14s ease-out both cache-confirmation-in;
+}
+.cache-confirmation-heading {
+  align-items: flex-start;
+  gap: 13px;
+  display: flex;
+}
+.cache-confirmation-icon {
+  color: #ffb5c5;
+  background: #bd3f6030;
+  border: 1px solid #ef779155;
+  border-radius: 9px;
+  flex-shrink: 0;
+  padding: 9px;
+  display: flex;
+}
+.cache-confirmation h2 {
+  letter-spacing: -0.4px;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 900;
+}
+.cache-confirmation p {
+  color: #9a85a6;
+  margin: 7px 0 0;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.cache-confirmation-actions {
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 22px;
+  display: flex;
+}
+@keyframes cache-confirmation-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
 .transport-layout-setting {
   margin-top: 24px;
 }

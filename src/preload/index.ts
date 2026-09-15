@@ -14,6 +14,8 @@ const api: PlayerAPI = {
   getTrackLocation: (id, query?: LibraryQuery) =>
     ipcRenderer.invoke("library:track-location", id, query),
   prepareVideo: (trackId) => ipcRenderer.invoke("video:prepare", trackId),
+  getCacheUsage: () => ipcRenderer.invoke("cache:usage"),
+  clearCache: (kind) => ipcRenderer.invoke("cache:clear", kind),
   chooseLibrary: () => ipcRenderer.invoke("library:choose"),
   onLibraryProgress: (listener) => {
     const callback = (

@@ -35,6 +35,8 @@ export class VideoTranscoder {
   >();
   private readonly pending = new Map<string, Promise<string>>();
   private readonly children = new Set<ChildProcess>();
+  private cacheGeneration = 0;
+  private clearPromise: Promise<void> | null = null;
 
   constructor(
     private readonly cacheDirectory: string,
@@ -45,6 +47,7 @@ export class VideoTranscoder {
     library: LibraryIndex | null,
     trackId: string,
   ): Promise<string | null> {
+    if (this.clearPromise) await this.clearPromise;
     const track = library?.getTrack(trackId);
     if (!library || !track?.videoUrl) return null;
     const hash = hashFromAssetUrl(track.videoUrl);
@@ -55,7 +58,7 @@ export class VideoTranscoder {
 
     const existing = this.pending.get(hash);
     if (existing) return await existing;
-    const conversion = this.convert(library, hash);
+    const conversion = this.convert(library, hash, this.cacheGeneration);
     this.pending.set(hash, conversion);
     try {
       return await conversion;
@@ -64,12 +67,20 @@ export class VideoTranscoder {
     }
   }
 
-  private async convert(library: LibraryIndex, hash: string): Promise<string> {
+  private async convert(
+    library: LibraryIndex,
+    hash: string,
+    generation: number,
+  ): Promise<string> {
+    if (generation !== this.cacheGeneration)
+      throw new Error("The video cache was cleared.");
     await mkdir(this.cacheDirectory, { recursive: true });
     const destination = join(this.cacheDirectory, `${hash}.mp4`);
     try {
       const cached = await stat(destination);
       if (cached.isFile() && cached.size > 0) {
+        if (generation !== this.cacheGeneration)
+          throw new Error("The video cache was cleared.");
         this.ready.set(hash, { filename: destination, size: cached.size });
         return convertedVideoUrl(hash);
       }
@@ -80,6 +91,8 @@ export class VideoTranscoder {
 
     const source = await resolveMediaFile(library, hash);
     if (!source) throw new Error("The beatmap video file could not be found.");
+    if (generation !== this.cacheGeneration)
+      throw new Error("The video cache was cleared.");
     const temporary = join(
       this.cacheDirectory,
       `${hash}.${process.pid}.${randomUUID()}.partial.mp4`,
@@ -128,6 +141,8 @@ export class VideoTranscoder {
     });
     this.children.delete(child);
     try {
+      if (generation !== this.cacheGeneration)
+        throw new Error("The video cache was cleared.");
       if (result.error) {
         const unavailable =
           (result.error as NodeJS.ErrnoException).code === "ENOENT";
@@ -144,11 +159,32 @@ export class VideoTranscoder {
       const converted = await stat(temporary);
       if (!converted.isFile() || converted.size === 0)
         throw new Error("FFmpeg did not produce a playable video.");
+      if (generation !== this.cacheGeneration)
+        throw new Error("The video cache was cleared.");
       await rename(temporary, destination);
       this.ready.set(hash, { filename: destination, size: converted.size });
       return convertedVideoUrl(hash);
     } finally {
       await rm(temporary, { force: true }).catch(() => {});
+    }
+  }
+
+  async clearCache(): Promise<void> {
+    if (this.clearPromise) return this.clearPromise;
+
+    this.cacheGeneration += 1;
+    this.ready.clear();
+    for (const child of this.children) child.kill();
+    const pending = [...this.pending.values()];
+    const clear = (async () => {
+      await Promise.allSettled(pending);
+      await rm(this.cacheDirectory, { recursive: true, force: true });
+    })();
+    this.clearPromise = clear;
+    try {
+      await clear;
+    } finally {
+      if (this.clearPromise === clear) this.clearPromise = null;
     }
   }
 
