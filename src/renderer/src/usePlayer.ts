@@ -82,10 +82,6 @@ export function usePlayer(
   const [audio] = useState(() => {
     const element = new Audio();
     element.crossOrigin = "anonymous";
-    if (initialTrack) {
-      element.src = initialTrack.audioUrl;
-      element.load();
-    }
     return element;
   });
   const graph = useRef<{
@@ -595,6 +591,14 @@ export function usePlayer(
     ];
     for (const [name, listener] of events)
       audio.addEventListener(name, listener);
+    // The cleanup below clears the source during React Strict Mode's mount
+    // replay. Load the bootstrap track after listeners are attached so that
+    // the second setup restores it and cannot leave the visible track without
+    // a media source.
+    if (initialTrack) {
+      audio.src = initialTrack.audioUrl;
+      audio.load();
+    }
     const removeMediaListener = api.onMediaAction?.((action) => {
       const current = controls.current;
       if (action === "stop") {
@@ -672,7 +676,7 @@ export function usePlayer(
         }
       });
     };
-  }, [api, audio, syncVideo]);
+  }, [api, audio, initialTrack, syncVideo]);
 
   useEffect(() => {
     let active = true;
