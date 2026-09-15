@@ -19,6 +19,7 @@ import type {
   Track,
   TrackContextMenuAction,
   TrackContextMenuInfo,
+  VideoEncodingSettings,
 } from "../shared/types";
 import { LibraryIndex } from "./library";
 import { directorySize } from "./cache";
@@ -504,10 +505,28 @@ function setupIPC(): void {
       return library.getTrackLocation(id, input as LibraryQuery | undefined);
     },
   );
-  ipcMain.handle("video:prepare", async (event, trackId: unknown) => {
+  ipcMain.handle(
+    "video:prepare",
+    async (event, trackId: unknown, settings: unknown) => {
+      requireTrusted(event);
+      if (typeof trackId !== "string") throw new Error("Invalid track ID.");
+      if (
+        settings !== undefined &&
+        (!settings || typeof settings !== "object" || Array.isArray(settings))
+      )
+        throw new Error("Invalid video encoding settings.");
+      return (
+        (await videoTranscoder?.prepare(
+          library,
+          trackId,
+          settings as VideoEncodingSettings | undefined,
+        )) ?? null
+      );
+    },
+  );
+  ipcMain.handle("video:encoding-status", (event) => {
     requireTrusted(event);
-    if (typeof trackId !== "string") throw new Error("Invalid track ID.");
-    return (await videoTranscoder?.prepare(library, trackId)) ?? null;
+    return videoTranscoder?.encodingStatus ?? null;
   });
   ipcMain.handle("window:fullscreen-state", (event) => {
     requireTrusted(event);
@@ -595,6 +614,11 @@ void app.whenReady().then(() => {
   session.defaultSession.setPermissionCheckHandler(() => false);
   videoTranscoder = new VideoTranscoder(
     join(app.getPath("userData"), "video-cache"),
+    undefined,
+    (status) => {
+      if (window && !window.isDestroyed())
+        window.webContents.send("video:encoding", status);
+    },
   );
   protocol.handle("osu-media", (request) => {
     try {

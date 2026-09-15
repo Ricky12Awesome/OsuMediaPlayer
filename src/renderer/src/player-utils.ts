@@ -1,4 +1,9 @@
-import type { LibraryQuery, RepeatMode } from "../../shared/types";
+import type {
+  LibraryQuery,
+  RepeatMode,
+  VideoEncodingQuality,
+  VideoMaxFps,
+} from "../../shared/types";
 
 export interface PlaybackSettings {
   volume: number;
@@ -6,6 +11,9 @@ export interface PlaybackSettings {
   shuffle: boolean;
   repeat: RepeatMode;
   playVideos: boolean;
+  videoEncodingQuality: VideoEncodingQuality;
+  videoMaxFps: VideoMaxFps;
+  videoForceRemux: boolean;
 }
 
 export interface ShuffleHistory {
@@ -72,7 +80,8 @@ export function navigateShuffleHistory({
   repeat?: RepeatMode;
   random?: () => number;
 }): { index: number | null; history: ShuffleHistory } {
-  if (total <= 0) return { index: null, history: { entries: [], position: -1 } };
+  if (total <= 0)
+    return { index: null, history: { entries: [], position: -1 } };
   const entries = history.entries.filter(
     (entry) => Number.isInteger(entry) && entry >= 0 && entry < total,
   );
@@ -193,6 +202,9 @@ export const defaultPlaybackSettings: PlaybackSettings = {
   shuffle: false,
   repeat: "off",
   playVideos: true,
+  videoEncodingQuality: "medium",
+  videoMaxFps: 60,
+  videoForceRemux: true,
 };
 
 export function parsePlaybackSettings(
@@ -225,6 +237,25 @@ export function parsePlaybackSettings(
         typeof record.playVideos === "boolean"
           ? record.playVideos
           : defaultPlaybackSettings.playVideos,
+      videoEncodingQuality:
+        record.videoEncodingQuality === "very-low" ||
+        record.videoEncodingQuality === "low" ||
+        record.videoEncodingQuality === "medium" ||
+        record.videoEncodingQuality === "high" ||
+        record.videoEncodingQuality === "very-high"
+          ? record.videoEncodingQuality
+          : defaultPlaybackSettings.videoEncodingQuality,
+      videoMaxFps:
+        record.videoMaxFps === 0 ||
+        record.videoMaxFps === 24 ||
+        record.videoMaxFps === 30 ||
+        record.videoMaxFps === 60
+          ? record.videoMaxFps
+          : defaultPlaybackSettings.videoMaxFps,
+      videoForceRemux:
+        typeof record.videoForceRemux === "boolean"
+          ? record.videoForceRemux
+          : defaultPlaybackSettings.videoForceRemux,
     };
   } catch {
     return defaultPlaybackSettings;

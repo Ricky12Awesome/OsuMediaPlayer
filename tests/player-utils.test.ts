@@ -80,6 +80,9 @@ test("stored playback settings are clamped and validated", () => {
         shuffle: true,
         repeat: "one",
         playVideos: false,
+        videoEncodingQuality: "very-high",
+        videoMaxFps: 24,
+        videoForceRemux: false,
       }),
     ),
     {
@@ -88,6 +91,9 @@ test("stored playback settings are clamped and validated", () => {
       shuffle: true,
       repeat: "one",
       playVideos: false,
+      videoEncodingQuality: "very-high",
+      videoMaxFps: 24,
+      videoForceRemux: false,
     },
   );
   assert.deepEqual(parsePlaybackSettings("{bad"), {
@@ -96,5 +102,8 @@ test("stored playback settings are clamped and validated", () => {
     shuffle: false,
     repeat: "off",
     playVideos: true,
+    videoEncodingQuality: "medium",
+    videoMaxFps: 60,
+    videoForceRemux: true,
   });
 });

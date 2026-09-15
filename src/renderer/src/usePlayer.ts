@@ -10,6 +10,8 @@ import type {
   PlayerAPI,
   RepeatMode,
   Track,
+  VideoEncodingQuality,
+  VideoMaxFps,
 } from "../../shared/types";
 import {
   cloneQueueQuery,
@@ -59,6 +61,14 @@ export interface PlayerState {
   cycleRepeat: () => void;
   playVideos: boolean;
   setPlayVideos: React.Dispatch<React.SetStateAction<boolean>>;
+  videoEncodingQuality: VideoEncodingQuality;
+  setVideoEncodingQuality: React.Dispatch<
+    React.SetStateAction<VideoEncodingQuality>
+  >;
+  videoMaxFps: VideoMaxFps;
+  setVideoMaxFps: React.Dispatch<React.SetStateAction<VideoMaxFps>>;
+  videoForceRemux: boolean;
+  setVideoForceRemux: React.Dispatch<React.SetStateAction<boolean>>;
   resetPlaybackSettings: () => void;
   error: string | null;
   clearError: () => void;
@@ -76,6 +86,7 @@ export interface PlayerState {
   videoRef: RefObject<HTMLVideoElement | null>;
   videoUrl: string | null;
   videoLoading: boolean;
+  videoEncoding: boolean;
   videoError: string | null;
   handleVideoError: () => void;
 }
@@ -111,11 +122,19 @@ export function usePlayer(
   const [shuffle, setShuffle] = useState(settings.shuffle);
   const [repeat, setRepeat] = useState(settings.repeat);
   const [playVideos, setPlayVideos] = useState(settings.playVideos);
+  const [videoEncodingQuality, setVideoEncodingQuality] = useState(
+    settings.videoEncodingQuality,
+  );
+  const [videoMaxFps, setVideoMaxFps] = useState(settings.videoMaxFps);
+  const [videoForceRemux, setVideoForceRemux] = useState(
+    settings.videoForceRemux,
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [videoLoading, setVideoLoading] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
+  const [encodingHash, setEncodingHash] = useState<string | null>(null);
   const activeTrack = useRef<Track | null>(initialTrack);
   const queue = useRef<{ query: LibraryQuery; index: number; total?: number }>({
     query: {},
@@ -510,6 +529,9 @@ export function usePlayer(
     setShuffle(defaultPlaybackSettings.shuffle);
     setRepeat(defaultPlaybackSettings.repeat);
     setPlayVideos(defaultPlaybackSettings.playVideos);
+    setVideoEncodingQuality(defaultPlaybackSettings.videoEncodingQuality);
+    setVideoMaxFps(defaultPlaybackSettings.videoMaxFps);
+    setVideoForceRemux(defaultPlaybackSettings.videoForceRemux);
   }, []);
 
   const controls = useRef({
@@ -529,12 +551,31 @@ export function usePlayer(
     try {
       localStorage.setItem(
         settingsKey,
-        JSON.stringify({ volume, muted, shuffle, repeat, playVideos }),
+        JSON.stringify({
+          volume,
+          muted,
+          shuffle,
+          repeat,
+          playVideos,
+          videoEncodingQuality,
+          videoMaxFps,
+          videoForceRemux,
+        }),
       );
     } catch {
       // Local storage is optional.
     }
-  }, [audio, muted, playVideos, repeat, shuffle, volume]);
+  }, [
+    audio,
+    muted,
+    playVideos,
+    repeat,
+    shuffle,
+    videoEncodingQuality,
+    videoForceRemux,
+    videoMaxFps,
+    volume,
+  ]);
 
   useEffect(() => {
     mounted.current = true;
@@ -684,6 +725,18 @@ export function usePlayer(
   }, [api, audio, initialTrack, syncVideo]);
 
   useEffect(() => {
+    return api.onVideoEncodingChange((status) => {
+      setEncodingHash((current) =>
+        status.encoding
+          ? status.hash
+          : current === status.hash
+            ? null
+            : current,
+      );
+    });
+  }, [api]);
+
+  useEffect(() => {
     let active = true;
     setVideoError(null);
     if (!playVideos || !track?.videoUrl) {
@@ -695,7 +748,11 @@ export function usePlayer(
     setVideoUrl(null);
     setVideoLoading(true);
     api
-      .prepareVideo(track.id)
+      .prepareVideo(track.id, {
+        quality: videoEncodingQuality,
+        maxFps: videoMaxFps,
+        forceRemux: videoForceRemux,
+      })
       .then((prepared) => {
         if (active && activeTrack.current?.id === track.id) {
           setVideoUrl(prepared);
@@ -717,7 +774,15 @@ export function usePlayer(
     return () => {
       active = false;
     };
-  }, [api, playVideos, track?.id, track?.videoUrl]);
+  }, [
+    api,
+    playVideos,
+    track?.id,
+    track?.videoUrl,
+    videoEncodingQuality,
+    videoForceRemux,
+    videoMaxFps,
+  ]);
 
   const handleVideoError = useCallback(() => {
     setVideoUrl(null);
@@ -734,13 +799,55 @@ export function usePlayer(
     const sync = () => syncVideo();
     video.addEventListener("loadedmetadata", sync);
     video.addEventListener("canplay", sync);
-    sync();
+    let hls: import("hls.js").default | null = null;
+    let disposed = false;
+    let isHlsStream = false;
+    try {
+      const source = new URL(videoUrl);
+      isHlsStream =
+        source.protocol === "osu-media:" && source.host === "video-cache";
+    } catch {
+      // Let the media element report a malformed direct URL normally.
+    }
+    const loadNative = () => {
+      if (disposed) return;
+      video.src = videoUrl;
+      video.load();
+      sync();
+    };
+    if (isHlsStream) {
+      void import("hls.js/light")
+        .then(({ default: Hls }) => {
+          if (disposed) return;
+          if (!Hls.isSupported()) {
+            loadNative();
+            return;
+          }
+          const instance = new Hls({
+            enableWorker: false,
+            startPosition: 0,
+          });
+          hls = instance;
+          instance.on(Hls.Events.ERROR, (_event, data) => {
+            if (data.fatal) handleVideoError();
+          });
+          instance.loadSource(videoUrl);
+          instance.attachMedia(video);
+        })
+        .catch(loadNative);
+    } else {
+      loadNative();
+    }
     return () => {
+      disposed = true;
       video.removeEventListener("loadedmetadata", sync);
       video.removeEventListener("canplay", sync);
       video.pause();
+      hls?.destroy();
+      video.removeAttribute("src");
+      video.load();
     };
-  }, [syncVideo, track?.videoOffset, videoUrl]);
+  }, [handleVideoError, syncVideo, track?.videoOffset, videoUrl]);
 
   useEffect(() => {
     const mediaSession = navigator.mediaSession;
@@ -841,6 +948,12 @@ export function usePlayer(
     cycleRepeat,
     playVideos,
     setPlayVideos,
+    videoEncodingQuality,
+    setVideoEncodingQuality,
+    videoMaxFps,
+    setVideoMaxFps,
+    videoForceRemux,
+    setVideoForceRemux,
     resetPlaybackSettings,
     error,
     clearError: () => setError(null),
@@ -858,6 +971,9 @@ export function usePlayer(
     videoRef,
     videoUrl,
     videoLoading,
+    videoEncoding:
+      Boolean(track?.videoHash) &&
+      encodingHash === track?.videoHash?.toLowerCase(),
     videoError,
     handleVideoError,
   };

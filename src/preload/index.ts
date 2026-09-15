@@ -5,6 +5,7 @@ import type {
   MediaAction,
   PlayerAPI,
   TrackContextMenuAction,
+  VideoEncodingStatus,
 } from "../shared/types";
 
 const api: PlayerAPI = {
@@ -16,7 +17,8 @@ const api: PlayerAPI = {
   getTrack: (id) => ipcRenderer.invoke("library:track", id),
   getTrackLocation: (id, query?: LibraryQuery) =>
     ipcRenderer.invoke("library:track-location", id, query),
-  prepareVideo: (trackId) => ipcRenderer.invoke("video:prepare", trackId),
+  prepareVideo: (trackId, settings) =>
+    ipcRenderer.invoke("video:prepare", trackId, settings),
   getCacheUsage: () => ipcRenderer.invoke("cache:usage"),
   clearCache: (kind) => ipcRenderer.invoke("cache:clear", kind),
   chooseLibrary: () => ipcRenderer.invoke("library:choose"),
@@ -36,6 +38,30 @@ const api: PlayerAPI = {
     ipcRenderer.on("media:action", callback);
     return () => {
       ipcRenderer.removeListener("media:action", callback);
+    };
+  },
+  onVideoEncodingChange: (listener) => {
+    let subscribed = true;
+    let receivedChange = false;
+    const callback = (
+      _event: Electron.IpcRendererEvent,
+      status: VideoEncodingStatus,
+    ) => {
+      receivedChange = true;
+      listener(status);
+    };
+    ipcRenderer.on("video:encoding", callback);
+    void ipcRenderer
+      .invoke("video:encoding-status")
+      .then((status: VideoEncodingStatus | null) => {
+        if (subscribed && !receivedChange && status) listener(status);
+      })
+      .catch(() => {
+        /* The window may be closing during subscription. */
+      });
+    return () => {
+      subscribed = false;
+      ipcRenderer.removeListener("video:encoding", callback);
     };
   },
   onFullscreenChange: (listener) => {

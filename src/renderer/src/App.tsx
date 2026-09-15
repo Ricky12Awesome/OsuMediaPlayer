@@ -59,6 +59,8 @@ import type {
   Track,
   TrackContextMenuAction,
   TrackContextMenuInfo,
+  VideoEncodingQuality,
+  VideoMaxFps,
 } from "../../shared/types";
 import { FacetPicker } from "./FacetPicker";
 import { SortPicker } from "./SortPicker";
@@ -145,6 +147,7 @@ const defaultApi: PlayerAPI = {
   chooseLibrary: async () => null,
   onLibraryProgress: () => () => {},
   onMediaAction: () => () => {},
+  onVideoEncodingChange: () => () => {},
   onFullscreenChange: () => () => {},
   onZoomChange: () => () => {},
   getTrackContextMenuInfo: async () => null,
@@ -1295,7 +1298,6 @@ export function App({
                 <video
                   ref={player.videoRef}
                   className={"hero-video " + (videoActive ? "is-active" : "")}
-                  src={player.videoUrl}
                   muted
                   playsInline
                   disablePictureInPicture
@@ -1305,6 +1307,12 @@ export function App({
                 />
               )}
               <div className="artwork-grain" />
+              {player.videoEncoding && (
+                <div className="video-encoding-indicator" role="status">
+                  <LoaderCircle className="spin" size={14} />
+                  Encoding video…
+                </div>
+              )}
               <AudioVisualizer
                 analyser={player.analyser}
                 playing={player.playing}
@@ -2131,6 +2139,65 @@ export function App({
                 </span>
                 <span className="settings-toggle-status">
                   {artworkThemeEnabled ? "On" : "Off"}
+                </span>
+              </button>
+            </div>
+            <div className="settings-block video-encoding-setting">
+              <span className="settings-label">
+                <SlidersHorizontal size={16} /> VIDEO ENCODING
+              </span>
+              <div className="video-encoding-fields">
+                <label>
+                  <span>Quality</span>
+                  <select
+                    value={player.videoEncodingQuality}
+                    onChange={(event) =>
+                      player.setVideoEncodingQuality(
+                        event.target.value as VideoEncodingQuality,
+                      )
+                    }
+                  >
+                    <option value="very-low">Very low</option>
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="very-high">Very high</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Frame-rate cap</span>
+                  <select
+                    value={player.videoMaxFps}
+                    onChange={(event) =>
+                      player.setVideoMaxFps(
+                        Number(event.target.value) as VideoMaxFps,
+                      )
+                    }
+                  >
+                    <option value={0}>No cap</option>
+                    <option value={24}>24 FPS</option>
+                    <option value={30}>30 FPS</option>
+                    <option value={60}>60 FPS</option>
+                  </select>
+                </label>
+              </div>
+              <button
+                type="button"
+                className={
+                  "settings-toggle " + (player.videoForceRemux ? "active" : "")
+                }
+                aria-pressed={player.videoForceRemux}
+                onClick={() => player.setVideoForceRemux((value) => !value)}
+              >
+                <span className="settings-toggle-copy">
+                  <strong>Force remux when possible</strong>
+                  <span>
+                    Copy compatible video without re-encoding; automatically
+                    encode when copying is not supported
+                  </span>
+                </span>
+                <span className="settings-toggle-status">
+                  {player.videoForceRemux ? "On" : "Off"}
                 </span>
               </button>
             </div>
