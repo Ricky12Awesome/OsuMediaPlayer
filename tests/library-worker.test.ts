@@ -162,11 +162,20 @@ test("worker imports Realm and transfers canonical sort orders; errors and cance
         beatmapCount: number;
         latestDateAdded: number;
       };
-      collectionFingerprint: Record<string, number>;
       realm: { mtimeMs: number; size: number };
     };
+    const collectionFingerprint = JSON.parse(
+      await readFile(cacheFiles.collectionManifest, "utf8"),
+    ) as Record<string, number>;
+    const tags = JSON.parse(await readFile(cacheFiles.tags, "utf8")) as Record<
+      string,
+      number
+    >;
+    const collections = JSON.parse(
+      await readFile(cacheFiles.collections, "utf8"),
+    ) as Record<string, number>;
     const tracksBinary = await readFile(cacheFiles.tracks);
-    const collectionsBinary = await readFile(cacheFiles.collections);
+    const collectionsBinary = await readFile(cacheFiles.collectionTracks);
     const ordersBinary = await readFile(cacheFiles.orders);
     const cachedData = await readLibraryCache(
       cachePath,
@@ -179,11 +188,17 @@ test("worker imports Realm and transfers canonical sort orders; errors and cance
     assert.equal(manifest.fingerprint.beatmapCount, 3);
     assert.ok(Number.isFinite(manifest.realm.mtimeMs));
     assert.ok(Number.isFinite(manifest.realm.size));
+    assert.equal("tags" in manifest, false);
+    assert.equal("collections" in manifest, false);
+    assert.equal("collectionFingerprint" in manifest, false);
+    assert.equal(Object.keys(collectionFingerprint).length, 1);
     assert.equal(tracksBinary.subarray(0, 4).toString(), "OMTR");
     assert.equal(collectionsBinary.subarray(0, 4).toString(), "OMCL");
     assert.equal(ordersBinary.subarray(0, 4).toString(), "OMOR");
     assert.equal(cachedData.snapshot.collections.length, 1);
     assert.equal(cachedData.snapshot.collections[0].name, "Favorites");
+    assert.equal(collections[cachedData.snapshot.collections[0].id], 1);
+    assert.deepEqual(tags, { pop: 1, jazz: 1, rock: 1 });
     assert.equal(cachedData.snapshot.orders.size, 8);
     const firstTrack = cachedData.snapshot.indexed[0].track;
     const firstTrackId = firstTrack.id;
@@ -251,9 +266,11 @@ test("worker imports Realm and transfers canonical sort orders; errors and cance
         const collection = changedRealm.objects(
           "BeatmapCollection",
         )[0] as unknown as {
+          Name: string;
           LastModified: Date;
           BeatmapMD5Hashes: { splice: (...values: unknown[]) => void };
         };
+        collection.Name = "Renamed";
         collection.LastModified = new Date(2025, 0, 2);
         collection.BeatmapMD5Hashes.splice(0, 1, "2".repeat(32));
       });
@@ -273,7 +290,7 @@ test("worker imports Realm and transfers canonical sort orders; errors and cance
     );
     assert.deepEqual(
       collectionCached
-        .query({ collection: "Favorites" })
+        .query({ collection: "Renamed" })
         .items.map((track) => track.id),
       [
         cachedData.snapshot.indexed.find((item) =>
@@ -281,6 +298,7 @@ test("worker imports Realm and transfers canonical sort orders; errors and cance
         )?.track.id,
       ],
     );
+    assert.equal(collectionCached.query({ collection: "Favorites" }).total, 0);
 
     const rebuiltRealm = new Realm({
       path: join(directory, "client.realm"),
