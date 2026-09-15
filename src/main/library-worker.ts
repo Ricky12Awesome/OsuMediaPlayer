@@ -83,7 +83,12 @@ void (async () => {
         manifest &&
         manifest.summary.installPath === resolvedPath &&
         libraryRealmMetadataEqual(manifest.realm, realmMetadata)
-          ? await readLibraryCache(cacheDirectory, undefined, controller.signal)
+          ? await readLibraryCache(
+              cacheDirectory,
+              undefined,
+              controller.signal,
+              manifest,
+            )
           : null;
       if (!cached) {
         const checked = await readLibraryFingerprints(
@@ -96,6 +101,7 @@ void (async () => {
           cacheDirectory,
           fingerprint,
           controller.signal,
+          manifest ?? undefined,
         );
       } else {
         fingerprint = cached.fingerprint;

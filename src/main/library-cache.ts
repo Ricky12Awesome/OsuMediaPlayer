@@ -18,13 +18,16 @@ import type {
 import { assetUrl, isAssetHash, type MediaAsset } from "./media";
 import type { LibrarySummary, SortKey, Track } from "../shared/types";
 
-export const libraryCacheVersion = 4;
+export const libraryCacheVersion = 6;
 
 export interface LibraryCachePaths {
   directory: string;
   manifest: string;
-  tracks: string;
+  collectionManifest: string;
+  tags: string;
   collections: string;
+  tracks: string;
+  collectionTracks: string;
   orders: string;
 }
 
@@ -33,11 +36,12 @@ export interface LibraryRealmMetadata {
   size: number;
 }
 
+export type LibraryCacheSummary = Omit<LibrarySummary, "collections" | "tags">;
+
 export interface LibraryCacheManifest {
   version: number;
   fingerprint: LibraryFingerprint;
-  collectionFingerprint: LibraryCollectionFingerprint;
-  summary: LibrarySummary;
+  summary: LibraryCacheSummary;
   realm: LibraryRealmMetadata;
 }
 
@@ -60,6 +64,10 @@ const sortKeyList: SortKey[] = [
 ];
 const sortKeyCodes = new Map(sortKeyList.map((key, index) => [key, index]));
 const sortKeysByCode = new Map(sortKeyList.map((key, index) => [index, key]));
+const facetCollator = new Intl.Collator(undefined, {
+  numeric: true,
+  sensitivity: "base",
+});
 const trackReferenceBytes = 40;
 const md5Bytes = 16;
 const sha256Bytes = 32;
@@ -105,8 +113,11 @@ export function libraryCachePaths(directory: string): LibraryCachePaths {
   return {
     directory,
     manifest: join(directory, "manifest.json"),
+    collectionManifest: join(directory, "manifest.collections.json"),
+    tags: join(directory, "tags.json"),
+    collections: join(directory, "collections.json"),
     tracks: join(directory, "tracks.bin"),
-    collections: join(directory, "collections.bin"),
+    collectionTracks: join(directory, "collections.bin"),
     orders: join(directory, "orders.bin"),
   };
 }
@@ -142,25 +153,29 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
-function isSummary(value: unknown): value is LibrarySummary {
+function isCacheSummary(value: unknown): value is LibraryCacheSummary {
   if (!isRecord(value)) return false;
-  const isFacetArray = (facets: unknown): boolean =>
-    Array.isArray(facets) &&
-    facets.every(
-      (item) =>
-        isRecord(item) &&
-        typeof item.name === "string" &&
-        isFiniteNumber(item.count),
-    );
   return (
     isFiniteNumber(value.trackCount) &&
     isFiniteNumber(value.beatmapCount) &&
     isFiniteNumber(value.collectionCount) &&
-    isFacetArray(value.collections) &&
-    isFacetArray(value.tags) &&
     typeof value.installPath === "string" &&
     isFiniteNumber(value.skippedCount)
   );
+}
+
+function isCountMap(value: unknown): value is Record<string, number> {
+  const isCount = (count: unknown): count is number =>
+    typeof count === "number" && Number.isSafeInteger(count) && count >= 0;
+  return (
+    isRecord(value) &&
+    !Array.isArray(value) &&
+    Object.values(value).every(isCount)
+  );
+}
+
+function parseCountMap(value: unknown): Record<string, number> | null {
+  return isCountMap(value) ? value : null;
 }
 
 function isFingerprint(value: unknown): value is LibraryFingerprint {
@@ -177,7 +192,8 @@ function isCollectionFingerprint(
 ): value is LibraryCollectionFingerprint {
   return (
     isRecord(value) &&
-    Object.values(value).every((timestamp) => isFiniteNumber(timestamp))
+    !Array.isArray(value) &&
+    Object.values(value).every(isFiniteNumber)
   );
 }
 
@@ -194,8 +210,7 @@ function parseManifest(value: unknown): LibraryCacheManifest | null {
     !isRecord(value) ||
     value.version !== libraryCacheVersion ||
     !isFingerprint(value.fingerprint) ||
-    !isCollectionFingerprint(value.collectionFingerprint) ||
-    !isSummary(value.summary) ||
+    !isCacheSummary(value.summary) ||
     !isRealmMetadata(value.realm)
   )
     return null;
@@ -663,10 +678,18 @@ function serializeCollections(
   collections: readonly LibraryCollection[],
 ): Buffer | null {
   const chunks: Buffer[] = [binaryHeader(collectionsMagic, collections.length)];
+  const seen = new Set<string>();
   for (const collection of collections) {
     const id = encodeCollectionId(collection.id);
     const name = Buffer.from(collection.name, "utf16le");
-    if (!id || name.length % 2 !== 0 || name.length > 0xffff) return null;
+    if (
+      !id ||
+      seen.has(collection.id) ||
+      name.length % 2 !== 0 ||
+      name.length > 0xffff
+    )
+      return null;
+    seen.add(collection.id);
     if (collection.trackIds.length > 0xffffffff) return null;
     const header = Buffer.alloc(2 + 4);
     header.writeUInt16LE(name.length, 0);
@@ -701,6 +724,39 @@ function serializeOrders(
     }
   }
   return Buffer.concat(chunks);
+}
+
+function serializeTagCounts(snapshot: LibrarySnapshot): string | null {
+  const tags: Record<string, number> = Object.create(null);
+
+  try {
+    for (const item of snapshot.indexed) {
+      for (const tag of item.track.tags) tags[tag] = (tags[tag] ?? 0) + 1;
+    }
+    return JSON.stringify(tags);
+  } catch {
+    return null;
+  }
+}
+
+function serializeCollectionCounts(snapshot: LibrarySnapshot): string | null {
+  const collections: Record<string, number> = Object.create(null);
+  const trackIds = new Set(snapshot.indexed.map(({ track }) => track.id));
+
+  try {
+    for (const collection of snapshot.collections) {
+      if (collections[collection.id] !== undefined) return null;
+      let count = 0;
+      for (const trackId of new Set(collection.trackIds)) {
+        if (!trackIds.has(trackId)) return null;
+        count++;
+      }
+      collections[collection.id] = count;
+    }
+    return JSON.stringify(collections);
+  } catch {
+    return null;
+  }
 }
 
 function parseBinaryHeader(
@@ -784,10 +840,48 @@ function deserializeSnapshot(
   tracksValue: DecodedTracks | null,
   collectionsValue: LibraryCollection[] | null,
   ordersValue: Map<string, readonly string[]> | null,
-  summary: LibrarySummary,
+  summary: LibraryCacheSummary,
+  tagCounts: Record<string, number> | null,
+  collectionCountsById: Record<string, number> | null,
 ): LibrarySnapshot | null {
-  if (!tracksValue || !collectionsValue || !ordersValue) return null;
+  if (
+    !tracksValue ||
+    !collectionsValue ||
+    !ordersValue ||
+    !tagCounts ||
+    !collectionCountsById
+  )
+    return null;
   const collections = collectionsValue;
+  const collectionIds = new Set(collections.map((collection) => collection.id));
+  const facetCollectionIds = Object.keys(collectionCountsById);
+  if (
+    facetCollectionIds.length !== collectionIds.size ||
+    facetCollectionIds.some((id) => !collectionIds.has(id))
+  )
+    return null;
+
+  const collectionCounts = new Map<string, number>();
+  for (const collection of collections) {
+    const count = collectionCountsById[collection.id];
+    if (!Number.isSafeInteger(count) || count < 0) return null;
+    collectionCounts.set(
+      collection.name,
+      (collectionCounts.get(collection.name) ?? 0) + count,
+    );
+  }
+  const collectionFacets = [...collectionCounts]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => facetCollator.compare(a.name, b.name));
+  const tagFacets = Object.entries(tagCounts)
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count || facetCollator.compare(a.name, b.name));
+  if (summary.collectionCount !== collectionFacets.length) return null;
+  const fullSummary: LibrarySummary = {
+    ...summary,
+    collections: collectionFacets,
+    tags: tagFacets,
+  };
   const collectionNamesByTrack = new Map<string, string[]>();
   for (const collection of collections) {
     for (const id of collection.trackIds) {
@@ -812,10 +906,10 @@ function deserializeSnapshot(
       beatmapHashes: decoded.beatmapHashes,
     });
   }
-  if (summary.trackCount !== indexed.length) return null;
+  if (fullSummary.trackCount !== indexed.length) return null;
   return {
     assets: tracksValue.assets,
-    summary,
+    summary: fullSummary,
     indexed,
     orders: ordersValue,
     collections,
@@ -826,34 +920,50 @@ export async function readLibraryCache(
   directory: string,
   fingerprint?: LibraryFingerprint,
   signal?: LibraryCancellation,
+  knownManifest?: LibraryCacheManifest,
 ): Promise<LibraryCacheData | null> {
   signal?.throwIfAborted();
   const paths = libraryCachePaths(directory);
   try {
     const [
       manifestContents,
+      collectionFingerprintContents,
+      tagCountsContents,
+      collectionCountsContents,
       tracksContents,
-      collectionsContents,
+      collectionTracksContents,
       ordersContents,
     ] = await Promise.all([
-      readFile(paths.manifest, "utf8"),
+      knownManifest ? Promise.resolve("") : readFile(paths.manifest, "utf8"),
+      readFile(paths.collectionManifest, "utf8"),
+      readFile(paths.tags, "utf8"),
+      readFile(paths.collections, "utf8"),
       readFile(paths.tracks),
-      readFile(paths.collections),
+      readFile(paths.collectionTracks),
       readFile(paths.orders),
     ]);
     signal?.throwIfAborted();
-    const manifest = parseManifest(JSON.parse(manifestContents));
+    const manifest =
+      knownManifest ?? parseManifest(JSON.parse(manifestContents));
     if (
       !manifest ||
       (fingerprint &&
         !libraryFingerprintsEqual(manifest.fingerprint, fingerprint))
     )
       return null;
+    const cachedCollectionFingerprint = parseCountMap(
+      JSON.parse(collectionFingerprintContents),
+    );
+    if (!cachedCollectionFingerprint) return null;
+    const tagCounts = parseCountMap(JSON.parse(tagCountsContents));
+    const collectionCounts = parseCountMap(
+      JSON.parse(collectionCountsContents),
+    );
     const tracksValue = deserializeTracks(tracksContents);
     const trackIds = tracksValue?.ids ?? new Set<string>();
     const collectionsValue = deserializeCollections(
-      collectionsContents,
-      manifest.collectionFingerprint,
+      collectionTracksContents,
+      cachedCollectionFingerprint,
       trackIds,
     );
     const ordersValue = deserializeOrders(ordersContents, trackIds);
@@ -862,19 +972,21 @@ export async function readLibraryCache(
       collectionsValue,
       ordersValue,
       manifest.summary,
+      tagCounts,
+      collectionCounts,
     );
     if (!snapshot) return null;
     if (
       !collectionFingerprintsEqual(
         collectionFingerprint(snapshot.collections),
-        manifest.collectionFingerprint,
+        cachedCollectionFingerprint,
       )
     )
       return null;
     return {
       snapshot,
       fingerprint: manifest.fingerprint,
-      collectionFingerprint: manifest.collectionFingerprint,
+      collectionFingerprint: cachedCollectionFingerprint,
       realm: manifest.realm,
     };
   } catch {
@@ -924,21 +1036,41 @@ export async function writeLibraryCache(
     const manifest: LibraryCacheManifest = {
       version: libraryCacheVersion,
       fingerprint,
-      collectionFingerprint,
-      summary: snapshot.summary,
+      summary: {
+        trackCount: snapshot.summary.trackCount,
+        beatmapCount: snapshot.summary.beatmapCount,
+        collectionCount: snapshot.summary.collectionCount,
+        installPath: snapshot.summary.installPath,
+        skippedCount: snapshot.summary.skippedCount,
+      },
       realm,
     };
     const tracks = serializeTracks(snapshot);
-    const collections = serializeCollections(snapshot.collections);
+    const collectionTracks = serializeCollections(snapshot.collections);
     const orders = serializeOrders(snapshot.orders);
-    if (!tracks || !collections || !orders)
+    const tags = serializeTagCounts(snapshot);
+    const collections = serializeCollectionCounts(snapshot);
+    if (
+      !tracks ||
+      !collectionTracks ||
+      !orders ||
+      tags === null ||
+      collections === null
+    )
       throw new Error("Could not encode the library cache binary files.");
     await mkdir(temporary, { recursive: true });
     signal?.throwIfAborted();
     await Promise.all([
       writeFile(paths.manifest, JSON.stringify(manifest), "utf8"),
+      writeFile(
+        paths.collectionManifest,
+        JSON.stringify(collectionFingerprint),
+        "utf8",
+      ),
+      writeFile(paths.tags, tags, "utf8"),
+      writeFile(paths.collections, collections, "utf8"),
       writeFile(paths.tracks, tracks),
-      writeFile(paths.collections, collections),
+      writeFile(paths.collectionTracks, collectionTracks),
       writeFile(paths.orders, orders),
     ]);
     signal?.throwIfAborted();
