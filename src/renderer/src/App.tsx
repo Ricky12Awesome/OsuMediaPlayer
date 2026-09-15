@@ -66,6 +66,10 @@ import { TrackArt } from "./TrackArt";
 import { TrackContextMenu } from "./TrackContextMenu";
 import { extractArtworkTheme, type ArtworkTheme } from "./artwork-theme";
 import {
+  cacheLastArtworkTheme,
+  clearCachedLastArtworkTheme,
+} from "./artwork-theme-cache";
+import {
   VirtualTrackList,
   type VirtualTrackListKeyboardControls,
 } from "./VirtualTrackList";
@@ -210,11 +214,19 @@ function formatCacheSize(bytes: number | undefined): string {
   return `${value.toFixed(unit === 0 || value >= 10 ? 0 : 1)} ${units[unit]}`;
 }
 
-export function App() {
-  const player = usePlayer(api);
+export function App({
+  initialLibrary = null,
+  initialTrack = null,
+  initialArtworkTheme = null,
+}: {
+  initialLibrary?: LibrarySummary | null;
+  initialTrack?: Track | null;
+  initialArtworkTheme?: { url: string; theme: ArtworkTheme } | null;
+}) {
+  const player = usePlayer(api, initialTrack);
   const [visualizer, setVisualizer] = useVisualizerSettings();
-  const [summary, setSummary] = useState<LibrarySummary | null>(null);
-  const [importing, setImporting] = useState(true);
+  const [summary, setSummary] = useState<LibrarySummary | null>(initialLibrary);
+  const [importing, setImporting] = useState(!initialLibrary);
   const [loadError, setLoadError] = useState("");
   const [clearingCache, setClearingCache] = useState<CacheKind | null>(null);
   const [cacheConfirmation, setCacheConfirmation] = useState<CacheKind | null>(
@@ -279,7 +291,7 @@ export function App() {
   const [artworkTheme, setArtworkTheme] = useState<{
     url: string;
     theme: ArtworkTheme;
-  } | null>(null);
+  } | null>(initialArtworkTheme);
   const [libraryWidth, setLibraryWidth] = useState(() => {
     const value = readStorage("osu-music-library-width", 430);
     return Number.isFinite(value) ? Math.min(720, Math.max(320, value)) : 430;
@@ -319,7 +331,7 @@ export function App() {
   const focusSearchAfterSidebar = useRef(false);
   const seekPreviewClearTimer = useRef<number | null>(null);
   const resizeStart = useRef<{ x: number; width: number } | null>(null);
-  const trackInitialized = useRef(false);
+  const trackInitialized = useRef(Boolean(initialTrack));
   const initialTrackRestore = useRef(0);
   const drag = useRef<{
     pointerId: number;
@@ -364,11 +376,12 @@ export function App() {
         setRevision((value) => value + 1);
       }
     });
-    void loadLibrary(
-      readStorage<string | undefined>("osu-music-library-path", undefined),
-    );
+    if (!initialLibrary)
+      void loadLibrary(
+        readStorage<string | undefined>("osu-music-library-path", undefined),
+      );
     return removeProgress;
-  }, [loadLibrary]);
+  }, [initialLibrary, loadLibrary]);
 
   useEffect(() => {
     const removeFullscreen = api.onFullscreenChange(setFullscreen);
@@ -501,9 +514,15 @@ export function App() {
   useEffect(() => writeStorage(sortDescendingKey, descending), [descending]);
 
   useEffect(() => {
-    if (player.playing && player.track)
-      writeStorage(lastPlayedTrackKey, player.track.id);
-  }, [player.playing, player.track]);
+    if (!player.playing || !player.track) return;
+    const themeMatchesTrack =
+      artworkTheme && artworkTheme.url === player.track.artworkUrl
+        ? artworkTheme.theme
+        : null;
+    if (themeMatchesTrack) cacheLastArtworkTheme(themeMatchesTrack);
+    else clearCachedLastArtworkTheme();
+    writeStorage(lastPlayedTrackKey, player.track.id);
+  }, [artworkTheme, player.playing, player.track]);
 
   useEffect(() => {
     const artworkUrl = player.track?.artworkUrl;
@@ -511,7 +530,6 @@ export function App() {
       setArtworkTheme(null);
       return;
     }
-
     let cancelled = false;
     const image = new Image();
     image.crossOrigin = "anonymous";

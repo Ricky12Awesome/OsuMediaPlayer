@@ -10,6 +10,8 @@ import type {
 const api: PlayerAPI = {
   loadLibrary: (installPath, priorityTrackId) =>
     ipcRenderer.invoke("library:load", installPath, priorityTrackId),
+  loadCachedLibrary: (installPath) =>
+    ipcRenderer.invoke("library:load-cached", installPath),
   queryLibrary: (query) => ipcRenderer.invoke("library:query", query),
   getTrack: (id) => ipcRenderer.invoke("library:track", id),
   getTrackLocation: (id, query?: LibraryQuery) =>
@@ -89,6 +91,7 @@ const api: PlayerAPI = {
   windowControl: (action) => {
     ipcRenderer.send("window:control", action);
   },
+  windowReady: () => ipcRenderer.send("window:ready"),
   platform: process.platform,
 };
 contextBridge.exposeInMainWorld("playerAPI", api);

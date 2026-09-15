@@ -61,6 +61,8 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 let window: BrowserWindow | null = null;
+let rendererReady = false;
+let windowReadyToShow = false;
 let library: LibraryIndex | null = null;
 let pendingLoad: Promise<LibraryIndex> | null = null;
 let pendingIndexCacheClear: Promise<void> | null = null;
@@ -159,6 +161,8 @@ function cancelledLibrarySummary(installPath?: string): LibrarySummary {
 }
 
 function createWindow(): void {
+  rendererReady = false;
+  windowReadyToShow = false;
   window = new BrowserWindow({
     width: 1440,
     height: 920,
@@ -177,7 +181,10 @@ function createWindow(): void {
       backgroundThrottling: false,
     },
   });
-  window.once("ready-to-show", () => window?.show());
+  window.once("ready-to-show", () => {
+    windowReadyToShow = true;
+    if (rendererReady) window?.show();
+  });
   window.on("enter-full-screen", () =>
     window?.webContents.send("window:fullscreen", true),
   );
@@ -317,6 +324,43 @@ function assetKindForAction(
 }
 
 function setupIPC(): void {
+  ipcMain.on("window:ready", (event) => {
+    if (!isTrusted(event)) return;
+    rendererReady = true;
+    if (windowReadyToShow) window?.show();
+  });
+  ipcMain.handle(
+    "library:load-cached",
+    async (event, requestedPath: unknown) => {
+      requireTrusted(event);
+      if (quitting || pendingLoad) return null;
+      if (
+        requestedPath !== undefined &&
+        (typeof requestedPath !== "string" || !isAbsolute(requestedPath))
+      )
+        return null;
+      const installPath = requestedPath as string | undefined;
+      try {
+        const loaded = await loadLibraryInWorker(
+          installPath,
+          undefined,
+          undefined,
+          (index) => {
+            library = index;
+          },
+          join(app.getPath("userData"), "library-cache"),
+          undefined,
+          true,
+        );
+        replaceLibrary(loaded);
+        return loaded.summary;
+      } catch {
+        // A miss is expected here. The renderer will begin the normal streamed
+        // import after it has painted its loading UI.
+        return null;
+      }
+    },
+  );
   ipcMain.handle(
     "library:load",
     async (event, requestedPath: unknown, priorityTrackId: unknown) => {
