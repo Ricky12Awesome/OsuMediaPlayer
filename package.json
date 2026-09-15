@@ -48,6 +48,7 @@
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
+      "node_modules/realm/**/*",
       "package.json"
     ],
     "linux": {
