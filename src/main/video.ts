@@ -16,6 +16,7 @@ const streamDirectoryName = "stream";
 const streamMetadataName = "stream.json";
 const playlistName = "playlist.m3u8";
 const defaultSettings: VideoEncodingSettings = {
+  codec: "auto",
   quality: "medium",
   maxFps: 60,
   forceRemux: true,
@@ -116,8 +117,17 @@ function normalizeSettings(
   input: VideoEncodingSettings | undefined,
 ): VideoEncodingSettings {
   const quality = input?.quality;
+  const codec = input?.codec;
   const maxFps = input?.maxFps;
   return {
+    codec:
+      codec === "auto" ||
+      codec === "av1" ||
+      codec === "hevc" ||
+      codec === "h264-hardware" ||
+      codec === "h264-software"
+        ? codec
+        : defaultSettings.codec,
     quality:
       quality && quality in qualityValues ? quality : defaultSettings.quality,
     maxFps:
@@ -129,6 +139,13 @@ function normalizeSettings(
         ? input.forceRemux
         : defaultSettings.forceRemux,
   };
+}
+
+function selectedCodec(
+  codec: VideoEncodingSettings["codec"],
+): "av1" | "hevc" | "h264" | null {
+  if (codec === "h264-hardware" || codec === "h264-software") return "h264";
+  return codec === "auto" ? null : codec;
 }
 
 function ffprobeFor(ffmpeg: string): string {
@@ -269,6 +286,7 @@ export class VideoTranscoder {
     if (!asset) return null;
     if (!videoNeedsConversion(asset.filename))
       return { url: track.videoUrl, streaming: false };
+    const settings = normalizeSettings(inputSettings);
 
     const generation = this.cacheGeneration;
     const preparation = await this.locked(async () => {
@@ -277,7 +295,17 @@ export class VideoTranscoder {
       await mkdir(this.cacheDirectory, { recursive: true });
       const destination = join(this.cacheDirectory, `${hash}.mp4`);
       const streamHash = await this.readStreamHash();
-      if (await this.rememberCached(hash, destination)) {
+      let cachedMatches = await this.rememberCached(hash, destination);
+      const requestedCodec = selectedCodec(settings.codec);
+      if (cachedMatches && requestedCodec) {
+        const cachedInfo = await this.probeSource(destination);
+        if (cachedInfo.codec !== requestedCodec) {
+          this.ready.delete(hash);
+          await rm(destination, { force: true });
+          cachedMatches = false;
+        }
+      }
+      if (cachedMatches) {
         if (
           streamHash === hash &&
           !(this.active?.hash === hash && this.active.encoding)
@@ -301,7 +329,7 @@ export class VideoTranscoder {
       const session = await this.startEncoding(
         hash,
         source.filename,
-        normalizeSettings(inputSettings),
+        settings,
         generation,
       );
       return { ready: session.ready };
@@ -571,8 +599,19 @@ export class VideoTranscoder {
       settings.forceRemux &&
       canKeepFrameRate &&
       sourceInfo.codec !== null &&
-      new Set(["av1", "hevc", "h264"]).has(sourceInfo.codec);
-    const encoders = orderedVideoEncoders(await this.availableEncoders());
+      new Set(["av1", "hevc", "h264"]).has(sourceInfo.codec) &&
+      (!selectedCodec(settings.codec) ||
+        selectedCodec(settings.codec) === sourceInfo.codec);
+    const encoders = orderedVideoEncoders(
+      await this.availableEncoders(),
+    ).filter((encoder) => {
+      if (settings.codec === "auto") return true;
+      if (settings.codec === "h264-hardware")
+        return encoder.codec === "h264" && encoder.hardware;
+      if (settings.codec === "h264-software")
+        return encoder.codec === "h264" && !encoder.hardware;
+      return encoder.codec === settings.codec;
+    });
     const attempts: Array<{ label: string; args: string[] }> = [];
     if (canRemux) {
       attempts.push({

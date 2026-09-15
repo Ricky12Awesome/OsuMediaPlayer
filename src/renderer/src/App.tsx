@@ -60,11 +60,10 @@ import type {
   Track,
   TrackContextMenuAction,
   TrackContextMenuInfo,
-  VideoEncodingQuality,
-  VideoMaxFps,
 } from "../../shared/types";
 import { FacetPicker } from "./FacetPicker";
 import { SortPicker } from "./SortPicker";
+import { SettingsPicker } from "./SettingsPicker";
 import { TrackArt } from "./TrackArt";
 import { TrackContextMenu } from "./TrackContextMenu";
 import { extractArtworkTheme, type ArtworkTheme } from "./artwork-theme";
@@ -104,6 +103,26 @@ type SeekPreview = {
   time: number;
   position: number;
 };
+const videoCodecOptions = [
+  { value: "auto", label: "Auto (best available)" },
+  { value: "av1", label: "AV1" },
+  { value: "hevc", label: "H.265 / HEVC" },
+  { value: "h264-hardware", label: "H.264 (hardware)" },
+  { value: "h264-software", label: "H.264 (software)" },
+] as const;
+const videoQualityOptions = [
+  { value: "very-low", label: "Very low" },
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+  { value: "very-high", label: "Very high" },
+] as const;
+const videoFpsOptions = [
+  { value: 0, label: "No cap" },
+  { value: 24, label: "24 FPS" },
+  { value: 30, label: "30 FPS" },
+  { value: 60, label: "60 FPS" },
+] as const;
 type TrackContextMenuState = {
   track: Track;
   x: number;
@@ -2191,37 +2210,31 @@ export function App({
               </span>
               <div className="video-encoding-fields">
                 <label>
+                  <span>Codec</span>
+                  <SettingsPicker
+                    label="Video codec"
+                    value={player.videoEncodingCodec}
+                    options={videoCodecOptions}
+                    onChange={player.setVideoEncodingCodec}
+                  />
+                </label>
+                <label>
                   <span>Quality</span>
-                  <select
+                  <SettingsPicker
+                    label="Video quality"
                     value={player.videoEncodingQuality}
-                    onChange={(event) =>
-                      player.setVideoEncodingQuality(
-                        event.target.value as VideoEncodingQuality,
-                      )
-                    }
-                  >
-                    <option value="very-low">Very low</option>
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                    <option value="very-high">Very high</option>
-                  </select>
+                    options={videoQualityOptions}
+                    onChange={player.setVideoEncodingQuality}
+                  />
                 </label>
                 <label>
                   <span>Frame-rate cap</span>
-                  <select
+                  <SettingsPicker
+                    label="Video frame-rate cap"
                     value={player.videoMaxFps}
-                    onChange={(event) =>
-                      player.setVideoMaxFps(
-                        Number(event.target.value) as VideoMaxFps,
-                      )
-                    }
-                  >
-                    <option value={0}>No cap</option>
-                    <option value={24}>24 FPS</option>
-                    <option value={30}>30 FPS</option>
-                    <option value={60}>60 FPS</option>
-                  </select>
+                    options={videoFpsOptions}
+                    onChange={player.setVideoMaxFps}
+                  />
                 </label>
               </div>
               <button

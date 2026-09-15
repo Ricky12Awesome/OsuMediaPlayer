@@ -228,7 +228,7 @@
   margin-top: 24px;
 }
 .video-encoding-fields {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   margin-top: 12px;
   display: grid;
@@ -241,20 +241,6 @@
   font-size: 9px;
   font-weight: 800;
   display: flex;
-}
-.video-encoding-fields select {
-  color: #d8c8df;
-  background: var(--panel-deep);
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  width: 100%;
-  padding: 10px;
-  font: inherit;
-  font-size: 11px;
-}
-.video-encoding-fields select:focus-visible {
-  border-color: var(--pink);
-  outline: 2px solid rgb(var(--pink-rgb) / 0.18);
 }
 .settings-toggle {
   color: #927e9e;

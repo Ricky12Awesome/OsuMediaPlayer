@@ -1,6 +1,7 @@
 import type {
   LibraryQuery,
   RepeatMode,
+  VideoEncodingCodec,
   VideoEncodingQuality,
   VideoMaxFps,
 } from "../../shared/types";
@@ -11,6 +12,7 @@ export interface PlaybackSettings {
   shuffle: boolean;
   repeat: RepeatMode;
   playVideos: boolean;
+  videoEncodingCodec: VideoEncodingCodec;
   videoEncodingQuality: VideoEncodingQuality;
   videoMaxFps: VideoMaxFps;
   videoForceRemux: boolean;
@@ -202,6 +204,7 @@ export const defaultPlaybackSettings: PlaybackSettings = {
   shuffle: false,
   repeat: "off",
   playVideos: true,
+  videoEncodingCodec: "auto",
   videoEncodingQuality: "medium",
   videoMaxFps: 60,
   videoForceRemux: true,
@@ -237,6 +240,14 @@ export function parsePlaybackSettings(
         typeof record.playVideos === "boolean"
           ? record.playVideos
           : defaultPlaybackSettings.playVideos,
+      videoEncodingCodec:
+        record.videoEncodingCodec === "auto" ||
+        record.videoEncodingCodec === "av1" ||
+        record.videoEncodingCodec === "hevc" ||
+        record.videoEncodingCodec === "h264-hardware" ||
+        record.videoEncodingCodec === "h264-software"
+          ? record.videoEncodingCodec
+          : defaultPlaybackSettings.videoEncodingCodec,
       videoEncodingQuality:
         record.videoEncodingQuality === "very-low" ||
         record.videoEncodingQuality === "low" ||

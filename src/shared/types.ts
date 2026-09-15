@@ -126,10 +126,13 @@ export interface CacheUsage {
 
 export type VideoEncodingQuality =
   "very-low" | "low" | "medium" | "high" | "very-high";
+export type VideoEncodingCodec =
+  "auto" | "av1" | "hevc" | "h264-hardware" | "h264-software";
 
 export type VideoMaxFps = 0 | 24 | 30 | 60;
 
 export interface VideoEncodingSettings {
+  codec: VideoEncodingCodec;
   quality: VideoEncodingQuality;
   maxFps: VideoMaxFps;
   forceRemux: boolean;

@@ -10,6 +10,7 @@ import type {
   PlayerAPI,
   RepeatMode,
   Track,
+  VideoEncodingCodec,
   VideoEncodingQuality,
   VideoMaxFps,
 } from "../../shared/types";
@@ -61,6 +62,10 @@ export interface PlayerState {
   cycleRepeat: () => void;
   playVideos: boolean;
   setPlayVideos: React.Dispatch<React.SetStateAction<boolean>>;
+  videoEncodingCodec: VideoEncodingCodec;
+  setVideoEncodingCodec: React.Dispatch<
+    React.SetStateAction<VideoEncodingCodec>
+  >;
   videoEncodingQuality: VideoEncodingQuality;
   setVideoEncodingQuality: React.Dispatch<
     React.SetStateAction<VideoEncodingQuality>
@@ -122,6 +127,9 @@ export function usePlayer(
   const [shuffle, setShuffle] = useState(settings.shuffle);
   const [repeat, setRepeat] = useState(settings.repeat);
   const [playVideos, setPlayVideos] = useState(settings.playVideos);
+  const [videoEncodingCodec, setVideoEncodingCodec] = useState(
+    settings.videoEncodingCodec,
+  );
   const [videoEncodingQuality, setVideoEncodingQuality] = useState(
     settings.videoEncodingQuality,
   );
@@ -533,6 +541,7 @@ export function usePlayer(
     setShuffle(defaultPlaybackSettings.shuffle);
     setRepeat(defaultPlaybackSettings.repeat);
     setPlayVideos(defaultPlaybackSettings.playVideos);
+    setVideoEncodingCodec(defaultPlaybackSettings.videoEncodingCodec);
     setVideoEncodingQuality(defaultPlaybackSettings.videoEncodingQuality);
     setVideoMaxFps(defaultPlaybackSettings.videoMaxFps);
     setVideoForceRemux(defaultPlaybackSettings.videoForceRemux);
@@ -561,6 +570,7 @@ export function usePlayer(
           shuffle,
           repeat,
           playVideos,
+          videoEncodingCodec,
           videoEncodingQuality,
           videoMaxFps,
           videoForceRemux,
@@ -573,6 +583,7 @@ export function usePlayer(
     audio,
     muted,
     playVideos,
+    videoEncodingCodec,
     repeat,
     shuffle,
     videoEncodingQuality,
@@ -761,6 +772,7 @@ export function usePlayer(
     setVideoLoading(true);
     api
       .prepareVideo(track.id, {
+        codec: videoEncodingCodec,
         quality: videoEncodingQuality,
         maxFps: videoMaxFps,
         forceRemux: videoForceRemux,
@@ -793,6 +805,7 @@ export function usePlayer(
     track?.id,
     track?.videoUrl,
     videoEncodingQuality,
+    videoEncodingCodec,
     videoForceRemux,
     videoMaxFps,
   ]);
@@ -979,6 +992,8 @@ export function usePlayer(
     cycleRepeat,
     playVideos,
     setPlayVideos,
+    videoEncodingCodec,
+    setVideoEncodingCodec,
     videoEncodingQuality,
     setVideoEncodingQuality,
     videoMaxFps,
