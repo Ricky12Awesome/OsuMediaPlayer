@@ -27,6 +27,9 @@ import {
 interface RawSet {
   identity: string;
   onlineId: number;
+  dateAddedAt: number;
+  dateSubmittedAt: number;
+  dateRankedAt: number;
   files: Map<string, { hash: string; filename: string }>;
   beatmapDirectories: Map<string, string>;
 }
@@ -61,6 +64,9 @@ export interface LibraryFingerprint {
   beatmapSetCount: number;
   beatmapCount: number;
   latestDateAdded: number;
+  latestDateSubmitted: number;
+  latestDateRanked: number;
+  latestLastPlayed: number;
 }
 
 export type LibraryCollectionFingerprint = Record<string, number>;
@@ -77,6 +83,10 @@ const sorts = new Set<SortKey>([
   "duration",
   "bpm",
   "added",
+  "dateAdded",
+  "dateSubmitted",
+  "dateRanked",
+  "lastPlayed",
   "stars",
   "collection",
   "tags",
@@ -85,6 +95,10 @@ const string = (value: unknown): string =>
   typeof value === "string" ? value : "";
 const number = (value: unknown): number =>
   typeof value === "number" && Number.isFinite(value) ? value : 0;
+const dateTimestamp = (value: Date | undefined): number => {
+  const timestamp = value?.getTime() ?? 0;
+  return Number.isFinite(timestamp) ? Math.max(0, timestamp) : 0;
+};
 const beatmapTitle = (map: Beatmap): string =>
   string(map.Metadata?.Title) ||
   string(map.Metadata?.TitleUnicode) ||
@@ -310,6 +324,16 @@ export class LibraryIndex {
     const key = `${sort}:ascending`;
     const cached = this.orderCache.get(key);
     if (cached) return cached;
+    if (
+      sort === "dateAdded" ||
+      sort === "dateSubmitted" ||
+      sort === "dateRanked" ||
+      sort === "lastPlayed"
+    ) {
+      const order = this.detachedOrder(sort);
+      this.orderCache.set(key, order);
+      return order;
+    }
     const fallback = this.indexed.map((item) => item.track.id);
     const order =
       sort === "collection" && this.collections.length
@@ -455,6 +479,14 @@ export class LibraryIndex {
           return track.artist;
         case "added":
           return track.addedAt;
+        case "dateAdded":
+          return track.dateAddedAt ?? 0;
+        case "dateSubmitted":
+          return track.dateSubmittedAt ?? 0;
+        case "dateRanked":
+          return track.dateRankedAt ?? 0;
+        case "lastPlayed":
+          return track.lastPlayedAt ?? 0;
         case "collection":
           return track.collections[0] ?? "";
         case "tags":
@@ -596,6 +628,28 @@ export async function readLibraryFingerprints(
     const sets = realm.objects<BeatmapSet>("BeatmapSet");
     const latest = sets.sorted("DateAdded", true)[0];
     const latestDateAdded = latest?.DateAdded?.getTime() ?? 0;
+    let latestDateSubmitted = 0;
+    let latestDateRanked = 0;
+    for (const set of sets) {
+      signal?.throwIfAborted();
+      latestDateSubmitted = Math.max(
+        latestDateSubmitted,
+        dateTimestamp(set.DateSubmitted),
+      );
+      latestDateRanked = Math.max(
+        latestDateRanked,
+        dateTimestamp(set.DateRanked),
+      );
+    }
+    let latestLastPlayed = 0;
+    for (const map of realm
+      .objects<Beatmap>("Beatmap")
+      .filtered("BeatmapSet != nil AND BeatmapSet.DeletePending == false")) {
+      signal?.throwIfAborted();
+      const timestamp = map.LastPlayed?.getTime() ?? 0;
+      if (Number.isFinite(timestamp))
+        latestLastPlayed = Math.max(latestLastPlayed, timestamp);
+    }
     const collectionFingerprint: LibraryCollectionFingerprint = {};
     for (const collection of realm.objects<BeatmapCollection>(
       "BeatmapCollection",
@@ -615,6 +669,11 @@ export async function readLibraryFingerprints(
         beatmapSetCount: sets.length,
         beatmapCount: realm.objects<Beatmap>("Beatmap").length,
         latestDateAdded: Number.isFinite(latestDateAdded) ? latestDateAdded : 0,
+        latestDateSubmitted,
+        latestDateRanked,
+        latestLastPlayed: Number.isFinite(latestLastPlayed)
+          ? Math.max(0, latestLastPlayed)
+          : 0,
       },
       collectionFingerprint,
     };
@@ -751,7 +810,10 @@ function collectionOrder(
 
 function realmTrackOrder(
   realm: Realm,
-  sort: SortKey,
+  sort: Exclude<
+    SortKey,
+    "dateAdded" | "dateSubmitted" | "dateRanked" | "lastPlayed"
+  >,
   trackIdByBeatmap: ReadonlyMap<string, string>,
   trackIdsByMd5: ReadonlyMap<string, ReadonlySet<string>>,
   fallback: readonly string[],
@@ -911,7 +973,15 @@ export async function loadLibraryFromRealm(
         if (typeof onlineId !== "number" || !Number.isInteger(onlineId))
           continue;
         const identity = String(onlineId);
-        const set = { identity, onlineId, files, beatmapDirectories };
+        const set = {
+          identity,
+          onlineId,
+          dateAddedAt: dateTimestamp(source.DateAdded),
+          dateSubmittedAt: dateTimestamp(source.DateSubmitted),
+          dateRankedAt: dateTimestamp(source.DateRanked),
+          files,
+          beatmapDirectories,
+        };
         sets.set(key, set);
         yield { map, set };
       }
@@ -1055,6 +1125,11 @@ async function buildIndex(
     const timestamp =
       (map.LastLocalUpdate ?? map.LastOnlineUpdate)?.getTime() ?? 0;
     const addedAt = Number.isFinite(timestamp) ? Math.max(0, timestamp) : 0;
+    const playedTimestamp = map.LastPlayed?.getTime() ?? 0;
+    const lastPlayedAt = Number.isFinite(playedTimestamp)
+      ? Math.max(0, playedTimestamp)
+      : 0;
+    const { dateAddedAt, dateSubmittedAt, dateRankedAt } = set;
     const current = tracks.get(id);
     if (current) {
       current.difficultyCount++;
@@ -1065,6 +1140,13 @@ async function buildIndex(
       current.duration = Math.max(current.duration, number(map.Length) / 1000);
       current.stars = Math.max(current.stars, number(map.StarRating));
       current.addedAt = Math.max(current.addedAt, addedAt);
+      current.dateAddedAt = Math.max(current.dateAddedAt ?? 0, dateAddedAt);
+      current.dateSubmittedAt = Math.max(
+        current.dateSubmittedAt ?? 0,
+        dateSubmittedAt,
+      );
+      current.dateRankedAt = Math.max(current.dateRankedAt ?? 0, dateRankedAt);
+      current.lastPlayedAt = Math.max(current.lastPlayedAt ?? 0, lastPlayedAt);
       current.artworkUrl ||= artwork ? assetUrl(artwork.hash) : undefined;
       current.backgroundHash ||= artwork?.hash;
       current.onlineId ??= onlineId;
@@ -1093,6 +1175,10 @@ async function buildIndex(
         onlineId,
         md5Hash,
         addedAt,
+        dateAddedAt,
+        dateSubmittedAt,
+        dateRankedAt,
+        lastPlayedAt,
       };
       tracks.set(id, track);
       const videos = [...set.files.entries()].filter(([, file]) =>

@@ -57,6 +57,8 @@ test("imports linked Realm records read-only, including collections and dates", 
   const audioHash = "a".repeat(64);
   const md5 = "b".repeat(32);
   const date = new Date("2025-01-02T00:00:00Z");
+  const submitted = new Date("2025-02-02T00:00:00Z");
+  const ranked = new Date("2025-03-02T00:00:00Z");
   try {
     const fixture = new Realm({ path, schema: Schema, schemaVersion: 52 });
     try {
@@ -68,6 +70,8 @@ test("imports linked Realm records read-only, including collections and dates", 
           DeletePending: false,
           Protected: false,
           DateAdded: date,
+          DateSubmitted: submitted,
+          DateRanked: ranked,
           Files: [{ Filename: "song.mp3", File: { Hash: audioHash } }],
           Beatmaps: [
             {
@@ -83,6 +87,7 @@ test("imports linked Realm records read-only, including collections and dates", 
               BPM: 180,
               StarRating: 4,
               LastLocalUpdate: date,
+              LastPlayed: date,
               Metadata: {
                 PreviewTime: 0,
                 Title: "Song",
@@ -127,6 +132,10 @@ test("imports linked Realm records read-only, including collections and dates", 
     assert.equal(track.title, "Song");
     assert.equal(track.duration, 120);
     assert.equal(track.addedAt, date.getTime());
+    assert.equal(track.dateAddedAt, date.getTime());
+    assert.equal(track.dateSubmittedAt, submitted.getTime());
+    assert.equal(track.dateRankedAt, ranked.getTime());
+    assert.equal(track.lastPlayedAt, date.getTime());
     assert.equal(track.audioHash, audioHash);
     assert.deepEqual(track.collections, ["Favorites"]);
     assert.deepEqual(track.tags, ["dance", "favorite"]);

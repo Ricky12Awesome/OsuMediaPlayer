@@ -18,7 +18,7 @@ import type {
 import { assetUrl, isAssetHash, type MediaAsset } from "./media";
 import type { LibrarySummary, SortKey, Track } from "../shared/types";
 
-export const libraryCacheVersion = 6;
+export const libraryCacheVersion = 8;
 
 export interface LibraryCachePaths {
   directory: string;
@@ -58,6 +58,10 @@ const sortKeyList: SortKey[] = [
   "duration",
   "bpm",
   "added",
+  "dateAdded",
+  "dateSubmitted",
+  "dateRanked",
+  "lastPlayed",
   "stars",
   "collection",
   "tags",
@@ -71,7 +75,7 @@ const facetCollator = new Intl.Collator(undefined, {
 const trackReferenceBytes = 40;
 const md5Bytes = 16;
 const sha256Bytes = 32;
-const binaryVersion = 1;
+const binaryVersion = 3;
 const tracksMagic = Buffer.from("OMTR");
 const collectionsMagic = Buffer.from("OMCL");
 const ordersMagic = Buffer.from("OMOR");
@@ -133,7 +137,10 @@ export function libraryFingerprintsEqual(
   return (
     left.beatmapSetCount === right.beatmapSetCount &&
     left.beatmapCount === right.beatmapCount &&
-    left.latestDateAdded === right.latestDateAdded
+    left.latestDateAdded === right.latestDateAdded &&
+    left.latestDateSubmitted === right.latestDateSubmitted &&
+    left.latestDateRanked === right.latestDateRanked &&
+    left.latestLastPlayed === right.latestLastPlayed
   );
 }
 
@@ -187,7 +194,10 @@ function isFingerprint(value: unknown): value is LibraryFingerprint {
     isRecord(value) &&
     isFiniteNumber(value.beatmapSetCount) &&
     isFiniteNumber(value.beatmapCount) &&
-    isFiniteNumber(value.latestDateAdded)
+    isFiniteNumber(value.latestDateAdded) &&
+    isFiniteNumber(value.latestDateSubmitted) &&
+    isFiniteNumber(value.latestDateRanked) &&
+    isFiniteNumber(value.latestLastPlayed)
   );
 }
 
@@ -392,6 +402,10 @@ function serializeTracks(snapshot: LibrarySnapshot): Buffer | null {
       const track = item.track;
       const identity = parseTrackId(track.id);
       const audio = assetForHash(snapshot.assets, track.audioHash);
+      const dateAddedAt = track.dateAddedAt ?? 0;
+      const dateSubmittedAt = track.dateSubmittedAt ?? 0;
+      const dateRankedAt = track.dateRankedAt ?? 0;
+      const lastPlayedAt = track.lastPlayedAt ?? 0;
       if (
         !identity ||
         !audio ||
@@ -404,7 +418,15 @@ function serializeTracks(snapshot: LibrarySnapshot): Buffer | null {
         track.difficultyCount < 0 ||
         track.difficultyCount > 0xffffffff ||
         !Number.isSafeInteger(track.addedAt) ||
-        track.addedAt < 0
+        track.addedAt < 0 ||
+        !Number.isSafeInteger(dateAddedAt) ||
+        dateAddedAt < 0 ||
+        !Number.isSafeInteger(dateSubmittedAt) ||
+        dateSubmittedAt < 0 ||
+        !Number.isSafeInteger(dateRankedAt) ||
+        dateRankedAt < 0 ||
+        !Number.isSafeInteger(lastPlayedAt) ||
+        lastPlayedAt < 0
       )
         return null;
       seen.add(track.id);
@@ -449,6 +471,10 @@ function serializeTracks(snapshot: LibrarySnapshot): Buffer | null {
       record.writeFloat64(track.stars);
       record.writeUint32(track.difficultyCount);
       record.writeBigUint64(BigInt(track.addedAt));
+      record.writeBigUint64(BigInt(dateAddedAt));
+      record.writeBigUint64(BigInt(dateSubmittedAt));
+      record.writeBigUint64(BigInt(dateRankedAt));
+      record.writeBigUint64(BigInt(lastPlayedAt));
       if (md5Hash) record.writeBytes(md5Hash);
       record.writeString(audio.filename);
       if (background) {
@@ -543,6 +569,10 @@ function deserializeTrackRecord(data: Buffer): DecodedTrack | null {
   const stars = reader.readFloat64();
   const difficultyCount = reader.readUint32();
   const addedAt = reader.readBigUint64();
+  const dateAddedAt = reader.readBigUint64();
+  const dateSubmittedAt = reader.readBigUint64();
+  const dateRankedAt = reader.readBigUint64();
+  const lastPlayedAt = reader.readBigUint64();
   const md5Hash =
     flags & trackFlagMd5Hash
       ? reader.readBytes(md5Bytes)?.toString("hex")
@@ -563,6 +593,14 @@ function deserializeTrackRecord(data: Buffer): DecodedTrack | null {
     difficultyCount === null ||
     addedAt === null ||
     addedAt > BigInt(Number.MAX_SAFE_INTEGER) ||
+    dateAddedAt === null ||
+    dateAddedAt > BigInt(Number.MAX_SAFE_INTEGER) ||
+    dateSubmittedAt === null ||
+    dateSubmittedAt > BigInt(Number.MAX_SAFE_INTEGER) ||
+    dateRankedAt === null ||
+    dateRankedAt > BigInt(Number.MAX_SAFE_INTEGER) ||
+    lastPlayedAt === null ||
+    lastPlayedAt > BigInt(Number.MAX_SAFE_INTEGER) ||
     (flags & trackFlagMd5Hash && !md5Hash) ||
     audioFilename === null
   )
@@ -629,6 +667,10 @@ function deserializeTrackRecord(data: Buffer): DecodedTrack | null {
     onlineId: onlineId > 0n ? Number(onlineId) : undefined,
     md5Hash: md5Hash ?? undefined,
     addedAt: Number(addedAt),
+    dateAddedAt: Number(dateAddedAt),
+    dateSubmittedAt: Number(dateSubmittedAt),
+    dateRankedAt: Number(dateRankedAt),
+    lastPlayedAt: Number(lastPlayedAt),
   };
   return {
     track,

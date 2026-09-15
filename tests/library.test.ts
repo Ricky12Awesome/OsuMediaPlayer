@@ -71,6 +71,109 @@ test("library queries search, filter, sort, and paginate tracks", () => {
   assert.equal(index.getTrackLocation("2", { search: "alpha" }), null);
 });
 
+test("library sorts tracks by their most recent play time", () => {
+  const makeTrack = (id: string, lastPlayedAt: number): Track => ({
+    id,
+    title: id,
+    artist: "Artist",
+    source: "",
+    tags: [],
+    collections: [],
+    duration: 120,
+    bpm: 180,
+    stars: 4,
+    difficultyCount: 1,
+    audioUrl: "osu-media://asset/" + id.padEnd(64, "a"),
+    addedAt: 0,
+    lastPlayedAt,
+  });
+  const index = new LibraryIndex(
+    [makeTrack("never", 0), makeTrack("older", 100), makeTrack("newer", 200)],
+    new Map(),
+    {
+      trackCount: 3,
+      beatmapCount: 3,
+      collectionCount: 0,
+      collections: [],
+      tags: [],
+      installPath: "/osu",
+      skippedCount: 0,
+    },
+  );
+
+  assert.deepEqual(
+    index.query({ sort: "lastPlayed" }).items.map((track) => track.id),
+    ["never", "older", "newer"],
+  );
+  assert.deepEqual(
+    index
+      .query({ sort: "lastPlayed", descending: true })
+      .items.map((track) => track.id),
+    ["newer", "older", "never"],
+  );
+});
+
+test("library sorts tracks by beatmap set dates", () => {
+  const makeTrack = (
+    id: string,
+    dateAddedAt: number,
+    dateSubmittedAt: number,
+    dateRankedAt: number,
+  ): Track => ({
+    id,
+    title: id,
+    artist: "Artist",
+    source: "",
+    tags: [],
+    collections: [],
+    duration: 120,
+    bpm: 180,
+    stars: 4,
+    difficultyCount: 1,
+    audioUrl: "osu-media://asset/" + id.padEnd(64, "a"),
+    addedAt: 0,
+    dateAddedAt,
+    dateSubmittedAt,
+    dateRankedAt,
+  });
+  const index = new LibraryIndex(
+    [
+      makeTrack("first", 100, 300, 200),
+      makeTrack("second", 300, 100, 300),
+      makeTrack("third", 200, 200, 100),
+    ],
+    new Map(),
+    {
+      trackCount: 3,
+      beatmapCount: 3,
+      collectionCount: 0,
+      collections: [],
+      tags: [],
+      installPath: "/osu",
+      skippedCount: 0,
+    },
+  );
+
+  for (const [sort, ascending, descending] of [
+    ["dateAdded", ["first", "third", "second"], ["second", "third", "first"]],
+    [
+      "dateSubmitted",
+      ["second", "third", "first"],
+      ["first", "third", "second"],
+    ],
+    ["dateRanked", ["third", "first", "second"], ["second", "first", "third"]],
+  ] as const) {
+    assert.deepEqual(
+      index.query({ sort }).items.map((track) => track.id),
+      ascending,
+    );
+    assert.deepEqual(
+      index.query({ sort, descending: true }).items.map((track) => track.id),
+      descending,
+    );
+  }
+});
+
 test("streamed batches update existing difficulties and invalidate query and facet caches", () => {
   const summary = {
     trackCount: 1,
