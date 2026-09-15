@@ -5,6 +5,7 @@ export interface PlaybackSettings {
   muted: boolean;
   shuffle: boolean;
   repeat: RepeatMode;
+  playVideos: boolean;
 }
 
 export interface ShuffleHistory {
@@ -191,6 +192,7 @@ export const defaultPlaybackSettings: PlaybackSettings = {
   muted: false,
   shuffle: false,
   repeat: "off",
+  playVideos: true,
 };
 
 export function parsePlaybackSettings(
@@ -219,6 +221,10 @@ export function parsePlaybackSettings(
         record.repeat === "one"
           ? record.repeat
           : defaultPlaybackSettings.repeat,
+      playVideos:
+        typeof record.playVideos === "boolean"
+          ? record.playVideos
+          : defaultPlaybackSettings.playVideos,
     };
   } catch {
     return defaultPlaybackSettings;

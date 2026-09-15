@@ -1118,6 +1118,7 @@ export function App() {
   const previewStart = Math.min(currentProgress, previewPosition);
   const previewEnd = Math.max(currentProgress, previewPosition);
   const videoActive = Boolean(
+    player.playVideos &&
     player.videoUrl &&
     player.currentTime >= Math.max(0, player.track?.videoOffset ?? 0),
   );
@@ -1183,7 +1184,9 @@ export function App() {
               className={
                 "artwork-stage " +
                 (player.track?.artworkUrl ? "has-artwork " : "") +
-                (player.track?.videoUrl ? "has-video " : "") +
+                (player.playVideos && player.track?.videoUrl
+                  ? "has-video "
+                  : "") +
                 (videoActive ? "video-is-active" : "")
               }
             >
@@ -1198,7 +1201,7 @@ export function App() {
                   }}
                 />
               )}
-              {player.videoUrl && (
+              {player.playVideos && player.videoUrl && (
                 <video
                   ref={player.videoRef}
                   className={"hero-video " + (videoActive ? "is-active" : "")}
@@ -2001,6 +2004,25 @@ export function App() {
               <span className="settings-label">
                 <Palette size={16} /> APPEARANCE
               </span>
+              <button
+                type="button"
+                className={
+                  "settings-toggle " + (player.playVideos ? "active" : "")
+                }
+                aria-pressed={player.playVideos}
+                onClick={() => player.setPlayVideos((value) => !value)}
+              >
+                <span className="settings-toggle-copy">
+                  <strong>Play background videos</strong>
+                  <span>
+                    Show beatmap videos when available; otherwise show the
+                    background art
+                  </span>
+                </span>
+                <span className="settings-toggle-status">
+                  {player.playVideos ? "On" : "Off"}
+                </span>
+              </button>
               <button
                 type="button"
                 className={
