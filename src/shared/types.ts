@@ -129,6 +129,8 @@ export interface PlayerAPI {
     installPath?: string,
     priorityTrackId?: string,
   ) => Promise<LibrarySummary>;
+  /** Loads only a valid disk cache. Returns null without scanning Realm on a miss. */
+  loadCachedLibrary?: (installPath?: string) => Promise<LibrarySummary | null>;
   queryLibrary: (query?: LibraryQuery) => Promise<LibraryPage>;
   getTrack: (id: string) => Promise<Track | null>;
   getTrackLocation?: (
@@ -155,6 +157,8 @@ export interface PlayerAPI {
   windowControl: (
     action: "minimize" | "maximize" | "fullscreen" | "close",
   ) => void;
+  /** Signals that the first renderer frame has been composed. */
+  windowReady?: () => void;
   platform: string;
 }
 

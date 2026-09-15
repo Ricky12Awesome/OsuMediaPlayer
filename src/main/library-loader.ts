@@ -22,12 +22,20 @@ export function loadLibraryInWorker(
   onSnapshot?: (index: LibraryIndex) => void,
   cacheDirectory?: string,
   priorityTrackId?: string,
+  cacheOnly = false,
 ): Promise<LibraryIndex> {
   return new Promise((resolve, reject) => {
     signal?.throwIfAborted();
     const worker = fork(
       join(__dirname, "library-worker.cjs"),
-      [JSON.stringify({ installPath, cacheDirectory, priorityTrackId })],
+      [
+        JSON.stringify({
+          installPath,
+          cacheDirectory,
+          priorityTrackId,
+          cacheOnly,
+        }),
+      ],
       {
         // Electron's executable runs the loader as Node, including packaged builds.
         env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },

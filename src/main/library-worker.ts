@@ -58,6 +58,7 @@ void (async () => {
       installPath?: string;
       cacheDirectory?: string;
       priorityTrackId?: string;
+      cacheOnly?: boolean;
     };
     try {
       options = JSON.parse(argument || "{}") as {
@@ -156,6 +157,8 @@ void (async () => {
         }
         return;
       }
+      if (options.cacheOnly)
+        throw new Error("No valid library cache is available.");
     }
     const index = await loadLibraryFromRealm(
       resolvedPath,

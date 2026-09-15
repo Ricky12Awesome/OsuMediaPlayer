@@ -73,10 +73,17 @@ export interface PlayerState {
   handleVideoError: () => void;
 }
 
-export function usePlayer(api: PlayerAPI): PlayerState {
+export function usePlayer(
+  api: PlayerAPI,
+  initialTrack: Track | null = null,
+): PlayerState {
   const [audio] = useState(() => {
     const element = new Audio();
     element.crossOrigin = "anonymous";
+    if (initialTrack) {
+      element.src = initialTrack.audioUrl;
+      element.load();
+    }
     return element;
   });
   const graph = useRef<{
@@ -88,8 +95,10 @@ export function usePlayer(api: PlayerAPI): PlayerState {
   const audioRef = useRef(audio);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [settings] = useState(readSettings);
-  const [track, setTrack] = useState<Track | null>(null);
-  const [queueIndex, setQueueIndex] = useState<number | null>(null);
+  const [track, setTrack] = useState<Track | null>(initialTrack);
+  const [queueIndex, setQueueIndex] = useState<number | null>(
+    initialTrack ? 0 : null,
+  );
   const [queueQuery, setQueueQuery] = useState<LibraryQuery>({});
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -104,7 +113,7 @@ export function usePlayer(api: PlayerAPI): PlayerState {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [videoLoading, setVideoLoading] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
-  const activeTrack = useRef<Track | null>(null);
+  const activeTrack = useRef<Track | null>(initialTrack);
   const queue = useRef<{ query: LibraryQuery; index: number; total?: number }>({
     query: {},
     index: 0,
