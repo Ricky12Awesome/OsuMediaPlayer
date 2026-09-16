@@ -85,6 +85,9 @@ import { parseVisualizer } from "./visualizer-settings";
 
 const defaultPosition = "top-left";
 const defaultLibraryPosition = "right";
+const defaultSidePanelWidth = 320;
+const minSidePanelWidth = 280;
+const maxSidePanelWidth = 520;
 const positions = [
   "top-left",
   "top-center",
@@ -99,6 +102,7 @@ type CaptionPosition = (typeof positions)[number];
 type LibraryTab = "all" | "favorites";
 type LibraryPosition = "left" | "right";
 type TransportLayout = "controls-left" | "controls-centered";
+type SidePanelTab = "visualizer" | "settings";
 type SeekPreview = {
   time: number;
   position: number;
@@ -323,10 +327,21 @@ export function App({
   });
   const [fullscreen, setFullscreen] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
-  const [visualizerOpen, setVisualizerOpen] = useState(() =>
+  const [sidePanelOpen, setSidePanelOpen] = useState(() =>
     readStorage("osu-music-visualizer-panel-open", false),
   );
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [sidePanelTab, setSidePanelTab] = useState<SidePanelTab>("visualizer");
+  const [sidePanelWidth, setSidePanelWidth] = useState(() => {
+    const value = readStorage(
+      "osu-music-side-panel-width",
+      defaultSidePanelWidth,
+    );
+    return Number.isFinite(value)
+      ? Math.min(maxSidePanelWidth, Math.max(minSidePanelWidth, value))
+      : defaultSidePanelWidth;
+  });
+  const [sidePanelResizing, setSidePanelResizing] = useState(false);
+  const settingsPanelOpen = sidePanelOpen && sidePanelTab === "settings";
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [settingsResetConfirmation, setSettingsResetConfirmation] =
     useState(false);
@@ -351,6 +366,7 @@ export function App({
   const captionRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLElement>(null);
   const libraryRef = useRef<HTMLElement>(null);
+  const sidePanelRef = useRef<HTMLElement>(null);
   const trackListKeyboardRef = useRef<VirtualTrackListKeyboardControls | null>(
     null,
   );
@@ -362,6 +378,9 @@ export function App({
   const scrubPointer = useRef<number | null>(null);
   const scrubTimeRef = useRef<number | null>(null);
   const resizeStart = useRef<{ x: number; width: number } | null>(null);
+  const sidePanelResizeStart = useRef<{ x: number; width: number } | null>(
+    null,
+  );
   // A bootstrap track has its media source ready, but its queue location is
   // not known yet. Let the first library result resolve that location so the
   // transport buttons continue from the restored track rather than index 0.
@@ -447,29 +466,58 @@ export function App({
     };
   }, []);
 
+  const clampSidePanelWidth = useCallback(
+    (value: number): number => {
+      const contentWidth = mainRef.current?.clientWidth ?? window.innerWidth;
+      const visibleLibraryWidth = isDesktop && sidebarHidden ? 0 : libraryWidth;
+      const libraryResizerWidth = isDesktop && !sidebarHidden ? 7 : 0;
+      const max = Math.max(
+        minSidePanelWidth,
+        Math.min(
+          maxSidePanelWidth,
+          contentWidth - 360 - 7 - libraryResizerWidth - visibleLibraryWidth,
+        ),
+      );
+      return Math.min(max, Math.max(minSidePanelWidth, value));
+    },
+    [isDesktop, libraryWidth, sidebarHidden],
+  );
+
   const clampLibraryWidth = useCallback(
     (value: number): number => {
       const contentWidth = mainRef.current?.clientWidth ?? window.innerWidth;
-      const visualizerWidth = visualizerOpen ? 320 : 0;
+      const visibleSidePanelWidth =
+        sidePanelOpen && isDesktop ? sidePanelWidth : 0;
+      const sidePanelResizerWidth = sidePanelOpen && isDesktop ? 7 : 0;
+      const libraryResizerWidth = isDesktop && !sidebarHidden ? 7 : 0;
       const max = Math.max(
         320,
-        Math.min(720, contentWidth - 360 - 7 - visualizerWidth),
+        Math.min(
+          720,
+          contentWidth -
+            360 -
+            visibleSidePanelWidth -
+            sidePanelResizerWidth -
+            libraryResizerWidth,
+        ),
       );
       return Math.min(max, Math.max(320, value));
     },
-    [visualizerOpen],
+    [isDesktop, sidePanelOpen, sidePanelWidth, sidebarHidden],
   );
 
   useEffect(() => {
     const onResize = () => {
       setIsDesktop(window.innerWidth > 760);
-      if (window.innerWidth > 760)
+      if (window.innerWidth > 760) {
         setLibraryWidth((value) => clampLibraryWidth(value));
+        setSidePanelWidth((value) => clampSidePanelWidth(value));
+      }
     };
     onResize();
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, [clampLibraryWidth]);
+  }, [clampLibraryWidth, clampSidePanelWidth]);
 
   useEffect(() => {
     if (!resizing) return;
@@ -501,6 +549,35 @@ export function App({
   }, [clampLibraryWidth, libraryPosition, resizing]);
 
   useEffect(() => {
+    if (!sidePanelResizing) return;
+    document.body.classList.add("is-resizing-side-panel");
+    const onMove = (event: globalThis.PointerEvent) => {
+      const start = sidePanelResizeStart.current;
+      if (!start) return;
+      const delta =
+        libraryPosition === "right"
+          ? event.clientX - start.x
+          : start.x - event.clientX;
+      setSidePanelWidth(clampSidePanelWidth(start.width + delta));
+    };
+    const finish = () => {
+      sidePanelResizeStart.current = null;
+      setSidePanelResizing(false);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", finish, { once: true });
+    window.addEventListener("pointercancel", finish, { once: true });
+    window.addEventListener("blur", finish, { once: true });
+    return () => {
+      document.body.classList.remove("is-resizing-side-panel");
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", finish);
+      window.removeEventListener("blur", finish);
+    };
+  }, [clampSidePanelWidth, libraryPosition, sidePanelResizing]);
+
+  useEffect(() => {
     const timer = window.setTimeout(() => setSearch(searchDraft), 150);
     return () => window.clearTimeout(timer);
   }, [searchDraft]);
@@ -517,8 +594,12 @@ export function App({
     [sidebarHidden],
   );
   useEffect(
-    () => writeStorage("osu-music-visualizer-panel-open", visualizerOpen),
-    [visualizerOpen],
+    () => writeStorage("osu-music-visualizer-panel-open", sidePanelOpen),
+    [sidePanelOpen],
+  );
+  useEffect(
+    () => writeStorage("osu-music-side-panel-width", sidePanelWidth),
+    [sidePanelWidth],
   );
   useEffect(
     () => writeStorage("osu-music-library-position", libraryPosition),
@@ -646,9 +727,9 @@ export function App({
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
-    if ((settingsOpen || shortcutsOpen) && !dialog.open) dialog.showModal();
-    else if (!settingsOpen && !shortcutsOpen && dialog.open) dialog.close();
-  }, [settingsOpen, shortcutsOpen]);
+    if (shortcutsOpen && !dialog.open) dialog.showModal();
+    else if (!shortcutsOpen && dialog.open) dialog.close();
+  }, [shortcutsOpen]);
 
   useEffect(() => {
     if (!fullscreen) {
@@ -685,20 +766,15 @@ export function App({
         api.windowControl("fullscreen");
         return;
       }
-      if (
-        event.key === "Escape" &&
-        visualizerOpen &&
-        !settingsOpen &&
-        !shortcutsOpen
-      ) {
+      if (event.key === "Escape" && sidePanelOpen && !shortcutsOpen) {
         event.preventDefault();
-        setVisualizerOpen(false);
+        setSidePanelOpen(false);
         return;
       }
       if (
         event.key === "Escape" &&
         fullscreen &&
-        !settingsOpen &&
+        !sidePanelOpen &&
         !shortcutsOpen
       ) {
         event.preventDefault();
@@ -719,7 +795,7 @@ export function App({
         return;
       }
       if (
-        !settingsOpen &&
+        !settingsPanelOpen &&
         !shortcutsOpen &&
         event.key === "Tab" &&
         !event.altKey &&
@@ -745,7 +821,7 @@ export function App({
         return;
       }
       if (
-        !settingsOpen &&
+        !settingsPanelOpen &&
         !shortcutsOpen &&
         !target?.closest(".facet-picker, .sort-picker") &&
         !target?.matches("input[type='range']") &&
@@ -762,7 +838,7 @@ export function App({
         );
         return;
       }
-      if (settingsOpen || shortcutsOpen || editing) return;
+      if (settingsPanelOpen || shortcutsOpen || editing) return;
       if (
         event.key === "F2" &&
         !event.repeat &&
@@ -820,8 +896,8 @@ export function App({
     player.toggle,
     player.toggleMute,
     focusSearch,
-    visualizerOpen,
-    settingsOpen,
+    sidePanelOpen,
+    settingsPanelOpen,
     shortcutsOpen,
     cacheConfirmation,
     settingsResetConfirmation,
@@ -975,7 +1051,7 @@ export function App({
   const chooseLibrary = useCallback(async () => {
     const path = await api.chooseLibrary();
     if (path) {
-      setSettingsOpen(false);
+      setSidePanelOpen(false);
       await loadLibrary(path);
     }
   }, [loadLibrary]);
@@ -984,14 +1060,15 @@ export function App({
     (kind: CacheKind) => {
       if (clearingCache || (kind === "index" && importing)) return;
       setCacheConfirmation(kind);
-      setSettingsOpen(false);
+      setSidePanelOpen(false);
     },
     [clearingCache, importing],
   );
 
   const cancelCacheClear = useCallback(() => {
     setCacheConfirmation(null);
-    setSettingsOpen(true);
+    setSidePanelTab("settings");
+    setSidePanelOpen(true);
   }, []);
 
   const confirmCacheClear = useCallback(async () => {
@@ -1016,7 +1093,8 @@ export function App({
       });
     } finally {
       setClearingCache(null);
-      setSettingsOpen(true);
+      setSidePanelTab("settings");
+      setSidePanelOpen(true);
       try {
         setCacheUsage(await api.getCacheUsage());
       } catch {
@@ -1027,12 +1105,13 @@ export function App({
 
   const requestSettingsReset = useCallback(() => {
     setSettingsResetConfirmation(true);
-    setSettingsOpen(false);
+    setSidePanelOpen(false);
   }, []);
 
   const cancelSettingsReset = useCallback(() => {
     setSettingsResetConfirmation(false);
-    setSettingsOpen(true);
+    setSidePanelTab("settings");
+    setSidePanelOpen(true);
   }, []);
 
   const confirmSettingsReset = useCallback(() => {
@@ -1047,14 +1126,15 @@ export function App({
     setShowNowPlayingTitleArtist(true);
     setArtworkThemeEnabled(true);
     setLibraryWidth(430);
-    setVisualizerOpen(false);
+    setSidePanelWidth(defaultSidePanelWidth);
     setCacheNotice(null);
     setSettingsResetConfirmation(false);
-    setSettingsOpen(true);
+    setSidePanelTab("settings");
+    setSidePanelOpen(true);
   }, [player.resetPlaybackSettings]);
 
   useEffect(() => {
-    if (!settingsOpen) return;
+    if (!settingsPanelOpen) return;
     let cancelled = false;
     void api
       .getCacheUsage()
@@ -1067,7 +1147,7 @@ export function App({
     return () => {
       cancelled = true;
     };
-  }, [settingsOpen]);
+  }, [settingsPanelOpen]);
 
   useEffect(() => {
     if (!cacheConfirmation) return;
@@ -1309,6 +1389,257 @@ export function App({
       );
   };
 
+  const settingsSwitch = (
+    title: string,
+    description: string,
+    active: boolean,
+    onClick: () => void,
+  ) => (
+    <div className="settings-row">
+      <span className="settings-row-label" title={description}>
+        {title}
+      </span>
+      <button
+        type="button"
+        className={"settings-switch " + (active ? "active" : "")}
+        aria-label={title}
+        aria-pressed={active}
+        title={description}
+        onClick={onClick}
+      >
+        {active ? "On" : "Off"}
+      </button>
+    </div>
+  );
+
+  const settingsPanelContent = (
+    <>
+      <div className="settings-block settings-library">
+        <span className="settings-label">
+          <FolderOpen size={16} /> OSU!LAZER LIBRARY
+        </span>
+        <div className="settings-row">
+          <span className="settings-row-label">Folder</span>
+          <span
+            className="settings-row-value install-path"
+            title={summary?.installPath || "Default osu!lazer installation"}
+          >
+            {summary?.installPath || "Default osu!lazer installation"}
+          </span>
+        </div>
+        <div className="settings-actions">
+          <button
+            className="primary-button"
+            onClick={() => void chooseLibrary()}
+          >
+            <FolderOpen size={15} /> Choose folder
+          </button>
+          <button
+            className="secondary-button"
+            disabled={importing}
+            onClick={() => {
+              setSidePanelOpen(false);
+              void loadLibrary(summary?.installPath);
+            }}
+          >
+            <RefreshCw size={15} /> Refresh library
+          </button>
+        </div>
+      </div>
+      <div className="settings-block transport-layout-setting">
+        <div className="settings-row">
+          <span className="settings-row-label">
+            <PanelLeft size={15} /> Panel
+          </span>
+          <div
+            className="settings-choice-group"
+            aria-label="Song list position"
+          >
+            <button
+              type="button"
+              className={
+                "settings-choice-option " +
+                (libraryPosition === "left" ? "active" : "")
+              }
+              aria-pressed={libraryPosition === "left"}
+              title="Show the song list on the left"
+              onClick={() => setLibraryPosition("left")}
+            >
+              Left
+            </button>
+            <button
+              type="button"
+              className={
+                "settings-choice-option " +
+                (libraryPosition === "right" ? "active" : "")
+              }
+              aria-pressed={libraryPosition === "right"}
+              title="Show the song list on the right"
+              onClick={() => setLibraryPosition("right")}
+            >
+              Right
+            </button>
+          </div>
+        </div>
+      </div>
+      <div className="settings-block transport-layout-setting">
+        <div className="settings-row">
+          <span className="settings-row-label">
+            <SlidersHorizontal size={15} /> Controls
+          </span>
+          <div className="settings-choice-group" aria-label="Bottom bar layout">
+            <button
+              type="button"
+              className={
+                "settings-choice-option " +
+                (transportLayout === "controls-left" ? "active" : "")
+              }
+              aria-pressed={transportLayout === "controls-left"}
+              title="Keep playback controls on the left"
+              onClick={() => setTransportLayout("controls-left")}
+            >
+              Left
+            </button>
+            <button
+              type="button"
+              className={
+                "settings-choice-option " +
+                (transportLayout === "controls-centered" ? "active" : "")
+              }
+              aria-pressed={transportLayout === "controls-centered"}
+              title="Center playback controls"
+              onClick={() => setTransportLayout("controls-centered")}
+            >
+              Center
+            </button>
+          </div>
+        </div>
+      </div>
+      <div className="settings-block artwork-theme-setting">
+        <span className="settings-label">
+          <Palette size={16} /> APPEARANCE
+        </span>
+        {settingsSwitch(
+          "Show Videos",
+          "Show beatmap videos when available; otherwise show the background art",
+          player.playVideos,
+          () => player.setPlayVideos((value) => !value),
+        )}
+        {settingsSwitch(
+          "Dynamic Theme",
+          "Theme the app background from the current song's artwork",
+          artworkThemeEnabled,
+          () => setArtworkThemeEnabled((value) => !value),
+        )}
+      </div>
+      <div className="settings-block video-encoding-setting">
+        <span className="settings-label">
+          <SlidersHorizontal size={16} /> VIDEO ENCODING
+        </span>
+        <div className="settings-row">
+          <span className="settings-row-label">Codec</span>
+          <SettingsPicker
+            label="Video codec"
+            value={player.videoEncodingCodec}
+            options={videoCodecOptions}
+            onChange={player.setVideoEncodingCodec}
+          />
+        </div>
+        <div className="settings-row">
+          <span className="settings-row-label">Quality</span>
+          <SettingsPicker
+            label="Video quality"
+            value={player.videoEncodingQuality}
+            options={videoQualityOptions}
+            onChange={player.setVideoEncodingQuality}
+          />
+        </div>
+        <div className="settings-row">
+          <span className="settings-row-label">FPS Cap</span>
+          <SettingsPicker
+            label="Video FPS cap"
+            value={player.videoMaxFps}
+            options={videoFpsOptions}
+            onChange={player.setVideoMaxFps}
+          />
+        </div>
+        {settingsSwitch(
+          "Force remux when possible",
+          "Copy compatible video without re-encoding; automatically encode when copying is not supported",
+          player.videoForceRemux,
+          () => player.setVideoForceRemux((value) => !value),
+        )}
+      </div>
+      <div className="settings-block now-playing-display-setting">
+        <span className="settings-label">
+          {showNowPlayingTitleArtist ? <Eye size={16} /> : <EyeOff size={16} />}{" "}
+          NOW PLAYING
+        </span>
+        {settingsSwitch(
+          "Show title / artist",
+          "Display track details over the artwork",
+          showNowPlayingTitleArtist,
+          () => setShowNowPlayingTitleArtist((value) => !value),
+        )}
+      </div>
+      <div className="settings-stats">
+        <span>
+          <strong>{summary?.trackCount.toLocaleString() ?? "—"}</strong> songs
+        </span>
+        <span>
+          <strong>{summary?.beatmapCount.toLocaleString() ?? "—"}</strong>{" "}
+          beatmaps
+        </span>
+        <span>
+          <strong>{summary?.collectionCount ?? "—"}</strong> collections
+        </span>
+      </div>
+      <div className="settings-block maintenance-setting">
+        <span className="settings-label">
+          <Trash2 size={16} /> CACHE &amp; SETTINGS
+        </span>
+        <div className="settings-actions maintenance-actions">
+          <button
+            type="button"
+            className="secondary-button settings-reset-button"
+            title="Restore playback, layout, appearance, sorting, and visualizer preferences to their original defaults"
+            onClick={requestSettingsReset}
+          >
+            <RefreshCw size={15} /> Reset
+          </button>
+          {(["index", "video"] as CacheKind[]).map((kind) => {
+            const active = clearingCache === kind;
+            const disabled =
+              clearingCache !== null || (kind === "index" && importing);
+            return (
+              <button
+                key={kind}
+                type="button"
+                className="danger-button cache-button"
+                aria-label={`Clear ${cacheName(kind)} cache`}
+                disabled={disabled}
+                onClick={() => requestCacheClear(kind)}
+              >
+                <strong>
+                  {active && <LoaderCircle className="spin" size={13} />}
+                  {active ? "Deleting…" : cacheName(kind)}
+                </strong>
+                <span className="cache-button-usage">
+                  {formatCacheSize(cacheUsage?.[kind])}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        {cacheNotice && (
+          <p className={"cache-notice " + cacheNotice.kind} role="status">
+            {cacheNotice.message}
+          </p>
+        )}
+      </div>
+    </>
+  );
+
   return (
     <div
       className={
@@ -1327,12 +1658,18 @@ export function App({
           className={
             "main-content " +
             (resizing ? "is-resizing " : "") +
-            (visualizerOpen ? "visualizer-is-open " : "") +
+            (sidePanelResizing ? "is-resizing-side-panel " : "") +
+            (sidePanelOpen ? "side-panel-is-open " : "") +
             (libraryHidden ? "sidebar-is-hidden " : "") +
             "library-position-" +
             libraryPosition
           }
-          style={{ "--library-width": libraryWidth + "px" } as CSSProperties}
+          style={
+            {
+              "--library-width": libraryWidth + "px",
+              "--side-panel-width": (sidePanelOpen ? sidePanelWidth : 0) + "px",
+            } as CSSProperties
+          }
         >
           <section className="now-playing-panel" aria-label="Now playing">
             <div
@@ -1420,35 +1757,123 @@ export function App({
           </section>
 
           <aside
-            id="visualizer-settings-panel"
-            className={"visualizer-panel " + (visualizerOpen ? "is-open" : "")}
-            aria-label="Audio visualizer settings"
-            aria-hidden={!visualizerOpen}
-            inert={!visualizerOpen || undefined}
+            ref={sidePanelRef}
+            id="side-settings-panel"
+            className={"side-panel " + (sidePanelOpen ? "is-open" : "")}
+            aria-label="Player tools"
+            aria-hidden={!sidePanelOpen}
+            inert={!sidePanelOpen || undefined}
           >
-            <div className="visualizer-panel-heading">
+            <div className="side-panel-heading">
               <div>
                 <span className="settings-label">
-                  <AudioWaveform size={16} /> AUDIO VISUALIZER
+                  {sidePanelTab === "visualizer" ? (
+                    <AudioWaveform size={16} />
+                  ) : (
+                    <Settings2 size={16} />
+                  )}{" "}
+                  {sidePanelTab === "visualizer"
+                    ? "AUDIO VISUALIZER"
+                    : "PLAYER SETTINGS"}
                 </span>
-                <h2>Visualizer</h2>
+                <h2>
+                  {sidePanelTab === "visualizer" ? "Visualizer" : "Settings"}
+                </h2>
               </div>
               <button
                 type="button"
                 className="icon-button"
-                aria-label="Close visualizer settings"
-                onClick={() => setVisualizerOpen(false)}
+                aria-label="Close player tools"
+                onClick={() => setSidePanelOpen(false)}
               >
                 <X size={19} />
               </button>
             </div>
-            <div className="visualizer-panel-content">
-              <VisualizerControls
-                settings={visualizer}
-                onChange={setVisualizer}
-              />
+            <div
+              className="side-panel-tabs"
+              role="tablist"
+              aria-label="Player tools"
+            >
+              <button
+                type="button"
+                role="tab"
+                id="visualizer-tab"
+                className={sidePanelTab === "visualizer" ? "active" : ""}
+                aria-selected={sidePanelTab === "visualizer"}
+                aria-controls="side-panel-tab-panel"
+                tabIndex={sidePanelTab === "visualizer" ? 0 : -1}
+                onClick={() => setSidePanelTab("visualizer")}
+              >
+                <AudioWaveform size={15} /> Visualizer
+              </button>
+              <button
+                type="button"
+                role="tab"
+                id="settings-tab"
+                className={sidePanelTab === "settings" ? "active" : ""}
+                aria-selected={sidePanelTab === "settings"}
+                aria-controls="side-panel-tab-panel"
+                tabIndex={sidePanelTab === "settings" ? 0 : -1}
+                onClick={() => setSidePanelTab("settings")}
+              >
+                <Settings2 size={15} /> Settings
+              </button>
+            </div>
+            <div
+              className="side-panel-content"
+              id="side-panel-tab-panel"
+              role="tabpanel"
+              aria-labelledby={sidePanelTab + "-tab"}
+            >
+              {sidePanelTab === "visualizer" ? (
+                <VisualizerControls
+                  settings={visualizer}
+                  onChange={setVisualizer}
+                />
+              ) : (
+                settingsPanelContent
+              )}
             </div>
           </aside>
+
+          <div
+            className="side-panel-resizer"
+            role="separator"
+            aria-label="Resize player tools panel"
+            aria-hidden={!sidePanelOpen || !isDesktop}
+            aria-orientation="vertical"
+            aria-valuemin={minSidePanelWidth}
+            aria-valuemax={maxSidePanelWidth}
+            aria-valuenow={Math.round(sidePanelWidth)}
+            tabIndex={!sidePanelOpen || !isDesktop ? -1 : 0}
+            title="Drag to resize · double-click to reset"
+            onPointerDown={(event) => {
+              if (event.button !== 0 || !sidePanelOpen || !isDesktop) return;
+              event.preventDefault();
+              sidePanelResizeStart.current = {
+                x: event.clientX,
+                width:
+                  sidePanelRef.current?.getBoundingClientRect().width ??
+                  sidePanelWidth,
+              };
+              setSidePanelResizing(true);
+            }}
+            onDoubleClick={() =>
+              setSidePanelWidth(clampSidePanelWidth(defaultSidePanelWidth))
+            }
+            onKeyDown={(event) => {
+              if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+                event.preventDefault();
+                const direction = event.key === "ArrowRight" ? 1 : -1;
+                const sign = libraryPosition === "right" ? 1 : -1;
+                setSidePanelWidth((value) =>
+                  clampSidePanelWidth(value + direction * sign * 16),
+                );
+              }
+            }}
+          >
+            <span aria-hidden="true" />
+          </div>
 
           <div
             className="library-resizer"
@@ -1920,31 +2345,22 @@ export function App({
           </button>
           <button
             className={
-              "icon-button visualizer-toggle " +
-              (visualizerOpen ? "active" : "")
+              "icon-button settings-panel-toggle " +
+              (settingsPanelOpen ? "active" : "")
             }
-            aria-label={
-              visualizerOpen
-                ? "Hide visualizer settings"
-                : "Show visualizer settings"
-            }
-            aria-pressed={visualizerOpen}
-            aria-expanded={visualizerOpen}
-            aria-controls="visualizer-settings-panel"
-            title={
-              visualizerOpen
-                ? "Hide visualizer settings"
-                : "Show visualizer settings"
-            }
-            onClick={() => setVisualizerOpen((value) => !value)}
-          >
-            <AudioWaveform size={17} />
-          </button>
-          <button
-            className="icon-button"
-            aria-label="Settings"
-            title="Settings"
-            onClick={() => setSettingsOpen(true)}
+            aria-label={settingsPanelOpen ? "Hide settings" : "Show settings"}
+            aria-pressed={settingsPanelOpen}
+            aria-expanded={sidePanelOpen}
+            aria-controls="side-settings-panel"
+            title={settingsPanelOpen ? "Hide settings" : "Show settings"}
+            onClick={() => {
+              if (settingsPanelOpen) {
+                setSidePanelOpen(false);
+              } else {
+                setSidePanelTab("settings");
+                setSidePanelOpen(true);
+              }
+            }}
           >
             <Settings2 size={17} />
           </button>
@@ -2014,34 +2430,27 @@ export function App({
       <dialog
         ref={dialogRef}
         className="settings-dialog"
-        onCancel={() => {
-          setSettingsOpen(false);
-          setShortcutsOpen(false);
-        }}
+        onCancel={() => setShortcutsOpen(false)}
         onClick={(event) => {
           if (event.target === event.currentTarget) {
-            setSettingsOpen(false);
             setShortcutsOpen(false);
           }
         }}
       >
         <div className="dialog-heading">
           <div>
-            <h2>{shortcutsOpen ? "Keyboard Shortcuts" : "Settings"}</h2>
+            <h2>Keyboard Shortcuts</h2>
           </div>
           <button
             className="icon-button"
             aria-label="Close dialog"
-            onClick={() => {
-              setSettingsOpen(false);
-              setShortcutsOpen(false);
-            }}
+            onClick={() => setShortcutsOpen(false)}
           >
             <X size={20} />
           </button>
         </div>
 
-        {shortcutsOpen ? (
+        {shortcutsOpen && (
           <div className="shortcuts">
             {[
               ["Play / pause", "Space"],
@@ -2068,292 +2477,6 @@ export function App({
               </div>
             ))}
           </div>
-        ) : (
-          <>
-            <div className="settings-block">
-              <span className="settings-label">
-                <FolderOpen size={16} /> OSU!LAZER LIBRARY
-              </span>
-              <p className="install-path">
-                {summary?.installPath || "Default osu!lazer installation"}
-              </p>
-              <div className="settings-actions">
-                <button
-                  className="primary-button"
-                  onClick={() => void chooseLibrary()}
-                >
-                  <FolderOpen size={15} /> Choose folder
-                </button>
-                <button
-                  className="secondary-button"
-                  disabled={importing}
-                  onClick={() => {
-                    setSettingsOpen(false);
-                    void loadLibrary(summary?.installPath);
-                  }}
-                >
-                  <RefreshCw size={15} /> Refresh library
-                </button>
-              </div>
-            </div>
-            <div className="settings-block transport-layout-setting">
-              <span className="settings-label">
-                <PanelLeft size={16} /> SONG LIST POSITION
-              </span>
-              <div
-                className="transport-layout-options"
-                aria-label="Song list position"
-              >
-                <button
-                  type="button"
-                  className={
-                    "transport-layout-option " +
-                    (libraryPosition === "left" ? "active" : "")
-                  }
-                  aria-pressed={libraryPosition === "left"}
-                  onClick={() => setLibraryPosition("left")}
-                >
-                  <strong>Left side</strong>
-                  <span>Show the song list on the left</span>
-                </button>
-                <button
-                  type="button"
-                  className={
-                    "transport-layout-option " +
-                    (libraryPosition === "right" ? "active" : "")
-                  }
-                  aria-pressed={libraryPosition === "right"}
-                  onClick={() => setLibraryPosition("right")}
-                >
-                  <strong>Right side</strong>
-                  <span>Show the song list on the right</span>
-                </button>
-              </div>
-            </div>
-            <div className="settings-block transport-layout-setting">
-              <span className="settings-label">
-                <SlidersHorizontal size={16} /> BOTTOM BAR LAYOUT
-              </span>
-              <div
-                className="transport-layout-options"
-                aria-label="Bottom bar layout"
-              >
-                <button
-                  type="button"
-                  className={
-                    "transport-layout-option " +
-                    (transportLayout === "controls-left" ? "active" : "")
-                  }
-                  aria-pressed={transportLayout === "controls-left"}
-                  onClick={() => setTransportLayout("controls-left")}
-                >
-                  <strong>Controls left</strong>
-                  <span>Track details centered</span>
-                </button>
-                <button
-                  type="button"
-                  className={
-                    "transport-layout-option " +
-                    (transportLayout === "controls-centered" ? "active" : "")
-                  }
-                  aria-pressed={transportLayout === "controls-centered"}
-                  onClick={() => setTransportLayout("controls-centered")}
-                >
-                  <strong>Controls centered</strong>
-                  <span>Track details left</span>
-                </button>
-              </div>
-            </div>
-            <div className="settings-block artwork-theme-setting">
-              <span className="settings-label">
-                <Palette size={16} /> APPEARANCE
-              </span>
-              <button
-                type="button"
-                className={
-                  "settings-toggle " + (player.playVideos ? "active" : "")
-                }
-                aria-pressed={player.playVideos}
-                onClick={() => player.setPlayVideos((value) => !value)}
-              >
-                <span className="settings-toggle-copy">
-                  <strong>Play background videos</strong>
-                  <span>
-                    Show beatmap videos when available; otherwise show the
-                    background art
-                  </span>
-                </span>
-                <span className="settings-toggle-status">
-                  {player.playVideos ? "On" : "Off"}
-                </span>
-              </button>
-              <button
-                type="button"
-                className={
-                  "settings-toggle " + (artworkThemeEnabled ? "active" : "")
-                }
-                aria-pressed={artworkThemeEnabled}
-                onClick={() => setArtworkThemeEnabled((value) => !value)}
-              >
-                <span className="settings-toggle-copy">
-                  <strong>Match artwork colors</strong>
-                  <span>
-                    Keep the player dark while tinting it from the current
-                    song&apos;s background art
-                  </span>
-                </span>
-                <span className="settings-toggle-status">
-                  {artworkThemeEnabled ? "On" : "Off"}
-                </span>
-              </button>
-            </div>
-            <div className="settings-block video-encoding-setting">
-              <span className="settings-label">
-                <SlidersHorizontal size={16} /> VIDEO ENCODING
-              </span>
-              <div className="video-encoding-fields">
-                <label>
-                  <span>Codec</span>
-                  <SettingsPicker
-                    label="Video codec"
-                    value={player.videoEncodingCodec}
-                    options={videoCodecOptions}
-                    onChange={player.setVideoEncodingCodec}
-                  />
-                </label>
-                <label>
-                  <span>Quality</span>
-                  <SettingsPicker
-                    label="Video quality"
-                    value={player.videoEncodingQuality}
-                    options={videoQualityOptions}
-                    onChange={player.setVideoEncodingQuality}
-                  />
-                </label>
-                <label>
-                  <span>Frame-rate cap</span>
-                  <SettingsPicker
-                    label="Video frame-rate cap"
-                    value={player.videoMaxFps}
-                    options={videoFpsOptions}
-                    onChange={player.setVideoMaxFps}
-                  />
-                </label>
-              </div>
-              <button
-                type="button"
-                className={
-                  "settings-toggle " + (player.videoForceRemux ? "active" : "")
-                }
-                aria-pressed={player.videoForceRemux}
-                onClick={() => player.setVideoForceRemux((value) => !value)}
-              >
-                <span className="settings-toggle-copy">
-                  <strong>Force remux when possible</strong>
-                  <span>
-                    Copy compatible video without re-encoding; automatically
-                    encode when copying is not supported
-                  </span>
-                </span>
-                <span className="settings-toggle-status">
-                  {player.videoForceRemux ? "On" : "Off"}
-                </span>
-              </button>
-            </div>
-            <div className="settings-block now-playing-display-setting">
-              <span className="settings-label">
-                {showNowPlayingTitleArtist ? (
-                  <Eye size={16} />
-                ) : (
-                  <EyeOff size={16} />
-                )}{" "}
-                NOW PLAYING
-              </span>
-              <button
-                type="button"
-                className={
-                  "settings-toggle " +
-                  (showNowPlayingTitleArtist ? "active" : "")
-                }
-                aria-pressed={showNowPlayingTitleArtist}
-                onClick={() => setShowNowPlayingTitleArtist((value) => !value)}
-              >
-                <span className="settings-toggle-copy">
-                  <strong>Show title / artist</strong>
-                  <span>Display track details over the artwork</span>
-                </span>
-                <span className="settings-toggle-status">
-                  {showNowPlayingTitleArtist ? "On" : "Off"}
-                </span>
-              </button>
-            </div>
-            <div className="settings-stats">
-              <span>
-                <strong>{summary?.trackCount.toLocaleString() ?? "—"}</strong>{" "}
-                songs
-              </span>
-              <span>
-                <strong>{summary?.beatmapCount.toLocaleString() ?? "—"}</strong>{" "}
-                beatmaps
-              </span>
-              <span>
-                <strong>{summary?.collectionCount ?? "—"}</strong> collections
-              </span>
-            </div>
-            <div className="settings-block cache-setting">
-              <span className="settings-label">
-                <Trash2 size={16} /> CACHE
-              </span>
-              <p>
-                Delete cached files to force them to be rebuilt when needed.
-              </p>
-              <div className="cache-actions">
-                {(["index", "video"] as CacheKind[]).map((kind) => {
-                  const active = clearingCache === kind;
-                  const disabled =
-                    clearingCache !== null || (kind === "index" && importing);
-                  return (
-                    <button
-                      key={kind}
-                      type="button"
-                      className="danger-button cache-button"
-                      disabled={disabled}
-                      onClick={() => requestCacheClear(kind)}
-                    >
-                      <strong>
-                        {active && <LoaderCircle className="spin" size={13} />}
-                        {active ? "Deleting…" : cacheName(kind)}
-                      </strong>
-                      <span className="cache-button-usage">
-                        {formatCacheSize(cacheUsage?.[kind])}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-              {cacheNotice && (
-                <p className={`cache-notice ${cacheNotice.kind}`} role="status">
-                  {cacheNotice.message}
-                </p>
-              )}
-            </div>
-            <div className="settings-block reset-settings-setting">
-              <span className="settings-label">
-                <RefreshCw size={16} /> SETTINGS
-              </span>
-              <p>
-                Restore playback, layout, appearance, sorting, and visualizer
-                preferences to their original defaults.
-              </p>
-              <button
-                type="button"
-                className="secondary-button settings-reset-button"
-                onClick={requestSettingsReset}
-              >
-                <RefreshCw size={15} /> Reset settings
-              </button>
-            </div>
-          </>
         )}
       </dialog>
       {cacheConfirmation && (

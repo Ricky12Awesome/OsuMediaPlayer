@@ -18,7 +18,11 @@ test("artwork themes keep generated surfaces dark and retain image color", () =>
   assert.notEqual(theme.variables["--pink-rgb"], "0 0 0");
   assert.match(theme.variables["--app-background"], /7%/);
   assert.match(theme.variables["--panel-option"], /16%/);
-  assert.match(theme.variables["--artwork-background"], /radial-gradient/);
+  assert.equal(theme.variables["--pink-foreground"], undefined);
+  assert.equal(theme.variables["--button-foreground"], undefined);
+  assert.equal(theme.variables["--now-playing-background"], undefined);
+  assert.equal(theme.variables["--artwork-background"], undefined);
+  assert.equal(theme.variables["--artwork-overlay"], undefined);
 });
 
 test("artwork themes ignore invalid or empty samples", () => {

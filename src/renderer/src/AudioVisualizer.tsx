@@ -58,98 +58,117 @@ export function VisualizerControls({
         },
       });
     })();
-  const toggleGlobal = (title: string, description: string) => (
-    <button
-      type="button"
-      className={"settings-toggle " + (settings.enabled ? "active" : "")}
-      aria-pressed={settings.enabled}
-      title={description}
-      onClick={() => onChange({ ...settings, enabled: !settings.enabled })}
-    >
-      <span className="settings-toggle-copy">
-        <strong>{title}</strong>
-        <span>{description}</span>
+  const switchRow = (
+    active: boolean,
+    title: string,
+    description: string,
+    onClick: () => void,
+    disabled = false,
+  ) => (
+    <div className="settings-row">
+      <span className="settings-row-label" title={description}>
+        {title}
       </span>
-      <span className="settings-toggle-status">
-        {settings.enabled ? "On" : "Off"}
-      </span>
-    </button>
+      <button
+        type="button"
+        className={"settings-switch " + (active ? "active" : "")}
+        aria-label={title}
+        aria-pressed={active}
+        disabled={disabled}
+        title={description}
+        onClick={onClick}
+      >
+        {active ? "On" : "Off"}
+      </button>
+    </div>
   );
+  const toggleGlobal = (title: string, description: string) =>
+    switchRow(settings.enabled, title, description, () =>
+      onChange({ ...settings, enabled: !settings.enabled }),
+    );
   const toggle = (
     key: "mirrored" | "flipped" | "mirrorVertically",
     title: string,
     description: string,
     disabled = false,
-  ) => (
-    <button
-      type="button"
-      className={"settings-toggle " + (layoutSettings[key] ? "active" : "")}
-      aria-pressed={layoutSettings[key]}
-      disabled={disabled}
-      title={description}
-      onClick={() => updateLayout({ [key]: !layoutSettings[key] })}
-    >
-      <span className="settings-toggle-copy">
-        <strong>{title}</strong>
-        <span>{description}</span>
-      </span>
-      <span className="settings-toggle-status">
-        {layoutSettings[key] ? "On" : "Off"}
-      </span>
-    </button>
-  );
+  ) =>
+    switchRow(
+      layoutSettings[key],
+      title,
+      description,
+      () => updateLayout({ [key]: !layoutSettings[key] }),
+      disabled,
+    );
   return (
     <div className="settings-block visualizer-settings">
       <span className="settings-label">AUDIO VISUALIZER</span>
       {toggleGlobal("Show visualizer", "Display bars over the artwork")}
-      <fieldset>
-        <legend>Style</legend>
-        <div className="transport-layout-options visualizer-variant-options">
-          {(
-            [
-              ["circle", "fft", "Circle (FFT)"],
-              ["circle", "waveform", "Circle (Waveform)"],
-              ["line", "fft", "Line (FFT)"],
-              ["line", "waveform", "Line (Waveform)"],
-            ] as const
-          ).map(([layout, mode, title]) => (
+      <div
+        className="visualizer-choice-fieldset"
+        role="group"
+        aria-label="Visualizer style"
+      >
+        <span className="visualizer-choice-label">Style</span>
+        <div className="settings-choice-group visualizer-choice-options">
+          {(["line", "circle"] as const).map((layout) => (
             <button
-              key={`${layout}-${mode}`}
+              key={layout}
               type="button"
-              aria-pressed={
-                settings.layout === layout && layoutSettings.mode === mode
-              }
+              aria-pressed={settings.layout === layout}
               className={
-                "transport-layout-option " +
-                (settings.layout === layout && layoutSettings.mode === mode
-                  ? "active"
-                  : "")
+                "settings-choice-option " +
+                (settings.layout === layout ? "active" : "")
               }
               onClick={() =>
                 onChange({
                   ...settings,
                   layout,
                   [layout]:
-                    settings.profiles[visualizerProfileKey(layout, mode)],
+                    settings.profiles[
+                      visualizerProfileKey(layout, layoutSettings.mode)
+                    ],
                 })
               }
             >
-              <strong>{title}</strong>
+              {layout === "line" ? "Line" : "Circle"}
             </button>
           ))}
         </div>
-      </fieldset>
+      </div>
+      <div
+        className="visualizer-choice-fieldset"
+        role="group"
+        aria-label="Visualizer mode"
+      >
+        <span className="visualizer-choice-label">Mode</span>
+        <div className="settings-choice-group visualizer-choice-options">
+          {(["fft", "waveform"] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              aria-pressed={layoutSettings.mode === mode}
+              className={
+                "settings-choice-option " +
+                (layoutSettings.mode === mode ? "active" : "")
+              }
+              onClick={() => updateLayout({ mode })}
+            >
+              {mode === "fft" ? "FFT" : "Waveform"}
+            </button>
+          ))}
+        </div>
+      </div>
       {settings.layout === "line" ? (
-        <fieldset>
+        <fieldset className="visualizer-toggle-fieldset">
           <legend>Mirroring</legend>
           {toggle(
             "mirrored",
-            "Mirror bar sequence",
+            "Mirror horizontally",
             "Reflect the sequence around its peak",
           )}
           {toggle(
             "flipped",
-            "Flip mirrored direction",
+            "Flip",
             "Place the lowest frequency at the center",
             !layoutSettings.mirrored,
           )}
@@ -160,16 +179,16 @@ export function VisualizerControls({
           )}
         </fieldset>
       ) : (
-        <fieldset>
+        <fieldset className="visualizer-toggle-fieldset">
           <legend>Mirroring</legend>
           {toggle(
             "mirrored",
-            "Mirror bar sequence",
+            "Mirror horizontally",
             "Reflect the sequence around the ring",
           )}
           {toggle(
             "flipped",
-            "Flip mirrored direction",
+            "Flip",
             "Reverse the mirrored frequency order",
             !layoutSettings.mirrored,
           )}
@@ -184,66 +203,35 @@ export function VisualizerControls({
         <legend>Bars</legend>
         {(
           [
-            [
-              "bars",
-              layoutSettings.mirrored
-                ? "Bars before mirroring"
-                : "Amount of bars",
-              8,
-              256,
-              "",
-            ],
+            ["bars", "Bars", 8, 256, ""],
             ["width", "Bar width (%)", 10, 100, "%"],
             ["length", "Bar length (%)", 10, 100, "%"],
             ...(layoutSettings.mode === "waveform"
               ? ([
                   ["waveformMultiplier", "Waveform multiplier", 1, 25, "×"],
-                  ["waveformRetention", "Waveform retention", 0, 250, " ms"],
+                  ["waveformRetention", "Retention", 0, 250, " ms"],
                 ] as const)
               : []),
             ...(layoutSettings.mode === "fft"
-              ? ([["fftRetention", "FFT retention", 0, 250, " ms"]] as const)
+              ? ([["fftRetention", "Retention", 0, 250, " ms"]] as const)
               : []),
             ...(settings.layout === "circle"
               ? ([
-                  ["inwardLength", "Inward length", 0, 100, "%"],
-                  ["radius", "Circle radius", 8, 45, "%"],
-                  ["rotation", "Circle rotation", -6, 6, ""],
+                  ["inwardLength", "Inner length", 0, 100, "%"],
+                  ["radius", "Radius", 8, 45, "%"],
+                  ["rotation", "Rotation speed", -6, 6, ""],
                 ] as const)
               : []),
           ] as const
         ).map(([name, label, min, max, unit]) => (
           <div className="visualizer-slider-card" key={name}>
-            <div className="visualizer-slider-heading">
-              <label htmlFor={`visualizer-${name}`}>
-                {label.replace(" (%)", "")}
-              </label>
-              <output htmlFor={`visualizer-${name}`}>
-                {name === "rotation" &&
-                normalizeVisualizerValue(name, layoutSettings[name]) === 0
-                  ? "Off"
-                  : `${normalizeVisualizerValue(name, layoutSettings[name])}${unit}`}
-              </output>
-            </div>
+            <label
+              className="visualizer-slider-label"
+              htmlFor={`visualizer-${name}`}
+            >
+              {label.replace(" (%)", "")}
+            </label>
             <div className="visualizer-slider-control">
-              <button
-                type="button"
-                aria-label={`Decrease ${label}`}
-                disabled={
-                  normalizeVisualizerValue(name, layoutSettings[name]) <= min
-                }
-                onClick={() =>
-                  updateLayout({
-                    [name]: Math.max(
-                      min,
-                      normalizeVisualizerValue(name, layoutSettings[name]) -
-                        visualizerStep(name),
-                    ),
-                  })
-                }
-              >
-                −
-              </button>
               <input
                 id={`visualizer-${name}`}
                 aria-label={label}
@@ -272,35 +260,26 @@ export function VisualizerControls({
                   })
                 }
               />
-              <button
-                type="button"
-                aria-label={`Increase ${label}`}
-                disabled={
-                  normalizeVisualizerValue(name, layoutSettings[name]) >= max
-                }
-                onClick={() =>
-                  updateLayout({
-                    [name]: Math.min(
-                      max,
-                      normalizeVisualizerValue(name, layoutSettings[name]) +
-                        visualizerStep(name),
-                    ),
-                  })
-                }
-              >
-                +
-              </button>
+              <div className="visualizer-slider-limits" aria-hidden="true">
+                <span>
+                  {min}
+                  {unit}
+                </span>
+                <span>
+                  {max}
+                  {unit}
+                </span>
+              </div>
             </div>
-            <div className="visualizer-slider-limits" aria-hidden="true">
-              <span>
-                {min}
-                {unit}
-              </span>
-              <span>
-                {max}
-                {unit}
-              </span>
-            </div>
+            <output
+              className="visualizer-slider-value"
+              htmlFor={`visualizer-${name}`}
+            >
+              {name === "rotation" &&
+              normalizeVisualizerValue(name, layoutSettings[name]) === 0
+                ? "Off"
+                : `${normalizeVisualizerValue(name, layoutSettings[name])}${unit}`}
+            </output>
           </div>
         ))}
       </fieldset>
