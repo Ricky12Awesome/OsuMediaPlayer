@@ -1389,15 +1389,44 @@ export function App({
       );
   };
 
+  const settingsSwitch = (
+    title: string,
+    description: string,
+    active: boolean,
+    onClick: () => void,
+  ) => (
+    <div className="settings-row">
+      <span className="settings-row-label" title={description}>
+        {title}
+      </span>
+      <button
+        type="button"
+        className={"settings-switch " + (active ? "active" : "")}
+        aria-label={title}
+        aria-pressed={active}
+        title={description}
+        onClick={onClick}
+      >
+        {active ? "On" : "Off"}
+      </button>
+    </div>
+  );
+
   const settingsPanelContent = (
     <>
-      <div className="settings-block">
+      <div className="settings-block settings-library">
         <span className="settings-label">
           <FolderOpen size={16} /> OSU!LAZER LIBRARY
         </span>
-        <p className="install-path">
-          {summary?.installPath || "Default osu!lazer installation"}
-        </p>
+        <div className="settings-row">
+          <span className="settings-row-label">Folder</span>
+          <span
+            className="settings-row-value install-path"
+            title={summary?.installPath || "Default osu!lazer installation"}
+          >
+            {summary?.installPath || "Default osu!lazer installation"}
+          </span>
+        </div>
         <div className="settings-actions">
           <button
             className="primary-button"
@@ -1418,186 +1447,140 @@ export function App({
         </div>
       </div>
       <div className="settings-block transport-layout-setting">
-        <span className="settings-label">
-          <PanelLeft size={16} /> SONG LIST POSITION
-        </span>
-        <div
-          className="transport-layout-options"
-          aria-label="Song list position"
-        >
-          <button
-            type="button"
-            className={
-              "transport-layout-option " +
-              (libraryPosition === "left" ? "active" : "")
-            }
-            aria-pressed={libraryPosition === "left"}
-            onClick={() => setLibraryPosition("left")}
+        <div className="settings-row">
+          <span className="settings-row-label">
+            <PanelLeft size={15} /> Panel
+          </span>
+          <div
+            className="settings-choice-group"
+            aria-label="Song list position"
           >
-            <strong>Left side</strong>
-            <span>Show the song list on the left</span>
-          </button>
-          <button
-            type="button"
-            className={
-              "transport-layout-option " +
-              (libraryPosition === "right" ? "active" : "")
-            }
-            aria-pressed={libraryPosition === "right"}
-            onClick={() => setLibraryPosition("right")}
-          >
-            <strong>Right side</strong>
-            <span>Show the song list on the right</span>
-          </button>
+            <button
+              type="button"
+              className={
+                "settings-choice-option " +
+                (libraryPosition === "left" ? "active" : "")
+              }
+              aria-pressed={libraryPosition === "left"}
+              title="Show the song list on the left"
+              onClick={() => setLibraryPosition("left")}
+            >
+              Left
+            </button>
+            <button
+              type="button"
+              className={
+                "settings-choice-option " +
+                (libraryPosition === "right" ? "active" : "")
+              }
+              aria-pressed={libraryPosition === "right"}
+              title="Show the song list on the right"
+              onClick={() => setLibraryPosition("right")}
+            >
+              Right
+            </button>
+          </div>
         </div>
       </div>
       <div className="settings-block transport-layout-setting">
-        <span className="settings-label">
-          <SlidersHorizontal size={16} /> BOTTOM BAR LAYOUT
-        </span>
-        <div
-          className="transport-layout-options"
-          aria-label="Bottom bar layout"
-        >
-          <button
-            type="button"
-            className={
-              "transport-layout-option " +
-              (transportLayout === "controls-left" ? "active" : "")
-            }
-            aria-pressed={transportLayout === "controls-left"}
-            onClick={() => setTransportLayout("controls-left")}
-          >
-            <strong>Controls left</strong>
-            <span>Track details centered</span>
-          </button>
-          <button
-            type="button"
-            className={
-              "transport-layout-option " +
-              (transportLayout === "controls-centered" ? "active" : "")
-            }
-            aria-pressed={transportLayout === "controls-centered"}
-            onClick={() => setTransportLayout("controls-centered")}
-          >
-            <strong>Controls centered</strong>
-            <span>Track details left</span>
-          </button>
+        <div className="settings-row">
+          <span className="settings-row-label">
+            <SlidersHorizontal size={15} /> Controls
+          </span>
+          <div className="settings-choice-group" aria-label="Bottom bar layout">
+            <button
+              type="button"
+              className={
+                "settings-choice-option " +
+                (transportLayout === "controls-left" ? "active" : "")
+              }
+              aria-pressed={transportLayout === "controls-left"}
+              title="Keep playback controls on the left"
+              onClick={() => setTransportLayout("controls-left")}
+            >
+              Left
+            </button>
+            <button
+              type="button"
+              className={
+                "settings-choice-option " +
+                (transportLayout === "controls-centered" ? "active" : "")
+              }
+              aria-pressed={transportLayout === "controls-centered"}
+              title="Center playback controls"
+              onClick={() => setTransportLayout("controls-centered")}
+            >
+              Center
+            </button>
+          </div>
         </div>
       </div>
       <div className="settings-block artwork-theme-setting">
         <span className="settings-label">
           <Palette size={16} /> APPEARANCE
         </span>
-        <button
-          type="button"
-          className={"settings-toggle " + (player.playVideos ? "active" : "")}
-          aria-pressed={player.playVideos}
-          onClick={() => player.setPlayVideos((value) => !value)}
-        >
-          <span className="settings-toggle-copy">
-            <strong>Play background videos</strong>
-            <span>
-              Show beatmap videos when available; otherwise show the background
-              art
-            </span>
-          </span>
-          <span className="settings-toggle-status">
-            {player.playVideos ? "On" : "Off"}
-          </span>
-        </button>
-        <button
-          type="button"
-          className={"settings-toggle " + (artworkThemeEnabled ? "active" : "")}
-          aria-pressed={artworkThemeEnabled}
-          onClick={() => setArtworkThemeEnabled((value) => !value)}
-        >
-          <span className="settings-toggle-copy">
-            <strong>Match artwork colors</strong>
-            <span>
-              Keep the player dark while tinting it from the current song&apos;s
-              background art
-            </span>
-          </span>
-          <span className="settings-toggle-status">
-            {artworkThemeEnabled ? "On" : "Off"}
-          </span>
-        </button>
+        {settingsSwitch(
+          "Play background videos",
+          "Show beatmap videos when available; otherwise show the background art",
+          player.playVideos,
+          () => player.setPlayVideos((value) => !value),
+        )}
+        {settingsSwitch(
+          "Match artwork colors",
+          "Keep the player dark while tinting it from the current song's background art",
+          artworkThemeEnabled,
+          () => setArtworkThemeEnabled((value) => !value),
+        )}
       </div>
       <div className="settings-block video-encoding-setting">
         <span className="settings-label">
           <SlidersHorizontal size={16} /> VIDEO ENCODING
         </span>
-        <div className="video-encoding-fields">
-          <label>
-            <span>Codec</span>
-            <SettingsPicker
-              label="Video codec"
-              value={player.videoEncodingCodec}
-              options={videoCodecOptions}
-              onChange={player.setVideoEncodingCodec}
-            />
-          </label>
-          <label>
-            <span>Quality</span>
-            <SettingsPicker
-              label="Video quality"
-              value={player.videoEncodingQuality}
-              options={videoQualityOptions}
-              onChange={player.setVideoEncodingQuality}
-            />
-          </label>
-          <label>
-            <span>Frame-rate cap</span>
-            <SettingsPicker
-              label="Video frame-rate cap"
-              value={player.videoMaxFps}
-              options={videoFpsOptions}
-              onChange={player.setVideoMaxFps}
-            />
-          </label>
+        <div className="settings-row">
+          <span className="settings-row-label">Codec</span>
+          <SettingsPicker
+            label="Video codec"
+            value={player.videoEncodingCodec}
+            options={videoCodecOptions}
+            onChange={player.setVideoEncodingCodec}
+          />
         </div>
-        <button
-          type="button"
-          className={
-            "settings-toggle " + (player.videoForceRemux ? "active" : "")
-          }
-          aria-pressed={player.videoForceRemux}
-          onClick={() => player.setVideoForceRemux((value) => !value)}
-        >
-          <span className="settings-toggle-copy">
-            <strong>Force remux when possible</strong>
-            <span>
-              Copy compatible video without re-encoding; automatically encode
-              when copying is not supported
-            </span>
-          </span>
-          <span className="settings-toggle-status">
-            {player.videoForceRemux ? "On" : "Off"}
-          </span>
-        </button>
+        <div className="settings-row">
+          <span className="settings-row-label">Quality</span>
+          <SettingsPicker
+            label="Video quality"
+            value={player.videoEncodingQuality}
+            options={videoQualityOptions}
+            onChange={player.setVideoEncodingQuality}
+          />
+        </div>
+        <div className="settings-row">
+          <span className="settings-row-label">Frame-rate cap</span>
+          <SettingsPicker
+            label="Video frame-rate cap"
+            value={player.videoMaxFps}
+            options={videoFpsOptions}
+            onChange={player.setVideoMaxFps}
+          />
+        </div>
+        {settingsSwitch(
+          "Force remux when possible",
+          "Copy compatible video without re-encoding; automatically encode when copying is not supported",
+          player.videoForceRemux,
+          () => player.setVideoForceRemux((value) => !value),
+        )}
       </div>
       <div className="settings-block now-playing-display-setting">
         <span className="settings-label">
           {showNowPlayingTitleArtist ? <Eye size={16} /> : <EyeOff size={16} />}{" "}
           NOW PLAYING
         </span>
-        <button
-          type="button"
-          className={
-            "settings-toggle " + (showNowPlayingTitleArtist ? "active" : "")
-          }
-          aria-pressed={showNowPlayingTitleArtist}
-          onClick={() => setShowNowPlayingTitleArtist((value) => !value)}
-        >
-          <span className="settings-toggle-copy">
-            <strong>Show title / artist</strong>
-            <span>Display track details over the artwork</span>
-          </span>
-          <span className="settings-toggle-status">
-            {showNowPlayingTitleArtist ? "On" : "Off"}
-          </span>
-        </button>
+        {settingsSwitch(
+          "Show title / artist",
+          "Display track details over the artwork",
+          showNowPlayingTitleArtist,
+          () => setShowNowPlayingTitleArtist((value) => !value),
+        )}
       </div>
       <div className="settings-stats">
         <span>
@@ -1611,12 +1594,19 @@ export function App({
           <strong>{summary?.collectionCount ?? "—"}</strong> collections
         </span>
       </div>
-      <div className="settings-block cache-setting">
+      <div className="settings-block maintenance-setting">
         <span className="settings-label">
-          <Trash2 size={16} /> CACHE
+          <Trash2 size={16} /> CACHE &amp; SETTINGS
         </span>
-        <p>Delete cached files to force them to be rebuilt when needed.</p>
-        <div className="cache-actions">
+        <div className="settings-actions maintenance-actions">
+          <button
+            type="button"
+            className="secondary-button settings-reset-button"
+            title="Restore playback, layout, appearance, sorting, and visualizer preferences to their original defaults"
+            onClick={requestSettingsReset}
+          >
+            <RefreshCw size={15} /> Reset
+          </button>
           {(["index", "video"] as CacheKind[]).map((kind) => {
             const active = clearingCache === kind;
             const disabled =
@@ -1626,6 +1616,7 @@ export function App({
                 key={kind}
                 type="button"
                 className="danger-button cache-button"
+                aria-label={`Clear ${cacheName(kind)} cache`}
                 disabled={disabled}
                 onClick={() => requestCacheClear(kind)}
               >
@@ -1645,22 +1636,6 @@ export function App({
             {cacheNotice.message}
           </p>
         )}
-      </div>
-      <div className="settings-block reset-settings-setting">
-        <span className="settings-label">
-          <RefreshCw size={16} /> SETTINGS
-        </span>
-        <p>
-          Restore playback, layout, appearance, sorting, and visualizer
-          preferences to their original defaults.
-        </p>
-        <button
-          type="button"
-          className="secondary-button settings-reset-button"
-          onClick={requestSettingsReset}
-        >
-          <RefreshCw size={15} /> Reset settings
-        </button>
       </div>
     </>
   );
