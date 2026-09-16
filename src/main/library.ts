@@ -303,6 +303,9 @@ export class LibraryIndex {
 
   /** Materialize one canonical ascending order per sort key. */
   async prepareSortOrders(signal?: LibraryCancellation): Promise<void> {
+    // The first streamed batch may intentionally start with the restored
+    // track. Never carry that temporary order into the completed library.
+    this.orderCache.delete("title:ascending");
     for (const sort of sorts) {
       await new Promise<void>((resolve) => setImmediate(resolve));
       signal?.throwIfAborted();
