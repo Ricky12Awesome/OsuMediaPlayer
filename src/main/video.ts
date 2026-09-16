@@ -287,6 +287,13 @@ export class VideoTranscoder {
     if (!videoNeedsConversion(asset.filename))
       return { url: track.videoUrl, streaming: false };
     const settings = normalizeSettings(inputSettings);
+    let source: Awaited<ReturnType<typeof resolveMediaFile>> = null;
+    try {
+      source = await resolveMediaFile(library, hash);
+    } catch {
+      // A cached conversion or an already-running stream does not need the
+      // original asset to be present.
+    }
 
     const generation = this.cacheGeneration;
     const preparation = await this.locked(async () => {
@@ -300,6 +307,21 @@ export class VideoTranscoder {
       if (cachedMatches && requestedCodec) {
         const cachedInfo = await this.probeSource(destination);
         if (cachedInfo.codec !== requestedCodec) {
+          this.ready.delete(hash);
+          await rm(destination, { force: true });
+          cachedMatches = false;
+        }
+      }
+      if (cachedMatches) {
+        const cachedInfo = await this.probeSource(destination);
+        const sourceInfo = source
+          ? await this.probeSource(source.filename)
+          : { duration: null };
+        const durationMismatch =
+          cachedInfo.duration !== null &&
+          sourceInfo.duration !== null &&
+          cachedInfo.duration + 2 < sourceInfo.duration;
+        if (durationMismatch) {
           this.ready.delete(hash);
           await rm(destination, { force: true });
           cachedMatches = false;
@@ -321,7 +343,6 @@ export class VideoTranscoder {
       }
       if (streamHash) await this.rotateStream(streamHash, generation);
 
-      const source = await resolveMediaFile(library, hash);
       if (!source)
         throw new Error("The beatmap video file could not be found.");
       if (generation !== this.cacheGeneration)
@@ -399,6 +420,7 @@ export class VideoTranscoder {
   private async probeSource(filename: string): Promise<{
     codec: string | null;
     fps: number | null;
+    duration: number | null;
   }> {
     const { result } = runProcess(ffprobeFor(this.executable), [
       "-v",
@@ -406,16 +428,22 @@ export class VideoTranscoder {
       "-select_streams",
       "v:0",
       "-show_entries",
-      "stream=codec_name,avg_frame_rate",
+      "stream=codec_name,avg_frame_rate,duration:format=duration",
       "-of",
       "json",
       filename,
     ]);
     const completed = await result;
-    if (completed.code !== 0) return { codec: null, fps: null };
+    if (completed.code !== 0)
+      return { codec: null, fps: null, duration: null };
     try {
       const parsed = JSON.parse(completed.stdout) as {
-        streams?: Array<{ codec_name?: string; avg_frame_rate?: string }>;
+        streams?: Array<{
+          codec_name?: string;
+          avg_frame_rate?: string;
+          duration?: string;
+        }>;
+        format?: { duration?: string };
       };
       const stream = parsed.streams?.[0];
       const [numerator, denominator] = (stream?.avg_frame_rate ?? "")
@@ -425,9 +453,14 @@ export class VideoTranscoder {
         denominator > 0 && Number.isFinite(numerator / denominator)
           ? numerator / denominator
           : null;
-      return { codec: stream?.codec_name ?? null, fps };
+      const durationValue = Number(stream?.duration ?? parsed.format?.duration);
+      return {
+        codec: stream?.codec_name ?? null,
+        fps,
+        duration: Number.isFinite(durationValue) ? durationValue : null,
+      };
     } catch {
-      return { codec: null, fps: null };
+      return { codec: null, fps: null, duration: null };
     }
   }
 
@@ -713,8 +746,8 @@ export class VideoTranscoder {
           completed.stderr.trim() || `FFmpeg exited with code ${completed.code}`
         }`,
       );
-      // A playlist already handed to the player must remain stable.
-      if (ready) return;
+      // Continue with the next encoder. A partial playlist must never be
+      // finalized into a seemingly valid but truncated cached video.
     }
     const detail = failures.at(-1);
     const error = new Error(detail || "FFmpeg could not encode this video.");
