@@ -163,12 +163,12 @@ export function VisualizerControls({
           <legend>Mirroring</legend>
           {toggle(
             "mirrored",
-            "Mirror bar sequence",
+            "Mirror horizontally",
             "Reflect the sequence around its peak",
           )}
           {toggle(
             "flipped",
-            "Flip mirrored direction",
+            "Flip",
             "Place the lowest frequency at the center",
             !layoutSettings.mirrored,
           )}
@@ -183,12 +183,12 @@ export function VisualizerControls({
           <legend>Mirroring</legend>
           {toggle(
             "mirrored",
-            "Mirror bar sequence",
+            "Mirror horizontally",
             "Reflect the sequence around the ring",
           )}
           {toggle(
             "flipped",
-            "Flip mirrored direction",
+            "Flip",
             "Reverse the mirrored frequency order",
             !layoutSettings.mirrored,
           )}
@@ -203,31 +203,23 @@ export function VisualizerControls({
         <legend>Bars</legend>
         {(
           [
-            [
-              "bars",
-              layoutSettings.mirrored
-                ? "Bars before mirroring"
-                : "Amount of bars",
-              8,
-              256,
-              "",
-            ],
+            ["bars", "Bars", 8, 256, ""],
             ["width", "Bar width (%)", 10, 100, "%"],
             ["length", "Bar length (%)", 10, 100, "%"],
             ...(layoutSettings.mode === "waveform"
               ? ([
                   ["waveformMultiplier", "Waveform multiplier", 1, 25, "×"],
-                  ["waveformRetention", "Waveform retention", 0, 250, " ms"],
+                  ["waveformRetention", "Retention", 0, 250, " ms"],
                 ] as const)
               : []),
             ...(layoutSettings.mode === "fft"
-              ? ([["fftRetention", "FFT retention", 0, 250, " ms"]] as const)
+              ? ([["fftRetention", "Retention", 0, 250, " ms"]] as const)
               : []),
             ...(settings.layout === "circle"
               ? ([
-                  ["inwardLength", "Inward length", 0, 100, "%"],
-                  ["radius", "Circle radius", 8, 45, "%"],
-                  ["rotation", "Circle rotation", -6, 6, ""],
+                  ["inwardLength", "Inner length", 0, 100, "%"],
+                  ["radius", "Radius", 8, 45, "%"],
+                  ["rotation", "Rotation speed", -6, 6, ""],
                 ] as const)
               : []),
           ] as const

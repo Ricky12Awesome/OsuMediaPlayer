@@ -1520,14 +1520,14 @@ export function App({
           <Palette size={16} /> APPEARANCE
         </span>
         {settingsSwitch(
-          "Play background videos",
+          "Show Videos",
           "Show beatmap videos when available; otherwise show the background art",
           player.playVideos,
           () => player.setPlayVideos((value) => !value),
         )}
         {settingsSwitch(
-          "Match artwork colors",
-          "Keep the player dark while tinting it from the current song's background art",
+          "Dynamic Theme",
+          "Theme the app background from the current song's artwork",
           artworkThemeEnabled,
           () => setArtworkThemeEnabled((value) => !value),
         )}
@@ -1555,9 +1555,9 @@ export function App({
           />
         </div>
         <div className="settings-row">
-          <span className="settings-row-label">Frame-rate cap</span>
+          <span className="settings-row-label">FPS Cap</span>
           <SettingsPicker
-            label="Video frame-rate cap"
+            label="Video FPS cap"
             value={player.videoMaxFps}
             options={videoFpsOptions}
             onChange={player.setVideoMaxFps}

@@ -214,7 +214,6 @@ export function createArtworkTheme(
   const accentBright = hsl(hue, accentSaturation, 74);
   const accentPale = hsl(hue, clamp(accentSaturation - 4, 54, 82), 82);
   const accentText = hsl(hue, clamp(accentSaturation - 12, 45, 76), 79);
-  const accentForeground = accentHsl.l >= 64 ? hsl(hue, 38, 12) : "#fff";
   const surfaceHue = hue;
   const border = hsl(hue, surfaceSaturation + 10, 70, 0.13);
   const rangeTrack = hsl(hue, surfaceSaturation + 8, 27);
@@ -228,10 +227,7 @@ export function createArtworkTheme(
       "--pink-bright": accentBright,
       "--pink-pale": accentPale,
       "--pink-text": accentText,
-      "--pink-foreground": accentForeground,
-      "--button-foreground": accentForeground,
       "--app-background": hsl(surfaceHue, surfaceSaturation, 7),
-      "--now-playing-background": hsl(surfaceHue, surfaceSaturation, 8),
       "--library-background": hsl(surfaceHue, surfaceSaturation, 10, 0.97),
       "--transport-background": hsl(surfaceHue, surfaceSaturation, 11),
       "--panel": hsl(surfaceHue, surfaceSaturation, 10),
@@ -260,19 +256,6 @@ export function createArtworkTheme(
       "--range-track": rangeTrack,
       "--scrollbar": hsl(surfaceHue, surfaceSaturation + 8, 31),
       "--selection": hsl(hue, accentSaturation, 62, 0.4),
-      "--artwork-background": `radial-gradient(at 67% 17%, ${hsl(
-        hue,
-        Math.max(accentSaturation - 10, 45),
-        32,
-      )} 0%, #0000 60%), radial-gradient(at 13% 67%, ${hsl(
-        secondaryHue,
-        Math.max(secondary.s, 38),
-        31,
-      )} 0%, #0000 60%), ${hsl(surfaceHue, surfaceSaturation + 4, 17)}`,
-      "--artwork-overlay": `linear-gradient(180deg, ${rgb(
-        { r: 0, g: 0, b: 0 },
-        0.08,
-      )}, ${rgb({ r: 0, g: 0, b: 0 }, 0.3)})`,
     },
   };
 }
