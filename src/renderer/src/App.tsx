@@ -2081,6 +2081,7 @@ export function App({
                   followCurrentTrackIndex={
                     queueMatches ? (player.queueIndex ?? undefined) : undefined
                   }
+                  libraryReady={!importing}
                   playing={player.playing}
                   favorites={favorites}
                   onPlay={playTrack}

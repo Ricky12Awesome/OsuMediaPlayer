@@ -48,6 +48,7 @@ export interface VirtualTrackListProps {
   revision: number;
   currentTrackId?: string;
   followCurrentTrackIndex?: number;
+  libraryReady: boolean;
   playing: boolean;
   favorites: Set<string>;
   onPlay: (track: Track, index: number) => void;
@@ -71,6 +72,7 @@ export function VirtualTrackList({
   revision,
   currentTrackId,
   followCurrentTrackIndex,
+  libraryReady,
   playing,
   favorites,
   onPlay,
@@ -347,7 +349,13 @@ export function VirtualTrackList({
   // location from the latest index so selection stays on the playing/saved
   // song while the rest of the library continues loading.
   useEffect(() => {
-    if (!currentTrackId || !api.getTrackLocation) return;
+    if (
+      !libraryReady ||
+      total === null ||
+      !currentTrackId ||
+      !api.getTrackLocation
+    )
+      return;
     let cancelled = false;
     void api
       .getTrackLocation(currentTrackId, query)
@@ -360,7 +368,7 @@ export function VirtualTrackList({
     return () => {
       cancelled = true;
     };
-  }, [api, cache, currentTrackId, query, select]);
+  }, [api, cache, currentTrackId, libraryReady, query, select, total]);
 
   const getTrack = (index: number) => {
     const page = Math.floor(index / pageSize);
