@@ -144,13 +144,13 @@
 .shuffle-button.active,
 .repeat-button.active,
 .transport-extra .sidebar-toggle.active,
-.transport-extra .visualizer-toggle.active {
+.transport-extra .settings-panel-toggle.active {
   color: var(--pink);
   background: rgb(var(--pink-rgb) / 0.09);
 }
 .repeat-button.active:hover:not(:disabled),
 .transport-extra .sidebar-toggle.active:hover:not(:disabled),
-.transport-extra .visualizer-toggle.active:hover:not(:disabled) {
+.transport-extra .settings-panel-toggle.active:hover:not(:disabled) {
   color: var(--pink-pale);
   background: rgb(var(--pink-rgb) / 0.16);
 }

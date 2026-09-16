@@ -20,12 +20,12 @@
   display: flex;
 }
 .main-content {
-  --visualizer-width: 0px;
-  grid-template-columns: var(--visualizer-width) minmax(0, 1fr) 7px var(
-      --library-width,
-      430px
-    );
-  grid-template-areas: "visualizer player resizer library";
+  --side-panel-width: 0px;
+  --side-panel-resizer-width: 0px;
+  grid-template-columns:
+    var(--side-panel-width) var(--side-panel-resizer-width) minmax(0, 1fr)
+    7px var(--library-width, 430px);
+  grid-template-areas: "visualizer visualizer-resizer player resizer library";
   flex: 1;
   gap: 0;
   min-width: 0;
@@ -39,20 +39,23 @@
     transition: grid-template-columns 0.28s cubic-bezier(0.22, 1, 0.36, 1);
     overflow: hidden;
   }
-  .main-content.visualizer-is-open {
-    --visualizer-width: 320px;
+  .main-content.side-panel-is-open {
+    --side-panel-resizer-width: 7px;
   }
   .main-content.library-position-left {
-    grid-template-columns: var(--library-width, 430px) 7px minmax(0, 1fr) var(
-        --visualizer-width
-      );
-    grid-template-areas: "library resizer player visualizer";
+    grid-template-columns:
+      var(--library-width, 430px) 7px minmax(0, 1fr)
+      var(--side-panel-resizer-width) var(--side-panel-width);
+    grid-template-areas: "library resizer player visualizer-resizer visualizer";
   }
   .now-playing-panel {
     grid-area: player;
   }
-  .visualizer-panel {
+  .side-panel {
     grid-area: visualizer;
+  }
+  .side-panel-resizer {
+    grid-area: visualizer-resizer;
   }
   .library-resizer {
     grid-area: resizer;
@@ -60,29 +63,39 @@
   .library-panel {
     grid-area: library;
   }
-  .main-content.is-resizing {
+  .main-content.is-resizing,
+  .main-content.is-resizing-side-panel {
     transition: none;
   }
   .library-resizer,
+  .side-panel-resizer,
   .library-panel,
-  .visualizer-panel {
+  .side-panel {
     transition:
       opacity 0.18s,
       transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
   }
   .main-content.sidebar-is-hidden {
-    grid-template-columns: var(--visualizer-width) minmax(0, 1fr) 0 0;
-    grid-template-areas: "visualizer player resizer library";
+    grid-template-columns:
+      var(--side-panel-width)
+      var(--side-panel-resizer-width) minmax(0, 1fr) 0 0;
+    grid-template-areas: "visualizer visualizer-resizer player resizer library";
   }
   .main-content.library-position-left.sidebar-is-hidden {
-    grid-template-columns: 0 0 minmax(0, 1fr) var(--visualizer-width);
-    grid-template-areas: "library resizer player visualizer";
+    grid-template-columns:
+      0 0 minmax(0, 1fr) var(--side-panel-resizer-width)
+      var(--side-panel-width);
+    grid-template-areas: "library resizer player visualizer-resizer visualizer";
   }
   .main-content.sidebar-is-hidden .library-resizer,
   .main-content.sidebar-is-hidden .library-panel {
     opacity: 0;
     pointer-events: none;
     transform: translate(28px);
+  }
+  .main-content:not(.side-panel-is-open) .side-panel-resizer {
+    opacity: 0;
+    pointer-events: none;
   }
   .main-content.sidebar-is-hidden .library-panel {
     visibility: hidden;
@@ -97,7 +110,7 @@
   }
 }
 
-.visualizer-panel {
+.side-panel {
   z-index: 3;
   color: #eaddf0;
   background: var(--library-background);
@@ -117,13 +130,13 @@
     transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
     visibility 0s linear 0.28s;
 }
-.main-content.library-position-left .visualizer-panel {
+.main-content.library-position-left .side-panel {
   border-right: 0;
   border-left: 1px solid var(--border);
   box-shadow: -18px 0 50px #09050e24;
   transform: translate(28px);
 }
-.main-content.visualizer-is-open .visualizer-panel {
+.main-content.side-panel-is-open .side-panel {
   opacity: 1;
   pointer-events: auto;
   transform: translate(0);
@@ -133,35 +146,72 @@
     transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
     visibility 0s;
 }
-.visualizer-panel-heading {
+.side-panel-heading {
   flex-shrink: 0;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
   display: flex;
 }
-.visualizer-panel-heading .icon-button {
+.side-panel-heading .icon-button {
   width: 28px;
   height: 28px;
 }
-.visualizer-panel-heading .settings-label {
+.side-panel-heading .settings-label {
   gap: 7px;
 }
-.visualizer-panel-heading h2 {
+.side-panel-heading h2 {
   letter-spacing: -0.7px;
   color: #eaddf0;
   margin: 2px 0 0;
   font-size: 20px;
   font-weight: 900;
 }
-.visualizer-panel-content {
+.side-panel-tabs {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  align-items: center;
+  gap: 25px;
+  margin-top: 14px;
+  display: flex;
+}
+.side-panel-tabs button {
+  color: #8e809d;
+  white-space: nowrap;
+  background: 0 0;
+  align-items: center;
+  gap: 7px;
+  padding: 11px 0 14px;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  position: relative;
+}
+.side-panel-tabs button:hover {
+  color: var(--pink-pale);
+}
+.side-panel-tabs button.active {
+  color: var(--pink);
+}
+.side-panel-tabs button.active:after {
+  content: "";
+  background: var(--pink);
+  border-radius: 3px;
+  height: 2px;
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  box-shadow: 0 0 10px rgb(var(--pink-rgb) / 0.4);
+}
+.side-panel-content {
   min-height: 0;
   overflow-y: auto;
   scrollbar-gutter: stable;
 }
-.visualizer-panel .visualizer-settings {
+.side-panel .visualizer-settings {
   margin-top: 10px;
 }
-.visualizer-panel .visualizer-settings > .settings-label {
+.side-panel .visualizer-settings > .settings-label {
   display: none;
 }

@@ -481,77 +481,100 @@
   font-variant-numeric: tabular-nums;
 }
 
-.visualizer-panel .visualizer-settings fieldset {
+.side-panel .visualizer-settings fieldset {
   margin-top: 13px;
 }
-.visualizer-panel .visualizer-settings legend {
+.side-panel .visualizer-settings legend {
   font-size: 10px;
 }
-.visualizer-panel .visualizer-settings > .settings-toggle,
-.visualizer-panel .visualizer-settings fieldset .settings-toggle {
+.side-panel .visualizer-settings > .settings-toggle,
+.side-panel .visualizer-settings fieldset .settings-toggle {
   gap: 8px;
   margin-top: 7px;
   padding: 8px 9px;
 }
-.visualizer-panel .visualizer-settings .settings-toggle-copy {
+.side-panel .visualizer-settings .settings-toggle-copy {
   gap: 0;
 }
-.visualizer-panel .visualizer-settings .settings-toggle-copy strong {
+.side-panel .visualizer-settings .settings-toggle-copy strong {
   font-size: 10px;
 }
-.visualizer-panel .visualizer-settings .settings-toggle-copy span {
+.side-panel .visualizer-settings .settings-toggle-copy span {
   display: none;
 }
-.visualizer-panel .visualizer-settings .settings-toggle-status {
+.side-panel .visualizer-settings .settings-toggle-status {
   font-size: 9px;
 }
-.visualizer-panel .visualizer-settings fieldset:nth-of-type(2) {
+.side-panel .visualizer-settings fieldset:nth-of-type(2) {
   display: block;
 }
-.visualizer-panel .visualizer-variant-options {
+.side-panel .visualizer-variant-options {
   gap: 6px;
   margin-top: 7px;
 }
-.visualizer-panel .visualizer-variant-options .transport-layout-option {
+.side-panel .visualizer-variant-options .transport-layout-option {
   gap: 2px;
   padding: 7px 8px;
 }
-.visualizer-panel .visualizer-variant-options .transport-layout-option strong {
+.side-panel .visualizer-variant-options .transport-layout-option strong {
   font-size: 10px;
 }
-.visualizer-panel .visualizer-slider-card {
+.side-panel .visualizer-slider-card {
   margin-top: 8px;
   padding: 9px;
 }
-.visualizer-panel .visualizer-slider-heading {
+.side-panel .visualizer-slider-heading {
   gap: 8px;
 }
-.visualizer-panel .visualizer-slider-heading label {
+.side-panel .visualizer-slider-heading label {
   font-size: 10px;
 }
-.visualizer-panel .visualizer-slider-heading output {
+.side-panel .visualizer-slider-heading output {
   min-width: 42px;
   padding: 3px 6px;
   font-size: 10px;
 }
-.visualizer-panel .visualizer-slider-control {
+.side-panel .visualizer-slider-control {
   gap: 7px;
   margin-top: 7px;
 }
-.visualizer-panel .visualizer-slider-control button {
+.side-panel .visualizer-slider-control button {
   width: 24px;
   height: 24px;
   border-radius: 5px;
   font-size: 15px;
 }
-.visualizer-panel .visualizer-slider-control input[type="range"] {
+.side-panel .visualizer-slider-control input[type="range"] {
   height: 24px;
 }
-.visualizer-panel .visualizer-slider-control input::-webkit-slider-thumb {
+.side-panel .visualizer-slider-control input::-webkit-slider-thumb {
   width: 12px;
   height: 12px;
 }
-.visualizer-panel .visualizer-slider-limits {
+.side-panel .visualizer-slider-limits {
   margin: 1px 31px 0;
   font-size: 8px;
+}
+
+.side-panel-content > .settings-block:first-child {
+  margin-top: 12px;
+}
+.side-panel-content .settings-actions {
+  flex-wrap: wrap;
+}
+.side-panel-content .settings-actions > button {
+  flex: 1 1 120px;
+  min-width: 0;
+}
+.side-panel-content .video-encoding-fields {
+  grid-template-columns: minmax(0, 1fr);
+}
+.side-panel-content .cache-actions {
+  grid-template-columns: minmax(0, 1fr);
+}
+.side-panel-content .settings-stats {
+  gap: 8px;
+}
+.side-panel-content .settings-stats strong {
+  font-size: 18px;
 }

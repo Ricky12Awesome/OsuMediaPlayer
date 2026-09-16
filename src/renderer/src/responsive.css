@@ -109,7 +109,7 @@
     padding: 13px 20px 0;
     display: flex;
   }
-  .visualizer-panel {
+  .side-panel {
     z-index: 6;
     position: absolute;
     inset: 13px auto 0 13px;
@@ -121,12 +121,12 @@
     box-shadow: 12px 16px 45px #09050e66;
     transform: translate(-24px);
   }
-  .main-content.library-position-left .visualizer-panel {
+  .main-content.library-position-left .side-panel {
     inset: 13px 13px 0 auto;
     border: 1px solid var(--border);
     transform: translate(24px);
   }
-  .main-content.visualizer-is-open .visualizer-panel {
+  .main-content.side-panel-is-open .side-panel {
     transform: translate(0);
   }
   .now-playing-panel,
@@ -153,7 +153,8 @@
   .search-box {
     height: 42px;
   }
-  .library-resizer {
+  .library-resizer,
+  .side-panel-resizer {
     display: none;
   }
   .library-panel {

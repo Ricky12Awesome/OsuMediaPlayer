@@ -16,7 +16,8 @@
   border-right: 1px solid var(--border);
   box-shadow: 18px 0 50px #09050e24;
 }
-.library-resizer {
+.library-resizer,
+.side-panel-resizer {
   z-index: 4;
   cursor: col-resize;
   touch-action: none;
@@ -26,12 +27,14 @@
   min-height: 0;
   position: relative;
 }
-.library-resizer:before {
+.library-resizer:before,
+.side-panel-resizer:before {
   content: "";
   position: absolute;
   inset: 0 -4px;
 }
-.library-resizer > span {
+.library-resizer > span,
+.side-panel-resizer > span {
   background: #ffffff1c;
   border-radius: 4px;
   width: 3px;
@@ -47,13 +50,22 @@
 }
 .library-resizer:hover > span,
 .library-resizer:focus-visible > span,
+.side-panel-resizer:hover > span,
+.side-panel-resizer:focus-visible > span,
 .main-content.is-resizing .library-resizer > span {
   background: var(--pink);
   height: 68px;
   box-shadow: 0 0 14px rgb(var(--pink-rgb) / 0.32);
 }
+.main-content.is-resizing-side-panel .side-panel-resizer > span {
+  background: var(--pink);
+  height: 68px;
+  box-shadow: 0 0 14px rgb(var(--pink-rgb) / 0.32);
+}
 body.is-resizing-library,
-body.is-resizing-library * {
+body.is-resizing-library *,
+body.is-resizing-side-panel,
+body.is-resizing-side-panel * {
   cursor: col-resize !important;
   -webkit-user-select: none !important;
   user-select: none !important;
