@@ -70,6 +70,25 @@
   position: absolute;
   inset: 0;
 }
+.video-encoding-indicator {
+  z-index: 4;
+  color: #f5eaf8;
+  background: #17101fcc;
+  border: 1px solid #ffffff20;
+  border-radius: 999px;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  font-size: 10px;
+  font-weight: 800;
+  display: flex;
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  box-shadow: 0 6px 24px #0006;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
 .is-favorite {
   color: var(--pink) !important;
 }

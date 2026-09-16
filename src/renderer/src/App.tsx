@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ChangeEvent,
   type CSSProperties,
   type KeyboardEvent,
   type PointerEvent,
@@ -62,6 +63,7 @@ import type {
 } from "../../shared/types";
 import { FacetPicker } from "./FacetPicker";
 import { SortPicker } from "./SortPicker";
+import { SettingsPicker } from "./SettingsPicker";
 import { TrackArt } from "./TrackArt";
 import { TrackContextMenu } from "./TrackContextMenu";
 import { extractArtworkTheme, type ArtworkTheme } from "./artwork-theme";
@@ -101,6 +103,26 @@ type SeekPreview = {
   time: number;
   position: number;
 };
+const videoCodecOptions = [
+  { value: "auto", label: "Auto (best available)" },
+  { value: "av1", label: "AV1" },
+  { value: "hevc", label: "H.265 / HEVC" },
+  { value: "h264-hardware", label: "H.264 (hardware)" },
+  { value: "h264-software", label: "H.264 (software)" },
+] as const;
+const videoQualityOptions = [
+  { value: "very-low", label: "Very low" },
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+  { value: "very-high", label: "Very high" },
+] as const;
+const videoFpsOptions = [
+  { value: 0, label: "No cap" },
+  { value: 24, label: "24 FPS" },
+  { value: 30, label: "30 FPS" },
+  { value: 60, label: "60 FPS" },
+] as const;
 type TrackContextMenuState = {
   track: Track;
   x: number;
@@ -136,6 +158,7 @@ const defaultApi: PlayerAPI = {
   queryLibrary: async () => ({ items: [], total: 0, offset: 0 }),
   getTrack: async () => null,
   prepareVideo: async () => null,
+  completeVideoStream: async () => {},
   getCacheUsage: async () => {
     throw new Error("Cache management is only available in the desktop app.");
   },
@@ -145,6 +168,7 @@ const defaultApi: PlayerAPI = {
   chooseLibrary: async () => null,
   onLibraryProgress: () => () => {},
   onMediaAction: () => () => {},
+  onVideoEncodingChange: () => () => {},
   onFullscreenChange: () => () => {},
   onZoomChange: () => () => {},
   getTrackContextMenuInfo: async () => null,
@@ -316,6 +340,7 @@ export function App({
   const [seekPreview, setSeekPreview] = useState<SeekPreview | null>(null);
   const [seekTooltipPreview, setSeekTooltipPreview] =
     useState<SeekPreview | null>(null);
+  const [scrubTime, setScrubTime] = useState<number | null>(null);
   const [resizing, setResizing] = useState(false);
   const [trackContextMenu, setTrackContextMenu] =
     useState<TrackContextMenuState | null>(null);
@@ -334,6 +359,8 @@ export function App({
   const zoomInitialized = useRef(false);
   const focusSearchAfterSidebar = useRef(false);
   const seekPreviewClearTimer = useRef<number | null>(null);
+  const scrubPointer = useRef<number | null>(null);
+  const scrubTimeRef = useRef<number | null>(null);
   const resizeStart = useRef<{ x: number; width: number } | null>(null);
   const trackInitialized = useRef(Boolean(initialTrack));
   const initialTrackRestore = useRef(0);
@@ -589,6 +616,12 @@ export function App({
     },
     [],
   );
+
+  useEffect(() => {
+    scrubPointer.current = null;
+    scrubTimeRef.current = null;
+    setScrubTime(null);
+  }, [player.track?.id]);
 
   const focusSearch = useCallback(() => {
     if (isDesktop && sidebarHidden) {
@@ -1158,6 +1191,36 @@ export function App({
     );
   };
   const duration = player.duration || player.track?.duration || 0;
+  const displayedTime = scrubTime ?? player.currentTime;
+  const beginScrubbing = (event: PointerEvent<HTMLInputElement>) => {
+    if (!player.track) return;
+    scrubPointer.current = event.pointerId;
+    const next = Number(event.currentTarget.value);
+    scrubTimeRef.current = next;
+    setScrubTime(next);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+  const updateScrubbing = (event: ChangeEvent<HTMLInputElement>) => {
+    const next = Number(event.currentTarget.value);
+    if (scrubPointer.current === null) {
+      player.seek(next);
+      return;
+    }
+    scrubTimeRef.current = next;
+    setScrubTime(next);
+  };
+  const finishScrubbing = (event: PointerEvent<HTMLInputElement>) => {
+    if (
+      scrubPointer.current === null ||
+      scrubPointer.current !== event.pointerId
+    )
+      return;
+    const next = scrubTimeRef.current ?? Number(event.currentTarget.value);
+    scrubPointer.current = null;
+    scrubTimeRef.current = null;
+    setScrubTime(null);
+    player.seek(next);
+  };
   const cancelSeekPreviewClear = () => {
     if (seekPreviewClearTimer.current !== null) {
       window.clearTimeout(seekPreviewClearTimer.current);
@@ -1194,7 +1257,7 @@ export function App({
     setSeekTooltipPreview(null);
   };
   const currentProgress = duration
-    ? Math.max(0, Math.min(100, (player.currentTime / duration) * 100))
+    ? Math.max(0, Math.min(100, (displayedTime / duration) * 100))
     : 0;
   const previewPosition = seekPreview?.position ?? currentProgress;
   const tooltipPosition =
@@ -1295,7 +1358,6 @@ export function App({
                 <video
                   ref={player.videoRef}
                   className={"hero-video " + (videoActive ? "is-active" : "")}
-                  src={player.videoUrl}
                   muted
                   playsInline
                   disablePictureInPicture
@@ -1305,6 +1367,12 @@ export function App({
                 />
               )}
               <div className="artwork-grain" />
+              {player.videoEncoding && (
+                <div className="video-encoding-indicator" role="status">
+                  <LoaderCircle className="spin" size={14} />
+                  Encoding video…
+                </div>
+              )}
               <AudioVisualizer
                 analyser={player.analyser}
                 playing={player.playing}
@@ -1667,7 +1735,7 @@ export function App({
               } as CSSProperties
             }
           >
-            {formatDuration(player.currentTime)} / {formatDuration(duration)}
+            {formatDuration(displayedTime)} / {formatDuration(duration)}
           </span>
           {seekTooltipPreview && (
             <span
@@ -1688,13 +1756,11 @@ export function App({
             min="0"
             max={duration || 1}
             step="0.1"
-            value={Math.min(player.currentTime, duration || 1)}
+            value={Math.min(displayedTime, duration || 1)}
             disabled={!player.track}
             aria-label="Seek"
             aria-valuetext={
-              formatDuration(player.currentTime) +
-              " of " +
-              formatDuration(duration)
+              formatDuration(displayedTime) + " of " + formatDuration(duration)
             }
             style={
               {
@@ -1704,8 +1770,12 @@ export function App({
               } as CSSProperties
             }
             onFocus={resetSeekPreview}
+            onPointerDown={beginScrubbing}
             onPointerMove={updateSeekPreview}
-            onChange={(event) => player.seek(Number(event.target.value))}
+            onPointerUp={finishScrubbing}
+            onPointerCancel={finishScrubbing}
+            onLostPointerCapture={finishScrubbing}
+            onChange={updateScrubbing}
           />
         </div>
 
@@ -2131,6 +2201,59 @@ export function App({
                 </span>
                 <span className="settings-toggle-status">
                   {artworkThemeEnabled ? "On" : "Off"}
+                </span>
+              </button>
+            </div>
+            <div className="settings-block video-encoding-setting">
+              <span className="settings-label">
+                <SlidersHorizontal size={16} /> VIDEO ENCODING
+              </span>
+              <div className="video-encoding-fields">
+                <label>
+                  <span>Codec</span>
+                  <SettingsPicker
+                    label="Video codec"
+                    value={player.videoEncodingCodec}
+                    options={videoCodecOptions}
+                    onChange={player.setVideoEncodingCodec}
+                  />
+                </label>
+                <label>
+                  <span>Quality</span>
+                  <SettingsPicker
+                    label="Video quality"
+                    value={player.videoEncodingQuality}
+                    options={videoQualityOptions}
+                    onChange={player.setVideoEncodingQuality}
+                  />
+                </label>
+                <label>
+                  <span>Frame-rate cap</span>
+                  <SettingsPicker
+                    label="Video frame-rate cap"
+                    value={player.videoMaxFps}
+                    options={videoFpsOptions}
+                    onChange={player.setVideoMaxFps}
+                  />
+                </label>
+              </div>
+              <button
+                type="button"
+                className={
+                  "settings-toggle " + (player.videoForceRemux ? "active" : "")
+                }
+                aria-pressed={player.videoForceRemux}
+                onClick={() => player.setVideoForceRemux((value) => !value)}
+              >
+                <span className="settings-toggle-copy">
+                  <strong>Force remux when possible</strong>
+                  <span>
+                    Copy compatible video without re-encoding; automatically
+                    encode when copying is not supported
+                  </span>
+                </span>
+                <span className="settings-toggle-status">
+                  {player.videoForceRemux ? "On" : "Off"}
                 </span>
               </button>
             </div>

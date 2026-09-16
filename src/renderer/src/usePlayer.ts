@@ -10,6 +10,9 @@ import type {
   PlayerAPI,
   RepeatMode,
   Track,
+  VideoEncodingCodec,
+  VideoEncodingQuality,
+  VideoMaxFps,
 } from "../../shared/types";
 import {
   cloneQueueQuery,
@@ -59,6 +62,18 @@ export interface PlayerState {
   cycleRepeat: () => void;
   playVideos: boolean;
   setPlayVideos: React.Dispatch<React.SetStateAction<boolean>>;
+  videoEncodingCodec: VideoEncodingCodec;
+  setVideoEncodingCodec: React.Dispatch<
+    React.SetStateAction<VideoEncodingCodec>
+  >;
+  videoEncodingQuality: VideoEncodingQuality;
+  setVideoEncodingQuality: React.Dispatch<
+    React.SetStateAction<VideoEncodingQuality>
+  >;
+  videoMaxFps: VideoMaxFps;
+  setVideoMaxFps: React.Dispatch<React.SetStateAction<VideoMaxFps>>;
+  videoForceRemux: boolean;
+  setVideoForceRemux: React.Dispatch<React.SetStateAction<boolean>>;
   resetPlaybackSettings: () => void;
   error: string | null;
   clearError: () => void;
@@ -76,6 +91,7 @@ export interface PlayerState {
   videoRef: RefObject<HTMLVideoElement | null>;
   videoUrl: string | null;
   videoLoading: boolean;
+  videoEncoding: boolean;
   videoError: string | null;
   handleVideoError: () => void;
 }
@@ -111,11 +127,24 @@ export function usePlayer(
   const [shuffle, setShuffle] = useState(settings.shuffle);
   const [repeat, setRepeat] = useState(settings.repeat);
   const [playVideos, setPlayVideos] = useState(settings.playVideos);
+  const [videoEncodingCodec, setVideoEncodingCodec] = useState(
+    settings.videoEncodingCodec,
+  );
+  const [videoEncodingQuality, setVideoEncodingQuality] = useState(
+    settings.videoEncodingQuality,
+  );
+  const [videoMaxFps, setVideoMaxFps] = useState(settings.videoMaxFps);
+  const [videoForceRemux, setVideoForceRemux] = useState(
+    settings.videoForceRemux,
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [videoStreaming, setVideoStreaming] = useState(false);
+  const [videoSourceRevision, setVideoSourceRevision] = useState(0);
   const [videoLoading, setVideoLoading] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
+  const [encodingHash, setEncodingHash] = useState<string | null>(null);
   const activeTrack = useRef<Track | null>(initialTrack);
   const queue = useRef<{ query: LibraryQuery; index: number; total?: number }>({
     query: {},
@@ -153,7 +182,7 @@ export function usePlayer(
       const target = Number.isFinite(videoDuration)
         ? Math.min(time, Math.max(0, videoDuration - 0.01))
         : time;
-      if (Math.abs(video.currentTime - target) > 0.3) {
+      if (!video.seeking && Math.abs(video.currentTime - target) > 0.3) {
         try {
           video.currentTime = target;
         } catch {
@@ -186,6 +215,7 @@ export function usePlayer(
     setLoading(false);
     setError(null);
     setVideoUrl(null);
+    setVideoStreaming(false);
     setVideoLoading(false);
     setVideoError(null);
   }, [audio]);
@@ -258,6 +288,7 @@ export function usePlayer(
       setPlaying(false);
       setError(null);
       setVideoUrl(null);
+      setVideoStreaming(false);
       setVideoLoading(playVideos && Boolean(nextTrack.videoUrl));
       setVideoError(null);
       audio.src = nextTrack.audioUrl;
@@ -510,6 +541,10 @@ export function usePlayer(
     setShuffle(defaultPlaybackSettings.shuffle);
     setRepeat(defaultPlaybackSettings.repeat);
     setPlayVideos(defaultPlaybackSettings.playVideos);
+    setVideoEncodingCodec(defaultPlaybackSettings.videoEncodingCodec);
+    setVideoEncodingQuality(defaultPlaybackSettings.videoEncodingQuality);
+    setVideoMaxFps(defaultPlaybackSettings.videoMaxFps);
+    setVideoForceRemux(defaultPlaybackSettings.videoForceRemux);
   }, []);
 
   const controls = useRef({
@@ -529,12 +564,33 @@ export function usePlayer(
     try {
       localStorage.setItem(
         settingsKey,
-        JSON.stringify({ volume, muted, shuffle, repeat, playVideos }),
+        JSON.stringify({
+          volume,
+          muted,
+          shuffle,
+          repeat,
+          playVideos,
+          videoEncodingCodec,
+          videoEncodingQuality,
+          videoMaxFps,
+          videoForceRemux,
+        }),
       );
     } catch {
       // Local storage is optional.
     }
-  }, [audio, muted, playVideos, repeat, shuffle, volume]);
+  }, [
+    audio,
+    muted,
+    playVideos,
+    videoEncodingCodec,
+    repeat,
+    shuffle,
+    videoEncodingQuality,
+    videoForceRemux,
+    videoMaxFps,
+    volume,
+  ]);
 
   useEffect(() => {
     mounted.current = true;
@@ -684,21 +740,47 @@ export function usePlayer(
   }, [api, audio, initialTrack, syncVideo]);
 
   useEffect(() => {
+    return api.onVideoEncodingChange((status) => {
+      setEncodingHash((current) =>
+        status.encoding
+          ? status.hash
+          : current === status.hash
+            ? null
+            : current,
+      );
+      if (
+        status.finalized &&
+        activeTrack.current?.videoHash?.toLowerCase() === status.hash
+      ) {
+        setVideoStreaming(false);
+        setVideoSourceRevision((revision) => revision + 1);
+      }
+    });
+  }, [api]);
+
+  useEffect(() => {
     let active = true;
     setVideoError(null);
     if (!playVideos || !track?.videoUrl) {
       videoRef.current?.pause();
       setVideoUrl(null);
+      setVideoStreaming(false);
       setVideoLoading(false);
       return;
     }
     setVideoUrl(null);
     setVideoLoading(true);
     api
-      .prepareVideo(track.id)
+      .prepareVideo(track.id, {
+        codec: videoEncodingCodec,
+        quality: videoEncodingQuality,
+        maxFps: videoMaxFps,
+        forceRemux: videoForceRemux,
+      })
       .then((prepared) => {
         if (active && activeTrack.current?.id === track.id) {
-          setVideoUrl(prepared);
+          setVideoUrl(prepared?.url ?? null);
+          setVideoStreaming(prepared?.streaming ?? false);
           setVideoLoading(false);
           if (!prepared)
             setVideoError("The beatmap video could not be prepared.");
@@ -717,7 +799,16 @@ export function usePlayer(
     return () => {
       active = false;
     };
-  }, [api, playVideos, track?.id, track?.videoUrl]);
+  }, [
+    api,
+    playVideos,
+    track?.id,
+    track?.videoUrl,
+    videoEncodingQuality,
+    videoEncodingCodec,
+    videoForceRemux,
+    videoMaxFps,
+  ]);
 
   const handleVideoError = useCallback(() => {
     setVideoUrl(null);
@@ -732,15 +823,75 @@ export function usePlayer(
     video.muted = true;
     video.preload = "metadata";
     const sync = () => syncVideo();
-    video.addEventListener("loadedmetadata", sync);
-    video.addEventListener("canplay", sync);
-    sync();
+    let hls: import("hls.js").default | null = null;
+    let disposed = false;
+    let isManagedVideo = false;
+    try {
+      const source = new URL(videoUrl);
+      isManagedVideo =
+        source.protocol === "osu-media:" && source.host === "video-cache";
+    } catch {
+      // Let the media element report a malformed direct URL normally.
+    }
+    const loadedMetadata = () => {
+      sync();
+      if (!videoStreaming && isManagedVideo && track?.videoHash)
+        void api.completeVideoStream(track.videoHash);
+    };
+    video.removeEventListener("loadedmetadata", sync);
+    video.addEventListener("loadedmetadata", loadedMetadata);
+    const loadNative = () => {
+      if (disposed) return;
+      video.src = videoUrl;
+      video.load();
+      sync();
+    };
+    if (videoStreaming) {
+      void import("hls.js/light")
+        .then(({ default: Hls }) => {
+          if (disposed) return;
+          if (!Hls.isSupported()) {
+            loadNative();
+            return;
+          }
+          const instance = new Hls({
+            backBufferLength: 20,
+            enableWorker: false,
+            maxBufferLength: 20,
+            maxMaxBufferLength: 60,
+            startFragPrefetch: true,
+            startPosition: 0,
+          });
+          hls = instance;
+          instance.on(Hls.Events.ERROR, (_event, data) => {
+            if (!disposed && data.fatal) handleVideoError();
+          });
+          instance.loadSource(videoUrl);
+          instance.attachMedia(video);
+        })
+        .catch(loadNative);
+    } else {
+      loadNative();
+    }
     return () => {
-      video.removeEventListener("loadedmetadata", sync);
+      disposed = true;
+      video.removeEventListener("loadedmetadata", loadedMetadata);
       video.removeEventListener("canplay", sync);
       video.pause();
+      hls?.destroy();
+      video.removeAttribute("src");
+      video.load();
     };
-  }, [syncVideo, track?.videoOffset, videoUrl]);
+  }, [
+    api,
+    handleVideoError,
+    syncVideo,
+    track?.videoHash,
+    track?.videoOffset,
+    videoSourceRevision,
+    videoStreaming,
+    videoUrl,
+  ]);
 
   useEffect(() => {
     const mediaSession = navigator.mediaSession;
@@ -841,6 +992,14 @@ export function usePlayer(
     cycleRepeat,
     playVideos,
     setPlayVideos,
+    videoEncodingCodec,
+    setVideoEncodingCodec,
+    videoEncodingQuality,
+    setVideoEncodingQuality,
+    videoMaxFps,
+    setVideoMaxFps,
+    videoForceRemux,
+    setVideoForceRemux,
     resetPlaybackSettings,
     error,
     clearError: () => setError(null),
@@ -858,6 +1017,9 @@ export function usePlayer(
     videoRef,
     videoUrl,
     videoLoading,
+    videoEncoding:
+      Boolean(track?.videoHash) &&
+      encodingHash === track?.videoHash?.toLowerCase(),
     videoError,
     handleVideoError,
   };
