@@ -362,7 +362,10 @@ export function App({
   const scrubPointer = useRef<number | null>(null);
   const scrubTimeRef = useRef<number | null>(null);
   const resizeStart = useRef<{ x: number; width: number } | null>(null);
-  const trackInitialized = useRef(Boolean(initialTrack));
+  // A bootstrap track has its media source ready, but its queue location is
+  // not known yet. Let the first library result resolve that location so the
+  // transport buttons continue from the restored track rather than index 0.
+  const trackInitialized = useRef(false);
   const initialTrackRestore = useRef(0);
   const drag = useRef<{
     pointerId: number;
