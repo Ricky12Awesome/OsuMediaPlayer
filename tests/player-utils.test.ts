@@ -106,6 +106,6 @@ test("stored playback settings are clamped and validated", () => {
     videoEncodingCodec: "auto",
     videoEncodingQuality: "medium",
     videoMaxFps: 60,
-    videoForceRemux: true,
+    videoForceRemux: false,
   });
 });

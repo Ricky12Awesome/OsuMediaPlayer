@@ -19,7 +19,7 @@ const defaultSettings: VideoEncodingSettings = {
   codec: "auto",
   quality: "medium",
   maxFps: 60,
-  forceRemux: true,
+  forceRemux: false,
 };
 
 const qualityValues: Record<

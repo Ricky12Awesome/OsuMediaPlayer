@@ -208,6 +208,7 @@
   min-height: 0;
   overflow-y: auto;
   scrollbar-gutter: stable;
+  padding-right: 10px;
 }
 .side-panel .visualizer-settings {
   margin-top: 10px;
