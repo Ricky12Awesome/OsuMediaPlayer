@@ -28,6 +28,7 @@ import {
   resolveMediaArtwork,
   type ResolvedMediaArtwork,
 } from "./media-artwork";
+import { displayTrackArtist, displayTrackTitle } from "./track-title";
 
 const settingsKey = "osu-music-player:settings";
 
@@ -99,6 +100,8 @@ export interface PlayerState {
 export function usePlayer(
   api: PlayerAPI,
   initialTrack: Track | null = null,
+  showTitleUnicode = false,
+  showArtistUnicode = false,
 ): PlayerState {
   const [audio] = useState(() => {
     const element = new Audio();
@@ -913,8 +916,8 @@ export function usePlayer(
     const setMetadata = (artwork?: ResolvedMediaArtwork) => {
       if (cancelled) return;
       mediaSession.metadata = new MediaMetadata({
-        title: track.title,
-        artist: track.artist,
+        title: displayTrackTitle(track, showTitleUnicode),
+        artist: displayTrackArtist(track, showArtistUnicode),
         album: track.source || "osu! music",
         artwork: artwork
           ? [
@@ -953,7 +956,7 @@ export function usePlayer(
       controller.abort();
       if (ownedArtworkUrl) URL.revokeObjectURL(ownedArtworkUrl);
     };
-  }, [track]);
+  }, [showArtistUnicode, showTitleUnicode, track]);
 
   useEffect(() => {
     if (
