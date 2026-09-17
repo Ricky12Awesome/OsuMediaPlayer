@@ -143,7 +143,7 @@ export function streamMediaFile(
   const headers = new Headers({
     "Content-Type": contentType,
     "Accept-Ranges": "bytes",
-    "Cache-Control": "private, max-age=31536000, immutable",
+    "Cache-Control": "no-store",
     "Access-Control-Allow-Origin": "*",
     "X-Content-Type-Options": "nosniff",
   });
