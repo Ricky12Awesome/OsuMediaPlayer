@@ -165,6 +165,7 @@ const defaultApi: PlayerAPI = {
   queryLibrary: async () => ({ items: [], total: 0, offset: 0 }),
   getTrack: async () => null,
   prepareVideo: async () => null,
+  cancelVideoEncoding: async () => {},
   completeVideoStream: async () => {},
   getCacheUsage: async () => {
     throw new Error("Cache management is only available in the desktop app.");

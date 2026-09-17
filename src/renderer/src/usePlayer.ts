@@ -766,6 +766,9 @@ export function usePlayer(
     setVideoError(null);
     if (!playVideos || !track?.videoUrl) {
       videoRef.current?.pause();
+      void api.cancelVideoEncoding().catch(() => {
+        // Video cancellation is best-effort while the renderer is changing sources.
+      });
       setVideoUrl(null);
       setVideoStreaming(false);
       setVideoLoading(false);

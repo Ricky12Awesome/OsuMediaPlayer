@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
 import type { LibraryIndex } from "../src/main/library";
@@ -80,3 +80,70 @@ test("an existing shared HLS stream is reused and served through the hash URL", 
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test(
+  "cancelling an in-flight preparation resolves without a superseded error",
+  { skip: process.platform === "win32" },
+  async () => {
+    const root = await mkdtemp(join(process.cwd(), ".video-cancel-test-"));
+    const cache = join(root, "video-cache");
+    const installPath = join(root, "osu");
+    const hash = "b".repeat(64);
+    const source = join(
+      installPath,
+      "files",
+      hash.slice(0, 1),
+      hash.slice(0, 2),
+      hash,
+    );
+    const ffmpeg = join(root, "ffmpeg");
+    const ffprobe = join(root, "ffprobe");
+    let transcoder: VideoTranscoder | null = null;
+    try {
+      await mkdir(
+        join(installPath, "files", hash.slice(0, 1), hash.slice(0, 2)),
+        { recursive: true },
+      );
+      await writeFile(source, "source");
+      await writeFile(
+        ffmpeg,
+        `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args.includes("-encoders")) {
+  process.stdout.write(" V....D libx264\\n");
+  process.exit(0);
+}
+await new Promise(() => {});
+`,
+      );
+      await writeFile(
+        ffprobe,
+        `#!/usr/bin/env node
+process.stdout.write(JSON.stringify({
+  streams: [{ codec_name: "h264", avg_frame_rate: "30/1" }]
+}));
+`,
+      );
+      await chmod(ffmpeg, 0o755);
+      await chmod(ffprobe, 0o755);
+
+      const library = {
+        summary: { installPath },
+        assets: new Map([[hash, { hash, filename: "video.avi" }]]),
+        getTrack: () => ({ videoUrl: assetUrl(hash) }),
+      } as unknown as LibraryIndex;
+      transcoder = new VideoTranscoder(cache, ffmpeg);
+      const preparing = transcoder.prepare(library, "track");
+      for (let attempt = 0; attempt < 100; attempt++) {
+        if (transcoder.encodingStatus) break;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      assert.deepEqual(transcoder.encodingStatus, { hash, encoding: true });
+      await transcoder.cancelEncoding();
+      assert.equal(await preparing, null);
+    } finally {
+      transcoder?.dispose();
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);

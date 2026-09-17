@@ -21,6 +21,14 @@ const defaultSettings: VideoEncodingSettings = {
   maxFps: 60,
   forceRemux: false,
 };
+const videoEncodingSupersededMessage = "Video encoding was superseded.";
+
+class VideoEncodingSupersededError extends Error {
+  constructor() {
+    super(videoEncodingSupersededMessage);
+    this.name = "VideoEncodingSupersededError";
+  }
+}
 
 const qualityValues: Record<
   VideoEncodingQuality,
@@ -233,6 +241,7 @@ export class VideoTranscoder {
   private cleanupTimer: NodeJS.Timeout | null = null;
   private cacheGeneration = 0;
   private clearPromise: Promise<void> | null = null;
+  private requestVersion = 0;
 
   constructor(
     private readonly cacheDirectory: string,
@@ -278,14 +287,17 @@ export class VideoTranscoder {
     inputSettings?: VideoEncodingSettings,
   ): Promise<PreparedVideo | null> {
     if (this.clearPromise) await this.clearPromise;
+    const requestVersion = ++this.requestVersion;
     const track = library?.getTrack(trackId);
     if (!library || !track?.videoUrl) return null;
     const hash = hashFromAssetUrl(track.videoUrl);
     if (!hash) return null;
     const asset = library.assets.get(hash);
     if (!asset) return null;
-    if (!videoNeedsConversion(asset.filename))
+    if (!videoNeedsConversion(asset.filename)) {
+      await this.cancelEncoding();
       return { url: track.videoUrl, streaming: false };
+    }
     const settings = normalizeSettings(inputSettings);
     let source: Awaited<ReturnType<typeof resolveMediaFile>> = null;
     try {
@@ -296,73 +308,94 @@ export class VideoTranscoder {
     }
 
     const generation = this.cacheGeneration;
-    const preparation = await this.locked(async () => {
-      if (generation !== this.cacheGeneration)
-        throw new Error("The video cache was cleared.");
-      await mkdir(this.cacheDirectory, { recursive: true });
-      const destination = join(this.cacheDirectory, `${hash}.mp4`);
-      const streamHash = await this.readStreamHash();
-      let cachedMatches = await this.rememberCached(hash, destination);
-      const requestedCodec = selectedCodec(settings.codec);
-      if (cachedMatches && requestedCodec) {
-        const cachedInfo = await this.probeSource(destination);
-        if (cachedInfo.codec !== requestedCodec) {
-          this.ready.delete(hash);
-          await rm(destination, { force: true });
-          cachedMatches = false;
+    try {
+      const preparation = await this.locked(async () => {
+        if (requestVersion !== this.requestVersion)
+          throw new VideoEncodingSupersededError();
+        if (generation !== this.cacheGeneration)
+          throw new Error("The video cache was cleared.");
+        await mkdir(this.cacheDirectory, { recursive: true });
+        const destination = join(this.cacheDirectory, `${hash}.mp4`);
+        const streamHash = await this.readStreamHash();
+        let cachedMatches = await this.rememberCached(hash, destination);
+        const requestedCodec = selectedCodec(settings.codec);
+        if (cachedMatches && requestedCodec) {
+          const cachedInfo = await this.probeSource(destination);
+          if (cachedInfo.codec !== requestedCodec) {
+            this.ready.delete(hash);
+            await rm(destination, { force: true });
+            cachedMatches = false;
+          }
         }
-      }
-      if (cachedMatches) {
-        const cachedInfo = await this.probeSource(destination);
-        const sourceInfo = source
-          ? await this.probeSource(source.filename)
-          : { duration: null };
-        const durationMismatch =
-          cachedInfo.duration !== null &&
-          sourceInfo.duration !== null &&
-          cachedInfo.duration + 2 < sourceInfo.duration;
-        if (durationMismatch) {
-          this.ready.delete(hash);
-          await rm(destination, { force: true });
-          cachedMatches = false;
+        if (cachedMatches) {
+          const cachedInfo = await this.probeSource(destination);
+          const sourceInfo = source
+            ? await this.probeSource(source.filename)
+            : { duration: null };
+          const durationMismatch =
+            cachedInfo.duration !== null &&
+            sourceInfo.duration !== null &&
+            cachedInfo.duration + 2 < sourceInfo.duration;
+          if (durationMismatch) {
+            this.ready.delete(hash);
+            await rm(destination, { force: true });
+            cachedMatches = false;
+          }
         }
-      }
-      if (cachedMatches) {
-        if (
-          streamHash === hash &&
-          !(this.active?.hash === hash && this.active.encoding)
-        )
-          await this.removeStreamFiles(hash);
-        return { ready: null as Promise<void> | null };
-      }
-
-      if (streamHash === hash) {
-        if (this.active?.hash === hash) return { ready: this.active.ready };
-        if (await fileHasContents(this.playlist))
+        if (cachedMatches) {
+          if (
+            streamHash === hash &&
+            !(this.active?.hash === hash && this.active.encoding)
+          )
+            await this.removeStreamFiles(hash);
+          if (requestVersion !== this.requestVersion)
+            throw new VideoEncodingSupersededError();
           return { ready: null as Promise<void> | null };
-      }
-      if (streamHash) await this.rotateStream(streamHash, generation);
+        }
 
-      if (!source)
-        throw new Error("The beatmap video file could not be found.");
+        if (streamHash === hash) {
+          if (requestVersion !== this.requestVersion)
+            throw new VideoEncodingSupersededError();
+          if (this.active?.hash === hash) return { ready: this.active.ready };
+          if (await fileHasContents(this.playlist)) {
+            if (requestVersion !== this.requestVersion)
+              throw new VideoEncodingSupersededError();
+            return { ready: null as Promise<void> | null };
+          }
+        }
+        if (streamHash) await this.rotateStream(streamHash, generation);
+
+        if (requestVersion !== this.requestVersion)
+          throw new VideoEncodingSupersededError();
+        if (!source)
+          throw new Error("The beatmap video file could not be found.");
+        if (generation !== this.cacheGeneration)
+          throw new Error("The video cache was cleared.");
+        const session = await this.startEncoding(
+          hash,
+          source.filename,
+          settings,
+          generation,
+        );
+        return { ready: session.ready };
+      });
+      if (preparation.ready) await preparation.ready;
+      if (requestVersion !== this.requestVersion)
+        throw new VideoEncodingSupersededError();
       if (generation !== this.cacheGeneration)
         throw new Error("The video cache was cleared.");
-      const session = await this.startEncoding(
-        hash,
-        source.filename,
-        settings,
-        generation,
-      );
-      return { ready: session.ready };
-    });
-    if (preparation.ready) await preparation.ready;
-    if (generation !== this.cacheGeneration)
-      throw new Error("The video cache was cleared.");
-    return {
-      url: convertedVideoUrl(hash),
-      streaming:
-        !this.ready.has(hash) && (await this.readStreamHash()) === hash,
-    };
+      const streaming =
+        !this.ready.has(hash) && (await this.readStreamHash()) === hash;
+      if (requestVersion !== this.requestVersion)
+        throw new VideoEncodingSupersededError();
+      return {
+        url: convertedVideoUrl(hash),
+        streaming,
+      };
+    } catch (error) {
+      if (error instanceof VideoEncodingSupersededError) return null;
+      throw error;
+    }
   }
 
   private async rememberCached(
@@ -434,8 +467,7 @@ export class VideoTranscoder {
       filename,
     ]);
     const completed = await result;
-    if (completed.code !== 0)
-      return { codec: null, fps: null, duration: null };
+    if (completed.code !== 0) return { codec: null, fps: null, duration: null };
     try {
       const parsed = JSON.parse(completed.stdout) as {
         streams?: Array<{
@@ -687,7 +719,7 @@ export class VideoTranscoder {
     const failures: string[] = [];
     for (const attempt of attempts) {
       if (session.cancelled || generation !== this.cacheGeneration) {
-        rejectReady(new Error("Video encoding was superseded."));
+        rejectReady(new VideoEncodingSupersededError());
         return;
       }
       await this.removeHlsFiles();
@@ -704,6 +736,7 @@ export class VideoTranscoder {
         this.children,
       );
       session.child = child;
+      if (session.cancelled) child.kill("SIGTERM");
       let completed: ProcessResult;
       for (;;) {
         const state = await Promise.race([
@@ -723,7 +756,7 @@ export class VideoTranscoder {
       }
       session.child = null;
       if (session.cancelled || generation !== this.cacheGeneration) {
-        rejectReady(new Error("Video encoding was superseded."));
+        rejectReady(new VideoEncodingSupersededError());
         return;
       }
       if (completed.code === 0) {
@@ -858,8 +891,23 @@ export class VideoTranscoder {
     await this.locked(() => this.removeStreamFiles(hash.toLowerCase()));
   }
 
+  async cancelEncoding(): Promise<void> {
+    this.requestVersion += 1;
+    await this.locked(async () => {
+      const session = this.active;
+      if (!session?.encoding) return;
+      session.cancelled = true;
+      session.child?.kill("SIGTERM");
+      await session.done;
+      if (this.active !== session) return;
+      this.active = null;
+      await this.removeStreamFiles(session.hash);
+    });
+  }
+
   async clearCache(): Promise<void> {
     if (this.clearPromise) return this.clearPromise;
+    this.requestVersion += 1;
     this.cacheGeneration += 1;
     this.ready.clear();
     if (this.cleanupTimer) clearTimeout(this.cleanupTimer);
@@ -967,6 +1015,7 @@ export class VideoTranscoder {
   }
 
   dispose(): void {
+    this.requestVersion += 1;
     if (this.cleanupTimer) clearTimeout(this.cleanupTimer);
     this.cleanupTimer = null;
     if (this.active) this.active.cancelled = true;

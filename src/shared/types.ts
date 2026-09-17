@@ -168,6 +168,7 @@ export interface PlayerAPI {
     trackId: string,
     settings?: VideoEncodingSettings,
   ) => Promise<PreparedVideo | null>;
+  cancelVideoEncoding: () => Promise<void>;
   completeVideoStream: (hash: string) => Promise<void>;
   getCacheUsage: () => Promise<CacheUsage>;
   clearCache: (kind: CacheKind) => Promise<void>;

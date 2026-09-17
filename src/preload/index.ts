@@ -19,6 +19,7 @@ const api: PlayerAPI = {
     ipcRenderer.invoke("library:track-location", id, query),
   prepareVideo: (trackId, settings) =>
     ipcRenderer.invoke("video:prepare", trackId, settings),
+  cancelVideoEncoding: () => ipcRenderer.invoke("video:cancel"),
   completeVideoStream: (hash) =>
     ipcRenderer.invoke("video:stream-complete", hash),
   getCacheUsage: () => ipcRenderer.invoke("cache:usage"),
