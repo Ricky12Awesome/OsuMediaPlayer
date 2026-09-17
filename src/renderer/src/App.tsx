@@ -330,7 +330,7 @@ export function App({
   const [sidePanelOpen, setSidePanelOpen] = useState(() =>
     readStorage("osu-music-visualizer-panel-open", false),
   );
-  const [sidePanelTab, setSidePanelTab] = useState<SidePanelTab>("visualizer");
+  const [sidePanelTab, setSidePanelTab] = useState<SidePanelTab>("settings");
   const [sidePanelWidth, setSidePanelWidth] = useState(() => {
     const value = readStorage(
       "osu-music-side-panel-width",
@@ -1797,18 +1797,6 @@ export function App({
               <button
                 type="button"
                 role="tab"
-                id="visualizer-tab"
-                className={sidePanelTab === "visualizer" ? "active" : ""}
-                aria-selected={sidePanelTab === "visualizer"}
-                aria-controls="side-panel-tab-panel"
-                tabIndex={sidePanelTab === "visualizer" ? 0 : -1}
-                onClick={() => setSidePanelTab("visualizer")}
-              >
-                <AudioWaveform size={15} /> Visualizer
-              </button>
-              <button
-                type="button"
-                role="tab"
                 id="settings-tab"
                 className={sidePanelTab === "settings" ? "active" : ""}
                 aria-selected={sidePanelTab === "settings"}
@@ -1817,6 +1805,18 @@ export function App({
                 onClick={() => setSidePanelTab("settings")}
               >
                 <Settings2 size={15} /> Settings
+              </button>
+              <button
+                type="button"
+                role="tab"
+                id="visualizer-tab"
+                className={sidePanelTab === "visualizer" ? "active" : ""}
+                aria-selected={sidePanelTab === "visualizer"}
+                aria-controls="side-panel-tab-panel"
+                tabIndex={sidePanelTab === "visualizer" ? 0 : -1}
+                onClick={() => setSidePanelTab("visualizer")}
+              >
+                <AudioWaveform size={15} /> Visualizer
               </button>
             </div>
             <div
@@ -2347,15 +2347,15 @@ export function App({
           <button
             className={
               "icon-button settings-panel-toggle " +
-              (settingsPanelOpen ? "active" : "")
+              (sidePanelOpen ? "active" : "")
             }
-            aria-label={settingsPanelOpen ? "Hide settings" : "Show settings"}
-            aria-pressed={settingsPanelOpen}
+            aria-label={sidePanelOpen ? "Hide settings" : "Show settings"}
+            aria-pressed={sidePanelOpen}
             aria-expanded={sidePanelOpen}
             aria-controls="side-settings-panel"
-            title={settingsPanelOpen ? "Hide settings" : "Show settings"}
+            title={sidePanelOpen ? "Hide settings" : "Show settings"}
             onClick={() => {
-              if (settingsPanelOpen) {
+              if (sidePanelOpen) {
                 setSidePanelOpen(false);
               } else {
                 setSidePanelTab("settings");

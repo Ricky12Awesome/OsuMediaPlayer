@@ -207,7 +207,7 @@ export const defaultPlaybackSettings: PlaybackSettings = {
   videoEncodingCodec: "auto",
   videoEncodingQuality: "medium",
   videoMaxFps: 60,
-  videoForceRemux: true,
+  videoForceRemux: false,
 };
 
 export function parsePlaybackSettings(
