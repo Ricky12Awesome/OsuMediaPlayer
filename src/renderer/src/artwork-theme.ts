@@ -22,6 +22,9 @@ interface ColorBucket extends Rgb {
 }
 
 const fallbackHue = 280;
+const maxColorSamples = 4096;
+const hueBucketCount = 24;
+const hueBucketSize = 360 / hueBucketCount;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -102,14 +105,68 @@ function hueDistance(first: number, second: number): number {
 }
 
 function quantize(value: number): number {
-  return clamp(Math.round(value / 24) * 24, 0, 255);
+  return clamp(Math.round(value / 16) * 16, 0, 255);
 }
 
-function colorScore(color: ColorBucket): number {
+function colorBucketKey(color: Hsl): number {
+  // Keep neutral colors together. A hue for a nearly gray pixel is arbitrary
+  // and should not create a competing accent bucket.
+  if (color.s < 10) return -1;
+
+  // Center the bins so reds around 0° and 360° end up in the same bucket.
+  return Math.floor(
+    ((((color.h + hueBucketSize / 2) % 360) + 360) % 360) / hueBucketSize,
+  );
+}
+
+function addColorSample(
+  buckets: Map<number, ColorBucket>,
+  color: Rgb,
+  hsl: Hsl,
+): void {
+  const key = colorBucketKey(hsl);
+  const bucket = buckets.get(key);
+  if (!bucket) {
+    buckets.set(key, { ...color, count: 1, hsl });
+    return;
+  }
+
+  // Keep a representative color for each hue rather than requiring every
+  // shade of a gradient to match the same RGB bucket.
+  bucket.count++;
+  bucket.r += (color.r - bucket.r) / bucket.count;
+  bucket.g += (color.g - bucket.g) / bucket.count;
+  bucket.b += (color.b - bucket.b) / bucket.count;
+  bucket.hsl = rgbToHsl(bucket);
+}
+
+function colorDistance(first: Rgb, second: Rgb): number {
+  return (
+    Math.sqrt(
+      (first.r - second.r) ** 2 +
+        (first.g - second.g) ** 2 +
+        (first.b - second.b) ** 2,
+    ) / Math.sqrt(255 ** 2 * 3)
+  );
+}
+
+function colorScore(
+  color: ColorBucket,
+  sampleCount: number,
+  average: ColorBucket,
+): number {
+  const population = clamp(color.count / sampleCount, 0, 1);
   const saturation = color.hsl.s / 100;
   const lightness = color.hsl.l / 100;
   const usableLightness = 0.35 + (1 - Math.abs(lightness - 0.46) / 0.54);
-  return color.count * (0.55 + saturation * 1.4) * usableLightness;
+  const contrast = colorDistance(color, average);
+
+  // Area still penalizes isolated noise, but its square-root-like weight keeps
+  // a vivid accent from losing to a much larger gray background.
+  const populationWeight = population ** 0.45;
+  const vividness = 0.16 + saturation * 1.55;
+  const contrastWeight = 0.4 + contrast * 1.6;
+  return populationWeight * vividness * usableLightness * contrastWeight;
 }
 
 function pickColors(
@@ -122,19 +179,48 @@ function pickColors(
     height <= 0 ||
     !Number.isSafeInteger(width) ||
     !Number.isSafeInteger(height) ||
+    !Number.isSafeInteger(width * height) ||
     pixels.length < width * height * 4
   )
     return null;
 
   const buckets = new Map<number, ColorBucket>();
-  const step = Math.max(1, Math.floor(Math.sqrt((width * height) / 1800)));
+  const pixelCount = width * height;
+  const sampleStep = Math.max(1, Math.sqrt(pixelCount / maxColorSamples));
+  let sampleWidth = Math.min(
+    width,
+    maxColorSamples,
+    Math.max(1, Math.ceil(width / sampleStep)),
+  );
+  let sampleHeight = Math.min(
+    height,
+    maxColorSamples,
+    Math.max(1, Math.ceil(height / sampleStep)),
+  );
+  // Extremely wide or tall images can otherwise exceed the sample budget
+  // because one dimension may already be smaller than the calculated step.
+  if (sampleWidth * sampleHeight > maxColorSamples) {
+    if (sampleWidth >= sampleHeight)
+      sampleWidth = Math.max(1, Math.floor(maxColorSamples / sampleHeight));
+    else sampleHeight = Math.max(1, Math.floor(maxColorSamples / sampleWidth));
+  }
   let sampleCount = 0;
   let totalRed = 0;
   let totalGreen = 0;
   let totalBlue = 0;
 
-  for (let y = 0; y < height; y += step) {
-    for (let x = 0; x < width; x += step) {
+  // Use the center of evenly distributed cells. This caps work for large
+  // artwork while still covering the full width and height of the image.
+  for (let row = 0; row < sampleHeight; row++) {
+    const y = Math.min(
+      height - 1,
+      Math.floor(((row + 0.5) * height) / sampleHeight),
+    );
+    for (let column = 0; column < sampleWidth; column++) {
+      const x = Math.min(
+        width - 1,
+        Math.floor(((column + 0.5) * width) / sampleWidth),
+      );
       const offset = (y * width + x) * 4;
       const alpha = pixels[offset + 3];
       if (alpha < 96) continue;
@@ -144,10 +230,7 @@ function pickColors(
         g: quantize(pixels[offset + 1]),
         b: quantize(pixels[offset + 2]),
       };
-      const key = (color.r << 16) | (color.g << 8) | color.b;
-      const bucket = buckets.get(key);
-      if (bucket) bucket.count++;
-      else buckets.set(key, { ...color, count: 1, hsl: rgbToHsl(color) });
+      addColorSample(buckets, color, rgbToHsl(color));
 
       sampleCount++;
       totalRed += color.r;
@@ -170,7 +253,9 @@ function pickColors(
     }),
   };
   const ranked = [...buckets.values()].sort(
-    (first, second) => colorScore(second) - colorScore(first),
+    (first, second) =>
+      colorScore(second, sampleCount, average) -
+      colorScore(first, sampleCount, average),
   );
   const primary = ranked[0] ?? average;
   const secondary =
@@ -266,7 +351,9 @@ export function extractArtworkTheme(
 ): ArtworkTheme | null {
   if (!image.naturalWidth || !image.naturalHeight) return null;
 
-  const size = 48;
+  // A fixed-size canvas keeps extraction cheap while letting the browser
+  // average the complete image before the palette scan runs.
+  const size = 64;
   const canvas = document.createElement("canvas");
   canvas.width = size;
   canvas.height = size;
