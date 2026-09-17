@@ -273,7 +273,6 @@
   margin-top: 24px;
 }
 .artwork-theme-setting,
-.now-playing-display-setting,
 .video-encoding-setting {
   margin-top: 24px;
 }
@@ -525,7 +524,6 @@
 .side-panel-content .transport-layout-setting,
 .side-panel-content .artwork-theme-setting,
 .side-panel-content .video-encoding-setting,
-.side-panel-content .now-playing-display-setting,
 .side-panel-content .maintenance-setting {
   margin-top: 17px;
 }

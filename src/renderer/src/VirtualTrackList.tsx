@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import type { LibraryQuery, PlayerAPI, Track } from "../../shared/types";
 import { TrackArt } from "./TrackArt";
+import { displayTrackArtist, displayTrackTitle } from "./track-title";
 
 const pageSize = 64;
 const pageCacheLimit = 8;
@@ -50,6 +51,8 @@ export interface VirtualTrackListProps {
   followCurrentTrackIndex?: number;
   libraryReady: boolean;
   playing: boolean;
+  showTitleUnicode: boolean;
+  showArtistUnicode: boolean;
   favorites: Set<string>;
   onPlay: (track: Track, index: number) => void;
   onFavorite: (track: Track) => void;
@@ -74,6 +77,8 @@ export function VirtualTrackList({
   followCurrentTrackIndex,
   libraryReady,
   playing,
+  showTitleUnicode,
+  showArtistUnicode,
   favorites,
   onPlay,
   onFavorite,
@@ -494,6 +499,8 @@ export function VirtualTrackList({
     const track = getTrack(index);
     const current = Boolean(track && track.id === currentTrackId);
     const error = cache.errors.get(Math.floor(index / pageSize));
+    const title = displayTrackTitle(track, showTitleUnicode);
+    const artist = displayTrackArtist(track, showArtistUnicode);
     rows.push(
       <div
         id={`${listId}-track-${index}`}
@@ -511,10 +518,7 @@ export function VirtualTrackList({
         aria-disabled={!track || undefined}
         aria-label={
           track
-            ? track.title +
-              ", " +
-              track.artist +
-              (current ? ", current track" : "")
+            ? title + ", " + artist + (current ? ", current track" : "")
             : "Loading track " + (index + 1)
         }
         style={{
@@ -546,11 +550,11 @@ export function VirtualTrackList({
             </span>
             <TrackArt track={track} playing={current && playing} />
             <div className="track-details">
-              <div className="track-title" title={track.title}>
-                {track.title}
+              <div className="track-title" title={title}>
+                {title}
               </div>
-              <div className="track-artist" title={track.artist}>
-                {track.artist}
+              <div className="track-artist" title={artist}>
+                {artist}
               </div>
             </div>
             <span className="track-duration">
@@ -564,7 +568,7 @@ export function VirtualTrackList({
               }
               aria-label={
                 (favorites.has(track.id) ? "Remove " : "Add ") +
-                track.title +
+                title +
                 (favorites.has(track.id) ? " from favorites" : " to favorites")
               }
               aria-pressed={favorites.has(track.id)}

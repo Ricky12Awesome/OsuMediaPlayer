@@ -15,8 +15,6 @@ import {
   ArrowUpWideNarrow,
   AudioWaveform,
   CircleAlert,
-  Eye,
-  EyeOff,
   FolderHeart,
   FolderOpen,
   Heart,
@@ -81,6 +79,7 @@ import {
   useVisualizerSettings,
 } from "./AudioVisualizer";
 import { usePlayer } from "./usePlayer";
+import { displayTrackArtist, displayTrackTitle } from "./track-title";
 import { parseVisualizer } from "./visualizer-settings";
 
 const defaultPosition = "top-left";
@@ -152,6 +151,10 @@ const sortOptions: Array<{ value: SortKey; label: string }> = [
 const lastPlayedTrackKey = "osu-music-last-played-track";
 const sortKey = "osu-music-sort";
 const sortDescendingKey = "osu-music-sort-descending";
+const showTitleUnicodeKey = "osu-music-show-title-unicode";
+const showArtistUnicodeKey = "osu-music-show-artist-unicode";
+const combinedShowUnicodeKey = "osu-music-show-unicode";
+const legacyShowUnicodeTitleKey = "osu-music-show-unicode-title";
 
 const defaultApi: PlayerAPI = {
   loadLibrary: async () => {
@@ -208,6 +211,28 @@ function removeStorage(key: string): void {
   }
 }
 
+function readStoredBoolean(key: string): boolean | undefined {
+  const stored = readStorage<unknown>(key, undefined);
+  return stored === undefined ? undefined : stored === true;
+}
+
+function readShowTitleUnicodeSetting(): boolean {
+  return (
+    readStoredBoolean(showTitleUnicodeKey) ??
+    readStoredBoolean(combinedShowUnicodeKey) ??
+    readStoredBoolean(legacyShowUnicodeTitleKey) ??
+    false
+  );
+}
+
+function readShowArtistUnicodeSetting(): boolean {
+  return (
+    readStoredBoolean(showArtistUnicodeKey) ??
+    readStoredBoolean(combinedShowUnicodeKey) ??
+    false
+  );
+}
+
 function isSortKey(value: unknown): value is SortKey {
   return sortOptions.some((option) => option.value === value);
 }
@@ -252,7 +277,18 @@ export function App({
   initialTrack?: Track | null;
   initialArtworkTheme?: { url: string; theme: ArtworkTheme } | null;
 }) {
-  const player = usePlayer(api, initialTrack);
+  const [showTitleUnicode, setShowTitleUnicode] = useState(
+    readShowTitleUnicodeSetting,
+  );
+  const [showArtistUnicode, setShowArtistUnicode] = useState(
+    readShowArtistUnicodeSetting,
+  );
+  const player = usePlayer(
+    api,
+    initialTrack,
+    showTitleUnicode,
+    showArtistUnicode,
+  );
   const [visualizer, setVisualizer] = useVisualizerSettings();
   const [summary, setSummary] = useState<LibrarySummary | null>(initialLibrary);
   const [importing, setImporting] = useState(!initialLibrary);
@@ -616,6 +652,14 @@ export function App({
         showNowPlayingTitleArtist,
       ),
     [showNowPlayingTitleArtist],
+  );
+  useEffect(
+    () => writeStorage(showTitleUnicodeKey, showTitleUnicode),
+    [showTitleUnicode],
+  );
+  useEffect(
+    () => writeStorage(showArtistUnicodeKey, showArtistUnicode),
+    [showArtistUnicode],
   );
   useEffect(
     () => writeStorage("osu-music-artwork-theme", artworkThemeEnabled),
@@ -1123,6 +1167,8 @@ export function App({
     setSidebarHidden(false);
     setLibraryPosition(defaultLibraryPosition);
     setTransportLayout("controls-centered");
+    setShowTitleUnicode(false);
+    setShowArtistUnicode(false);
     setShowNowPlayingTitleArtist(true);
     setArtworkThemeEnabled(true);
     setLibraryWidth(430);
@@ -1531,6 +1577,24 @@ export function App({
           artworkThemeEnabled,
           () => setArtworkThemeEnabled((value) => !value),
         )}
+        {settingsSwitch(
+          "Show title / artist",
+          "Display track details over the artwork",
+          showNowPlayingTitleArtist,
+          () => setShowNowPlayingTitleArtist((value) => !value),
+        )}
+        {settingsSwitch(
+          "Show title unicode",
+          "Use a song's Unicode title when one is available",
+          showTitleUnicode,
+          () => setShowTitleUnicode((value) => !value),
+        )}
+        {settingsSwitch(
+          "Show artist unicode",
+          "Use a song's Unicode artist when one is available",
+          showArtistUnicode,
+          () => setShowArtistUnicode((value) => !value),
+        )}
       </div>
       <div className="settings-block video-encoding-setting">
         <span className="settings-label">
@@ -1568,18 +1632,6 @@ export function App({
           "Copy compatible video without re-encoding; automatically encode when copying is not supported",
           player.videoForceRemux,
           () => player.setVideoForceRemux((value) => !value),
-        )}
-      </div>
-      <div className="settings-block now-playing-display-setting">
-        <span className="settings-label">
-          {showNowPlayingTitleArtist ? <Eye size={16} /> : <EyeOff size={16} />}{" "}
-          NOW PLAYING
-        </span>
-        {settingsSwitch(
-          "Show title / artist",
-          "Display track details over the artwork",
-          showNowPlayingTitleArtist,
-          () => setShowNowPlayingTitleArtist((value) => !value),
         )}
       </div>
       <div className="settings-stats">
@@ -1736,11 +1788,14 @@ export function App({
                   }
                   onPointerDown={beginCaptionDrag}
                 >
-                  <h2 title={player.track?.title}>
-                    {player.track?.title || "A little more rhythm."}
+                  <h2 title={displayTrackTitle(player.track, showTitleUnicode)}>
+                    {displayTrackTitle(player.track, showTitleUnicode) ||
+                      "A little more rhythm."}
                   </h2>
-                  <p title={player.track?.artist}>
-                    {player.track?.artist ||
+                  <p
+                    title={displayTrackArtist(player.track, showArtistUnicode)}
+                  >
+                    {displayTrackArtist(player.track, showArtistUnicode) ||
                       "Your osu! library. A whole new way to listen."}
                   </p>
                   {player.track?.source && (
@@ -2083,6 +2138,8 @@ export function App({
                   }
                   libraryReady={!importing}
                   playing={player.playing}
+                  showTitleUnicode={showTitleUnicode}
+                  showArtistUnicode={showArtistUnicode}
                   favorites={favorites}
                   onPlay={playTrack}
                   onFavorite={toggleFavorite}
@@ -2302,11 +2359,13 @@ export function App({
             playing={false}
           />
           <div className="transport-track-text">
-            <strong title={player.track?.title}>
-              {player.track?.title || "Your soundtrack starts here"}
+            <strong title={displayTrackTitle(player.track, showTitleUnicode)}>
+              {displayTrackTitle(player.track, showTitleUnicode) ||
+                "Your soundtrack starts here"}
             </strong>
-            <span title={player.track?.artist}>
-              {player.track?.artist || "Pick a song and press play"}
+            <span title={displayTrackArtist(player.track, showArtistUnicode)}>
+              {displayTrackArtist(player.track, showArtistUnicode) ||
+                "Pick a song and press play"}
             </span>
           </div>
           <button
