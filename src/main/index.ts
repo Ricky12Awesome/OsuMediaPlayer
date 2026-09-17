@@ -524,6 +524,10 @@ function setupIPC(): void {
       );
     },
   );
+  ipcMain.handle("video:cancel", async (event) => {
+    requireTrusted(event);
+    await videoTranscoder?.cancelEncoding();
+  });
   ipcMain.handle("video:stream-complete", async (event, hash: unknown) => {
     requireTrusted(event);
     if (typeof hash !== "string") return;
