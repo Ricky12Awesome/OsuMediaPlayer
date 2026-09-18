@@ -1,5 +1,10 @@
 import { assetUrl, isAssetHash, type MediaAsset } from "../media";
-import type { LibrarySummary, SortKey, Track } from "../../shared/types";
+import {
+  sortKeys,
+  type LibrarySummary,
+  type SortKey,
+  type Track,
+} from "../../shared/types";
 import type {
   LibraryCollection,
   LibraryCollectionFingerprint,
@@ -8,20 +13,7 @@ import type {
 import type { LibraryCacheSummary } from "./cache-types";
 import { collator, normalize, trackSearch } from "./utils";
 
-const sortKeyList: SortKey[] = [
-  "title",
-  "artist",
-  "duration",
-  "bpm",
-  "added",
-  "dateAdded",
-  "dateSubmitted",
-  "dateRanked",
-  "lastPlayed",
-  "stars",
-  "collection",
-  "tags",
-];
+const sortKeyList: readonly SortKey[] = sortKeys;
 const sortKeyCodes = new Map(sortKeyList.map((key, index) => [key, index]));
 const sortKeysByCode = new Map(sortKeyList.map((key, index) => [index, key]));
 const facetCollator = collator;

@@ -169,11 +169,15 @@ export function LibraryPanel({
         </button>
       </div>
 
-      <div className="library-tabs" role="tablist" aria-label="Library view">
+      <div
+        className="panel-tabs library-tabs"
+        role="tablist"
+        aria-label="Library view"
+      >
         <button
           role="tab"
           aria-selected={tab === "all"}
-          className={tab === "all" ? "active" : ""}
+          className={"panel-tab " + (tab === "all" ? "active" : "")}
           onClick={() => setTab("all")}
         >
           <Music2 size={15} /> All songs
@@ -181,7 +185,7 @@ export function LibraryPanel({
         <button
           role="tab"
           aria-selected={tab === "favorites"}
-          className={tab === "favorites" ? "active" : ""}
+          className={"panel-tab " + (tab === "favorites" ? "active" : "")}
           onClick={() => setTab("favorites")}
         >
           <Heart size={15} /> Favorites

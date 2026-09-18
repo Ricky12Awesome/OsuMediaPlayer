@@ -19,6 +19,7 @@ import type {
   TrackDebugInfo,
   TrackContextMenuAction,
 } from "../../shared/types";
+import { sortKeys } from "../../shared/types";
 import { extractArtworkTheme, type ArtworkTheme } from "./artwork-theme";
 import {
   cacheLastArtworkTheme,
@@ -52,6 +53,7 @@ const defaultLibraryPosition = "right";
 const defaultSidePanelWidth = 320;
 const minSidePanelWidth = 280;
 const maxSidePanelWidth = 520;
+const cssRem = (pixels: number): string => `${pixels / 16}rem`;
 const positions = [
   "top-left",
   "top-center",
@@ -146,7 +148,7 @@ function readShowArtistUnicodeSetting(): boolean {
 }
 
 function isSortKey(value: unknown): value is SortKey {
-  return sortOptions.some((option) => option.value === value);
+  return sortKeys.includes(value as SortKey);
 }
 
 function isCaptionPosition(value: unknown): value is CaptionPosition {
@@ -299,10 +301,6 @@ export function App({
   const [zoomPercent, setZoomPercent] = useState(100);
   const [zoomIndicatorVisible, setZoomIndicatorVisible] = useState(false);
   const [captionDragging, setCaptionDragging] = useState(false);
-  const [captionDragPosition, setCaptionDragPosition] = useState<{
-    x: number;
-    y: number;
-  } | null>(null);
   const [resizing, setResizing] = useState(false);
   const [trackContextMenu, setTrackContextMenu] =
     useState<TrackContextMenuState | null>(null);
@@ -332,12 +330,24 @@ export function App({
   const initialTrackRestore = useRef(0);
   const drag = useRef<{
     pointerId: number;
+    element: HTMLDivElement;
     offsetX: number;
     offsetY: number;
     moved: boolean;
     x: number;
     y: number;
+    nextX: number;
+    nextY: number;
+    frame: number | null;
   } | null>(null);
+  const stopCaptionDrag = useRef<(() => void) | null>(null);
+
+  useEffect(
+    () => () => {
+      stopCaptionDrag.current?.();
+    },
+    [],
+  );
 
   const loadLibrary = useCallback(
     async (installPath?: string) => {
@@ -1000,7 +1010,10 @@ export function App({
     setTab("all");
   };
 
-  const updateCaptionPosition = (event: PointerEvent<HTMLDivElement>) => {
+  const updateCaptionPosition = (event: {
+    clientX: number;
+    clientY: number;
+  }) => {
     const stage = captionRef.current;
     if (!stage) return;
     const bounds = stage.getBoundingClientRect();
@@ -1036,46 +1049,77 @@ export function App({
 
   const beginCaptionDrag = (event: PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
+    stopCaptionDrag.current?.();
     const target = event.currentTarget.getBoundingClientRect();
     drag.current = {
       pointerId: event.pointerId,
+      element: event.currentTarget,
       offsetX: event.clientX - target.left,
       offsetY: event.clientY - target.top,
       moved: false,
       x: event.clientX,
       y: event.clientY,
+      nextX: target.left,
+      nextY: target.top,
+      frame: null,
     };
     setCaptionDragging(false);
     const move = (next: globalThis.PointerEvent) => {
       const state = drag.current;
       if (!state || next.pointerId !== state.pointerId) return;
-      state.moved ||=
-        Math.hypot(next.clientX - state.x, next.clientY - state.y) > 4;
+      if (
+        !state.moved &&
+        Math.hypot(next.clientX - state.x, next.clientY - state.y) > 4
+      ) {
+        state.moved = true;
+        state.element.classList.add("is-dragging");
+        setCaptionDragging(true);
+      }
       if (state.moved) {
         const stage = captionRef.current;
         if (stage) {
           const bounds = stage.getBoundingClientRect();
-          setCaptionDragPosition({
-            x: next.clientX - bounds.left - state.offsetX,
-            y: next.clientY - bounds.top - state.offsetY,
-          });
+          state.nextX = next.clientX - bounds.left - state.offsetX;
+          state.nextY = next.clientY - bounds.top - state.offsetY;
+          if (state.frame === null)
+            state.frame = requestAnimationFrame(() => {
+              state.frame = null;
+              if (drag.current !== state) return;
+              state.element.style.setProperty(
+                "--caption-drag-x",
+                `${state.nextX}px`,
+              );
+              state.element.style.setProperty(
+                "--caption-drag-y",
+                `${state.nextY}px`,
+              );
+            });
         }
-        setCaptionDragging(true);
       }
     };
-    const finish = (next?: globalThis.PointerEvent) => {
+    const finish = (
+      next?: globalThis.PointerEvent,
+      updateDraggingState = true,
+    ) => {
       const state = drag.current;
       if (state && next?.pointerId === state.pointerId && state.moved)
-        updateCaptionPosition(next as unknown as PointerEvent<HTMLDivElement>);
+        updateCaptionPosition(next);
+      if (state?.frame !== null && state?.frame !== undefined)
+        cancelAnimationFrame(state.frame);
+      state?.element.classList.remove("is-dragging");
+      state?.element.style.removeProperty("--caption-drag-x");
+      state?.element.style.removeProperty("--caption-drag-y");
       drag.current = null;
-      setCaptionDragPosition(null);
-      setCaptionDragging(false);
+      if (updateDraggingState) setCaptionDragging(false);
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", finish);
       window.removeEventListener("pointercancel", cancel);
       window.removeEventListener("blur", cancel);
+      if (stopCaptionDrag.current === cleanup) stopCaptionDrag.current = null;
     };
     const cancel = () => finish();
+    const cleanup = () => finish(undefined, false);
+    stopCaptionDrag.current = cleanup;
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", finish);
     window.addEventListener("pointercancel", cancel);
@@ -1160,8 +1204,8 @@ export function App({
           }
           style={
             {
-              "--library-width": libraryWidth + "px",
-              "--side-panel-width": (sidePanelOpen ? sidePanelWidth : 0) + "px",
+              "--library-width": cssRem(libraryWidth),
+              "--side-panel-width": cssRem(sidePanelOpen ? sidePanelWidth : 0),
             } as CSSProperties
           }
         >
@@ -1175,7 +1219,6 @@ export function App({
             showArtistUnicode={showArtistUnicode}
             captionPosition={captionPosition}
             captionDragging={captionDragging}
-            captionDragPosition={captionDragPosition}
             videoActive={videoActive}
             captionRef={captionRef}
             beginCaptionDrag={beginCaptionDrag}

@@ -104,12 +104,12 @@ a {
   background: var(--selection);
 }
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 0.3125rem;
+  height: 0.3125rem;
 }
 ::-webkit-scrollbar-thumb {
   background: var(--scrollbar);
-  border-radius: 8px;
+  border-radius: 0.5rem;
 }
 ::-webkit-scrollbar-track {
   background: 0 0;

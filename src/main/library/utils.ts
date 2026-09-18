@@ -1,24 +1,11 @@
-import type { Track } from "../../shared/types";
+import { sortKeys, type Track } from "../../shared/types";
 
 export const collator = new Intl.Collator(undefined, {
   numeric: true,
   sensitivity: "base",
 });
 
-export const sorts = new Set([
-  "title",
-  "artist",
-  "duration",
-  "bpm",
-  "added",
-  "dateAdded",
-  "dateSubmitted",
-  "dateRanked",
-  "lastPlayed",
-  "stars",
-  "collection",
-  "tags",
-] as const);
+export const sorts = new Set(sortKeys);
 
 export const string = (value: unknown): string =>
   typeof value === "string" ? value : "";

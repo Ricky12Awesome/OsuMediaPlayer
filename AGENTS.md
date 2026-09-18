@@ -47,6 +47,14 @@ Keep these boundaries intact. Renderer code must not import Electron, Node files
 - TypeScript is strict and uses ES modules. Keep the existing two-space indentation, semicolons, double quotes, trailing commas, and casing conventions.
 - Use Prettier rather than hand-formatting: `npm run format`.
 - Keep feature CSS beside its renderer feature and use the existing styling approach. A small feature should not introduce another styling system.
+- Reuse the shared renderer control classes in `controls.css` for buttons, tabs, popovers, and option rows, and the shared settings classes in `settings.css` for settings and visualizer controls. Keep feature CSS focused on positioning or behavior that is genuinely unique so equivalent controls do not drift apart.
+- Use scalable CSS units intentionally:
+  - Use `rem` for most typography, spacing, radii, control sizes, and fixed layout constraints that should scale with the interface.
+  - Keep normal text, controls, and metadata at `1rem` or larger. Use sub-`1rem` text sparingly for clearly secondary microcopy or compact badges, and verify that it remains legible.
+  - Use `em` when a value should scale with a specific component's font size, and `ch` for text-line widths.
+  - Reserve `px` for thin borders, shadows, icons, precise small details, and runtime coordinates measured in CSS pixels.
+  - Use percentages, Flexbox, or Grid fractions for layout widths when the layout can be fluid; use `vw`/`vh` for viewport-relative sizing and prefer `dvw`/`dvh` when browser UI can affect the available viewport.
+  - Avoid fixed heights for content containers. Use `min-height`, intrinsic sizing, or bounded overflow unless a fixed dimension is required by a control, media surface, or virtualization calculation.
 - Prefer explicit types at process boundaries and for persisted settings. Validate untrusted or persisted data before using it.
 - Do not commit generated output or local data such as `dist/`, `dist-electron/`, `release/`, `test-results/`, `node_modules/`, or cache files.
 

@@ -86,7 +86,7 @@ export function orderedVideoEncoders(
 }
 
 export function normalizeVideoEncodingSettings(
-  input: VideoEncodingSettings | undefined,
+  input: Partial<Record<keyof VideoEncodingSettings, unknown>> | undefined,
 ): VideoEncodingSettings {
   const quality = input?.quality;
   const codec = input?.codec;
@@ -101,8 +101,8 @@ export function normalizeVideoEncodingSettings(
         ? codec
         : defaultVideoEncodingSettings.codec,
     quality:
-      quality && quality in qualityValues
-        ? quality
+      typeof quality === "string" && quality in qualityValues
+        ? (quality as VideoEncodingQuality)
         : defaultVideoEncodingSettings.quality,
     maxFps:
       maxFps === 0 || maxFps === 24 || maxFps === 30 || maxFps === 60

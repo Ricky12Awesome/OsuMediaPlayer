@@ -1,7 +1,7 @@
 /* Fullscreen player overrides. */
 
 .is-fullscreen {
-  --fullscreen-transport-height: 72px;
+  --fullscreen-transport-height: 4.5rem;
 }
 .is-fullscreen:not(.fullscreen-controls-visible),
 .is-fullscreen:not(.fullscreen-controls-visible) * {
@@ -51,9 +51,9 @@
   opacity: 0.07;
 }
 .is-fullscreen .hero-caption {
-  --caption-edge: 22px;
-  --caption-top-edge: 22px;
-  --caption-bottom-edge: calc(72px + var(--caption-edge));
+  --caption-edge: 1.375rem;
+  --caption-top-edge: 1.375rem;
+  --caption-bottom-edge: calc(4.5rem + var(--caption-edge));
   transition:
     left 0.26s cubic-bezier(0.22, 1, 0.36, 1),
     top 0.26s cubic-bezier(0.22, 1, 0.36, 1),
@@ -68,15 +68,15 @@
   --caption-bottom-edge: var(--caption-edge);
 }
 .is-fullscreen .hero-caption h2 {
-  letter-spacing: -2px;
-  font-size: clamp(32px, 4.5vw, 76px);
+  letter-spacing: -0.04em;
+  font-size: clamp(2rem, 4.5vw, 4.75rem);
 }
 .is-fullscreen .hero-caption p {
-  font-size: clamp(14px, 1.4vw, 21px);
+  font-size: clamp(1rem, 1.4vw, 1.3125rem);
 }
 .is-fullscreen .hero-source {
-  margin-top: 10px;
-  font-size: 12px;
+  margin-top: 0.625rem;
+  font-size: 1rem;
 }
 .is-fullscreen .transport {
   box-shadow: none;
@@ -104,63 +104,63 @@
   min-height: 0;
 }
 .is-fullscreen .playback-error {
-  left: 30px;
-  right: 30px;
+  left: 1.875rem;
+  right: 1.875rem;
 }
-@media (width<=1100px) {
+@media (width<=68.75rem) {
   .transport {
-    padding-right: 24px;
+    padding-right: 1.5rem;
   }
 }
-@media (width<=850px) {
+@media (width<=53.125rem) {
   .transport-extra .volume-slider {
-    width: 42px;
+    width: 2.625rem;
   }
 }
-@media (width<=760px) {
+@media (width<=47.5rem) {
   .sidebar-toggle {
     display: none;
   }
   .is-fullscreen .hero-caption {
-    --caption-edge: 18px;
-    --caption-top-edge: 18px;
-    --caption-bottom-edge: calc(72px + var(--caption-edge));
+    --caption-edge: 1.125rem;
+    --caption-top-edge: 1.125rem;
+    --caption-bottom-edge: calc(4.5rem + var(--caption-edge));
   }
   .is-fullscreen .hero-caption h2 {
-    letter-spacing: -1px;
-    font-size: 34px;
+    letter-spacing: -0.03em;
+    font-size: 2.125rem;
   }
   .is-fullscreen .hero-caption p {
-    font-size: 13px;
+    font-size: 1rem;
   }
 }
-@media (height<=650px) {
+@media (height<=40.625rem) {
   .is-fullscreen .hero-caption {
-    --caption-edge: 16px;
-    --caption-top-edge: 16px;
-    --caption-bottom-edge: calc(68px + var(--caption-edge));
+    --caption-edge: 1rem;
+    --caption-top-edge: 1rem;
+    --caption-bottom-edge: calc(4.25rem + var(--caption-edge));
   }
   .is-fullscreen .hero-caption h2 {
-    font-size: 32px;
+    font-size: 2rem;
   }
 }
-@media (width>=1550px) {
+@media (width>=96.875rem) {
   .is-fullscreen {
-    --fullscreen-transport-height: 76px;
+    --fullscreen-transport-height: 4.75rem;
   }
 }
-@media (height<=760px) and (width>=761px) {
+@media (height<=47.5rem) and (width>=47.5625rem) {
   .is-fullscreen {
-    --fullscreen-transport-height: 68px;
+    --fullscreen-transport-height: 4.25rem;
   }
 }
-@media (width<=760px) {
+@media (width<=47.5rem) {
   .is-fullscreen {
-    --fullscreen-transport-height: 70px;
+    --fullscreen-transport-height: 4.375rem;
   }
 }
-@media (width<=520px) {
+@media (width<=32.5rem) {
   .is-fullscreen {
-    --fullscreen-transport-height: 120px;
+    --fullscreen-transport-height: 7.5rem;
   }
 }

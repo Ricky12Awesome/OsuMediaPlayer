@@ -50,7 +50,7 @@ function MenuItem({
   return (
     <button
       type="button"
-      className="track-context-item"
+      className="control-option track-context-item"
       role="menuitem"
       disabled={disabled}
       aria-disabled={disabled}
@@ -60,7 +60,7 @@ function MenuItem({
       <span className="track-context-item-icon" aria-hidden="true">
         {icon}
       </span>
-      <span>{label}</span>
+      <span className="control-option-label">{label}</span>
     </button>
   );
 }
@@ -115,7 +115,7 @@ export function TrackContextMenu({
   const openLeft = position.x > window.innerWidth - 460;
   const openUp = position.y > window.innerHeight - 430;
   const submenuClass =
-    "track-context-submenu" +
+    "control-popover track-context-submenu" +
     (openLeft ? " opens-left" : "") +
     (openUp ? " opens-up" : "");
 
@@ -149,7 +149,7 @@ export function TrackContextMenu({
     >
       <div
         ref={menuRef}
-        className="track-context-menu"
+        className="control-popover track-context-menu"
         role="menu"
         aria-label={`Actions for ${track.title}`}
         style={{ left: position.x, top: position.y }}
@@ -158,7 +158,7 @@ export function TrackContextMenu({
           <button
             ref={copyButtonRef}
             type="button"
-            className="track-context-item track-context-parent"
+            className="control-option track-context-item track-context-parent"
             role="menuitem"
             aria-haspopup="menu"
             aria-expanded={openSubmenu === "copy"}
@@ -169,7 +169,7 @@ export function TrackContextMenu({
             <span className="track-context-item-icon" aria-hidden="true">
               <Copy size={15} />
             </span>
-            <span>Copy</span>
+            <span className="control-option-label">Copy</span>
             <ChevronRight className="track-context-chevron" size={14} />
           </button>
           {openSubmenu === "copy" && (
@@ -264,7 +264,7 @@ export function TrackContextMenu({
         <div className="track-context-menu-group">
           <button
             type="button"
-            className="track-context-item track-context-parent"
+            className="control-option track-context-item track-context-parent"
             role="menuitem"
             aria-haspopup="menu"
             aria-expanded={openSubmenu === "open"}
@@ -275,7 +275,7 @@ export function TrackContextMenu({
             <span className="track-context-item-icon" aria-hidden="true">
               <ExternalLink size={15} />
             </span>
-            <span>Open</span>
+            <span className="control-option-label">Open</span>
             <ChevronRight className="track-context-chevron" size={14} />
           </button>
           {openSubmenu === "open" && (

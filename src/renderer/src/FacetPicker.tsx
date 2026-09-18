@@ -240,7 +240,11 @@ export function FacetPicker({
       </button>
       {open &&
         createPortal(
-          <div ref={popupRef} className="facet-picker-popup" style={position}>
+          <div
+            ref={popupRef}
+            className="control-popover facet-picker-popup"
+            style={position}
+          >
             <div className="facet-picker-search">
               <Search size={14} aria-hidden="true" />
               <input
@@ -319,15 +323,21 @@ export function FacetPicker({
                 role="option"
                 aria-selected={!hasValue}
                 className={
-                  "facet-picker-option facet-picker-all " +
+                  "control-option facet-picker-option facet-picker-all " +
                   (active === -1 ? "is-active" : "")
                 }
                 onMouseDown={(event) => event.preventDefault()}
                 onMouseMove={() => setActive(-1)}
                 onClick={clearSelection}
               >
-                <span>{allLabel}</span>
-                {!hasValue && <Check size={13} aria-hidden="true" />}
+                <span className="control-option-label">{allLabel}</span>
+                {!hasValue && (
+                  <Check
+                    className="control-option-check"
+                    size={13}
+                    aria-hidden="true"
+                  />
+                )}
               </div>
               <div
                 ref={viewportRef}
@@ -353,7 +363,7 @@ export function FacetPicker({
                           aria-posinset={index + 2}
                           aria-setsize={filtered.length + 1}
                           className={
-                            "facet-picker-option " +
+                            "control-option facet-picker-option " +
                             (active === index ? "is-active" : "")
                           }
                           style={{
@@ -368,10 +378,16 @@ export function FacetPicker({
                           onMouseMove={() => setActive(index)}
                           onClick={() => choose(item.name)}
                         >
-                          <span>{item.name}</span>
+                          <span className="control-option-label">
+                            {item.name}
+                          </span>
                           <small>{item.count.toLocaleString()}</small>
                           {selectedValues.includes(item.name) && (
-                            <Check size={13} aria-hidden="true" />
+                            <Check
+                              className="control-option-check"
+                              size={13}
+                              aria-hidden="true"
+                            />
                           )}
                         </div>
                       );

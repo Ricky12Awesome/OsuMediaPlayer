@@ -13,7 +13,6 @@ import {
 import { readFile, stat } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import type {
-  LibraryQuery,
   LibrarySummary,
   MediaAction,
   Track,
@@ -21,7 +20,6 @@ import type {
   TrackDebugMediaInfo,
   TrackContextMenuAction,
   TrackContextMenuInfo,
-  VideoEncodingSettings,
   VideoSource,
 } from "../shared/types";
 import { LibraryIndex } from "./library/index";
@@ -37,6 +35,10 @@ import {
 import { VideoTranscoder } from "./video/transcoder";
 import { ffprobeFor, runProcess } from "./video/process";
 import { resolveRendererUrl } from "./renderer-url";
+import {
+  parseLibraryQuery,
+  parseVideoEncodingSettings,
+} from "./ipc-validation";
 
 const isWaylandSession =
   process.platform === "linux" &&
@@ -653,9 +655,7 @@ function setupIPC(): void {
   ipcMain.handle("library:query", (event, input: unknown) => {
     requireTrusted(event);
     if (!library) throw new Error("The library has not been loaded yet.");
-    if (!input || typeof input !== "object" || Array.isArray(input))
-      throw new Error("Invalid library query.");
-    return library.query(input as LibraryQuery);
+    return library.query(parseLibraryQuery(input));
   });
   ipcMain.handle("library:track", (event, id: unknown) => {
     requireTrusted(event);
@@ -684,12 +684,7 @@ function setupIPC(): void {
     (event, id: unknown, input: unknown) => {
       requireTrusted(event);
       if (typeof id !== "string" || !library) return null;
-      if (
-        input !== undefined &&
-        (!input || typeof input !== "object" || Array.isArray(input))
-      )
-        throw new Error("Invalid library query.");
-      return library.getTrackLocation(id, input as LibraryQuery | undefined);
+      return library.getTrackLocation(id, parseLibraryQuery(input, true));
     },
   );
   ipcMain.handle(
@@ -697,16 +692,11 @@ function setupIPC(): void {
     async (event, trackId: unknown, settings: unknown) => {
       requireTrusted(event);
       if (typeof trackId !== "string") throw new Error("Invalid track ID.");
-      if (
-        settings !== undefined &&
-        (!settings || typeof settings !== "object" || Array.isArray(settings))
-      )
-        throw new Error("Invalid video encoding settings.");
       return (
         (await videoTranscoder?.prepare(
           library,
           trackId,
-          settings as VideoEncodingSettings | undefined,
+          parseVideoEncodingSettings(settings),
         )) ?? null
       );
     },

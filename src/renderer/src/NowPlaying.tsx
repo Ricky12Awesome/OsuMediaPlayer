@@ -1,4 +1,4 @@
-import type { CSSProperties, PointerEvent, RefObject } from "react";
+import type { PointerEvent, RefObject } from "react";
 import { LoaderCircle, Sparkles } from "lucide-react";
 import type { TrackDebugInfo } from "../../shared/types";
 import type { PlayerState } from "./usePlayer";
@@ -20,11 +20,6 @@ export const captionPositions = [
 
 export type CaptionPosition = (typeof captionPositions)[number];
 
-export type CaptionDragPosition = {
-  x: number;
-  y: number;
-};
-
 export interface NowPlayingProps {
   player: PlayerState;
   visualizer: VisualizerSettings;
@@ -35,7 +30,6 @@ export interface NowPlayingProps {
   showArtistUnicode: boolean;
   captionPosition: CaptionPosition;
   captionDragging: boolean;
-  captionDragPosition: CaptionDragPosition | null;
   videoActive: boolean;
   captionRef: RefObject<HTMLDivElement | null>;
   beginCaptionDrag: (event: PointerEvent<HTMLDivElement>) => void;
@@ -51,7 +45,6 @@ export function NowPlaying({
   showArtistUnicode,
   captionPosition,
   captionDragging,
-  captionDragPosition,
   videoActive,
   captionRef,
   beginCaptionDrag,
@@ -146,14 +139,6 @@ export function NowPlaying({
               (captionDragging ? " is-dragging" : "")
             }
             aria-label="Now playing information. Drag to move it to an edge."
-            style={
-              captionDragPosition
-                ? ({
-                    "--caption-drag-x": captionDragPosition.x + "px",
-                    "--caption-drag-y": captionDragPosition.y + "px",
-                  } as CSSProperties)
-                : undefined
-            }
             onPointerDown={beginCaptionDrag}
           >
             <h2 title={displayTrackTitle(player.track, showTitleUnicode)}>
