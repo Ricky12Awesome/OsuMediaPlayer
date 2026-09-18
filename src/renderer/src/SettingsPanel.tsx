@@ -266,12 +266,6 @@ export function SettingsPanel({
           () => setShowNowPlayingTitleArtist((value) => !value),
         )}
         {settingsSwitch(
-          "Debug mode",
-          "Display technical metadata for the current track",
-          debugMode,
-          () => setDebugMode((value) => !value),
-        )}
-        {settingsSwitch(
           "Show title unicode",
           "Use a song's Unicode title when one is available",
           showTitleUnicode,
@@ -419,6 +413,14 @@ export function SettingsPanel({
           <p className={"cache-notice " + cacheNotice.kind} role="status">
             {cacheNotice.message}
           </p>
+        )}
+      </div>
+      <div className="settings-block debug-setting">
+        {settingsSwitch(
+          "Debug mode",
+          "Display technical metadata for the current track",
+          debugMode,
+          () => setDebugMode((value) => !value),
         )}
       </div>
     </>
