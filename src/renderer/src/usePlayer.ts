@@ -88,6 +88,7 @@ export interface PlayerState {
   analyser: AnalyserNode | null;
   videoRef: RefObject<HTMLVideoElement | null>;
   videoUrl: string | null;
+  videoSource: "none" | "Original" | "Cache" | "HLS";
   videoLoading: boolean;
   videoEncoding: boolean;
   videoEncodingProgress: number | null;
@@ -197,6 +198,7 @@ export function usePlayer(
 
   const {
     videoUrl,
+    videoSource,
     videoLoading,
     videoEncoding,
     videoEncodingProgress,
@@ -880,6 +882,7 @@ export function usePlayer(
     analyser,
     videoRef,
     videoUrl,
+    videoSource,
     videoLoading,
     videoEncoding,
     videoEncodingProgress,

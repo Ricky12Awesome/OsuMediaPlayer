@@ -16,6 +16,7 @@ import type {
   PlayerAPI,
   SortKey,
   Track,
+  TrackDebugInfo,
   TrackContextMenuAction,
 } from "../../shared/types";
 import { extractArtworkTheme, type ArtworkTheme } from "./artwork-theme";
@@ -89,6 +90,7 @@ const defaultApi: PlayerAPI = {
   },
   queryLibrary: async () => ({ items: [], total: 0, offset: 0 }),
   getTrack: async () => null,
+  getTrackDebugInfo: async () => null,
   prepareVideo: async () => null,
   cancelVideoEncoding: async () => {},
   completeVideoStream: async () => {},
@@ -234,6 +236,8 @@ export function App({
   const [showNowPlayingTitleArtist, setShowNowPlayingTitleArtist] = useState(
     () => readPreference("showNowPlayingTitleArtist"),
   );
+  const [debugMode, setDebugMode] = useState(() => readPreference("debugMode"));
+  const [debugInfo, setDebugInfo] = useState<TrackDebugInfo | null>(null);
   const [artworkThemeEnabled, setArtworkThemeEnabled] = useState(() =>
     readPreference("artworkTheme"),
   );
@@ -522,6 +526,26 @@ export function App({
       writePreference("showNowPlayingTitleArtist", showNowPlayingTitleArtist),
     [showNowPlayingTitleArtist],
   );
+  useEffect(() => writePreference("debugMode", debugMode), [debugMode]);
+  useEffect(() => {
+    const trackId = player.track?.id;
+    if (!debugMode || !trackId) {
+      setDebugInfo(null);
+      return;
+    }
+    let cancelled = false;
+    void api
+      .getTrackDebugInfo(trackId)
+      .then((info) => {
+        if (!cancelled) setDebugInfo(info);
+      })
+      .catch(() => {
+        if (!cancelled) setDebugInfo(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [debugMode, player.track?.id]);
   useEffect(
     () => writePreference("showTitleUnicode", showTitleUnicode),
     [showTitleUnicode],
@@ -889,6 +913,7 @@ export function App({
     setShowTitleUnicode(false);
     setShowArtistUnicode(false);
     setShowNowPlayingTitleArtist(true);
+    setDebugMode(false);
     setArtworkThemeEnabled(true);
     setLibraryWidth(430);
     setSidePanelWidth(defaultSidePanelWidth);
@@ -1115,6 +1140,8 @@ export function App({
             player={player}
             visualizer={visualizer}
             showNowPlayingTitleArtist={showNowPlayingTitleArtist}
+            debugMode={debugMode}
+            debugInfo={debugInfo}
             showTitleUnicode={showTitleUnicode}
             showArtistUnicode={showArtistUnicode}
             captionPosition={captionPosition}
@@ -1151,6 +1178,8 @@ export function App({
                 setArtworkThemeEnabled={setArtworkThemeEnabled}
                 showNowPlayingTitleArtist={showNowPlayingTitleArtist}
                 setShowNowPlayingTitleArtist={setShowNowPlayingTitleArtist}
+                debugMode={debugMode}
+                setDebugMode={setDebugMode}
                 showTitleUnicode={showTitleUnicode}
                 setShowTitleUnicode={setShowTitleUnicode}
                 showArtistUnicode={showArtistUnicode}

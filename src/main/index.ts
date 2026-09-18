@@ -17,6 +17,8 @@ import type {
   LibrarySummary,
   MediaAction,
   Track,
+  TrackDebugInfo,
+  TrackDebugMediaInfo,
   TrackContextMenuAction,
   TrackContextMenuInfo,
   VideoEncodingSettings,
@@ -32,6 +34,7 @@ import {
   type ResolvedMediaFile,
 } from "./media";
 import { VideoTranscoder } from "./video/transcoder";
+import { ffprobeFor, runProcess } from "./video/process";
 import { resolveRendererUrl } from "./renderer-url";
 
 const isWaylandSession =
@@ -297,6 +300,132 @@ async function getTrackContextMenuInfo(
   };
 }
 
+type DebugMediaKind = "audio" | "background" | "video";
+
+function debugAssetName(filename: string): string {
+  const normalized = filename.replaceAll("\\", "/");
+  return normalized.slice(normalized.lastIndexOf("/") + 1) || filename;
+}
+
+/** Probe optional media properties without making playback depend on ffprobe. */
+async function probeDebugMedia(
+  filename: string,
+  kind: DebugMediaKind,
+): Promise<
+  Pick<
+    TrackDebugMediaInfo,
+    "duration" | "resolution" | "frameRate" | "codec" | "bitrate"
+  >
+> {
+  const stream = kind === "audio" ? "a:0" : "v:0";
+  const { result } = runProcess(
+    ffprobeFor(process.env.FFMPEG_PATH || "ffmpeg"),
+    [
+      "-v",
+      "error",
+      "-select_streams",
+      stream,
+      "-show_entries",
+      "stream=width,height,codec_name,avg_frame_rate,bit_rate,duration:format=duration,bit_rate",
+      "-of",
+      "json",
+      filename,
+    ],
+  );
+  const completed = await result;
+  if (completed.code !== 0)
+    return {
+      duration: null,
+      resolution: null,
+      frameRate: null,
+      codec: null,
+      bitrate: null,
+    };
+  try {
+    const parsed = JSON.parse(completed.stdout) as {
+      streams?: Array<{
+        width?: number;
+        height?: number;
+        codec_name?: string;
+        avg_frame_rate?: string;
+        r_frame_rate?: string;
+        bit_rate?: string;
+        duration?: string;
+      }>;
+      format?: { duration?: string; bit_rate?: string };
+    };
+    const streamInfo = parsed.streams?.[0];
+    const parseFrameRate = (value: string | undefined): number | null => {
+      const [numerator, denominator] = (value ?? "").split("/").map(Number);
+      if (denominator > 0 && Number.isFinite(numerator / denominator))
+        return numerator / denominator;
+      return null;
+    };
+    const frameRate =
+      parseFrameRate(streamInfo?.avg_frame_rate) ??
+      parseFrameRate(streamInfo?.r_frame_rate);
+    const durationValue = Number(
+      streamInfo?.duration ?? parsed.format?.duration,
+    );
+    const bitrateValue = Number(
+      streamInfo?.bit_rate ?? parsed.format?.bit_rate,
+    );
+    return {
+      duration:
+        Number.isFinite(durationValue) && durationValue >= 0
+          ? durationValue
+          : null,
+      resolution:
+        Number.isFinite(streamInfo?.width) &&
+        Number.isFinite(streamInfo?.height) &&
+        streamInfo?.width &&
+        streamInfo?.height
+          ? { width: streamInfo.width, height: streamInfo.height }
+          : null,
+      frameRate,
+      codec: streamInfo?.codec_name ?? null,
+      bitrate:
+        Number.isFinite(bitrateValue) && bitrateValue > 0 ? bitrateValue : null,
+    };
+  } catch {
+    return {
+      duration: null,
+      resolution: null,
+      frameRate: null,
+      codec: null,
+      bitrate: null,
+    };
+  }
+}
+
+async function getTrackDebugInfo(
+  index: LibraryIndex,
+  track: Track,
+): Promise<TrackDebugInfo> {
+  const resolve = async (
+    kind: DebugMediaKind,
+    hash: string | undefined,
+  ): Promise<TrackDebugMediaInfo | null> => {
+    if (!hash) return null;
+    const resolved = await resolveTrackAsset(index, track, kind);
+    if (!resolved) return null;
+    const probe = await probeDebugMedia(resolved.filename, kind);
+    return {
+      name: debugAssetName(resolved.asset.filename),
+      path: resolved.filename,
+      hash: resolved.asset.hash,
+      fileSize: resolved.size,
+      ...probe,
+    };
+  };
+  const [audio, background, video] = await Promise.all([
+    resolve("audio", track.audioHash),
+    resolve("background", track.backgroundHash),
+    resolve("video", track.videoHash),
+  ]);
+  return { audio, background, video };
+}
+
 function copyTextForAction(
   track: Track,
   action: TrackContextMenuAction,
@@ -495,6 +624,12 @@ function setupIPC(): void {
   ipcMain.handle("library:track", (event, id: unknown) => {
     requireTrusted(event);
     return typeof id === "string" ? (library?.getTrack(id) ?? null) : null;
+  });
+  ipcMain.handle("library:track-debug-info", async (event, id: unknown) => {
+    requireTrusted(event);
+    if (typeof id !== "string" || !library) return null;
+    const track = library.getTrack(id);
+    return track ? getTrackDebugInfo(library, track) : null;
   });
   ipcMain.handle(
     "library:track-location",

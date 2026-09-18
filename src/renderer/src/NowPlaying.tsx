@@ -1,9 +1,11 @@
 import type { CSSProperties, PointerEvent, RefObject } from "react";
 import { LoaderCircle, Sparkles } from "lucide-react";
+import type { TrackDebugInfo } from "../../shared/types";
 import type { PlayerState } from "./usePlayer";
 import { AudioVisualizer } from "./AudioVisualizer";
 import type { VisualizerSettings } from "./visualizer-settings";
 import { displayTrackArtist, displayTrackTitle } from "./track-title";
+import { DebugWidget, type DebugWidgetData } from "./DebugWidget";
 
 export const captionPositions = [
   "top-left",
@@ -27,6 +29,8 @@ export interface NowPlayingProps {
   player: PlayerState;
   visualizer: VisualizerSettings;
   showNowPlayingTitleArtist: boolean;
+  debugMode: boolean;
+  debugInfo?: TrackDebugInfo | null;
   showTitleUnicode: boolean;
   showArtistUnicode: boolean;
   captionPosition: CaptionPosition;
@@ -41,6 +45,8 @@ export function NowPlaying({
   player,
   visualizer,
   showNowPlayingTitleArtist,
+  debugMode,
+  debugInfo,
   showTitleUnicode,
   showArtistUnicode,
   captionPosition,
@@ -50,6 +56,36 @@ export function NowPlaying({
   captionRef,
   beginCaptionDrag,
 }: NowPlayingProps) {
+  const debugData = player.track
+    ? {
+        onlineId: player.track.onlineId,
+        md5Hash: player.track.md5Hash,
+        title: player.track.title,
+        titleUnicode: player.track.titleUnicode,
+        artist: player.track.artist,
+        artistUnicode: player.track.artistUnicode,
+        tags: player.track.tags,
+        ...debugInfo,
+        audio: {
+          hash: player.track.audioHash,
+          ...(debugInfo?.audio ?? {}),
+          duration:
+            debugInfo?.audio?.duration ??
+            player.duration ??
+            player.track.duration,
+        },
+        background: {
+          hash: player.track.backgroundHash,
+          ...(debugInfo?.background ?? {}),
+        },
+        video: {
+          hash: player.track.videoHash,
+          ...(debugInfo?.video ?? {}),
+          source: player.videoSource,
+        },
+      }
+    : debugInfo;
+
   return (
     <section className="now-playing-panel" aria-label="Now playing">
       <div
@@ -101,6 +137,7 @@ export function NowPlaying({
           playing={player.playing}
           settings={visualizer}
         />
+        {debugMode && player.track && <DebugWidget data={debugData} />}
         {showNowPlayingTitleArtist && (
           <div
             className={

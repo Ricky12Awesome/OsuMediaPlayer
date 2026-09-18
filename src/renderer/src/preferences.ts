@@ -18,6 +18,7 @@ export interface Preferences {
   libraryPosition: "left" | "right";
   transportLayout: "controls-left" | "controls-centered";
   showNowPlayingTitleArtist: boolean;
+  debugMode: boolean;
   artworkTheme: boolean;
   nowPlayingPosition:
     | "top-left"
@@ -60,6 +61,7 @@ const keys: Record<PreferenceKey, string> = {
   libraryPosition: "osu-music-library-position",
   transportLayout: "osu-music-transport-layout",
   showNowPlayingTitleArtist: "osu-music-show-now-playing-title-artist",
+  debugMode: "osu-music-debug-mode",
   artworkTheme: "osu-music-artwork-theme",
   nowPlayingPosition: "osu-music-now-playing-position",
   libraryWidth: "osu-music-library-width",
@@ -105,6 +107,7 @@ export const preferenceDefaults: Preferences = {
   libraryPosition: "right",
   transportLayout: "controls-centered",
   showNowPlayingTitleArtist: true,
+  debugMode: false,
   artworkTheme: true,
   nowPlayingPosition: "top-left",
   libraryWidth: 430,
@@ -172,6 +175,7 @@ function parseValue<K extends PreferenceKey>(
     case "showArtistUnicode":
     case "sidebarHidden":
     case "showNowPlayingTitleArtist":
+    case "debugMode":
     case "artworkTheme":
     case "visualizerPanelOpen":
       return parseBoolean(value, fallback as boolean) as Preferences[K];

@@ -89,6 +89,77 @@
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
 }
+.debug-widget {
+  z-index: 5;
+  color: #fff;
+  background: rgb(0 0 0 / 93%);
+  border: 1px solid rgb(255 255 255 / 16%);
+  border-radius: 5px;
+  width: max-content;
+  max-width: calc(100% - 28px);
+  max-height: calc(100% - 28px);
+  padding: 7px 9px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  font-family: monospace;
+  font-size: 10px;
+  line-height: 1.35;
+  position: absolute;
+  bottom: 14px;
+  left: 14px;
+  box-shadow: 0 6px 24px rgb(0 0 0 / 35%);
+}
+.debug-widget-row {
+  align-items: baseline;
+  display: flex;
+  gap: 5px;
+  min-width: 0;
+  min-height: 14px;
+  white-space: nowrap;
+}
+.debug-widget-key {
+  flex: 0 0 auto;
+  color: #fff;
+}
+.debug-widget-value {
+  appearance: none;
+  color: #fff;
+  cursor: pointer;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.debug-widget-value:hover,
+.debug-widget-value:focus-visible {
+  color: #ffd7e9;
+  text-decoration: underline;
+}
+.debug-widget-value:focus-visible {
+  outline: 1px solid currentColor;
+  outline-offset: 1px;
+}
+.debug-widget-value.is-none {
+  color: #686868;
+}
+.debug-widget-value.is-copied {
+  text-decoration: underline;
+}
+.debug-widget-value.debug-value-source-original {
+  color: #ff66aa;
+}
+.debug-widget-value.debug-value-source-cache {
+  color: #39ff88;
+}
+.debug-widget-value.debug-value-source-hls {
+  color: #fff04a;
+}
 .is-favorite {
   color: var(--pink) !important;
 }

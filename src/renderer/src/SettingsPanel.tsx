@@ -57,6 +57,8 @@ export interface SettingsPanelProps {
   setArtworkThemeEnabled: Dispatch<SetStateAction<boolean>>;
   showNowPlayingTitleArtist: boolean;
   setShowNowPlayingTitleArtist: Dispatch<SetStateAction<boolean>>;
+  debugMode: boolean;
+  setDebugMode: Dispatch<SetStateAction<boolean>>;
   showTitleUnicode: boolean;
   setShowTitleUnicode: Dispatch<SetStateAction<boolean>>;
   showArtistUnicode: boolean;
@@ -101,6 +103,8 @@ export function SettingsPanel({
   setArtworkThemeEnabled,
   showNowPlayingTitleArtist,
   setShowNowPlayingTitleArtist,
+  debugMode,
+  setDebugMode,
   showTitleUnicode,
   setShowTitleUnicode,
   showArtistUnicode,
@@ -260,6 +264,12 @@ export function SettingsPanel({
           "Display track details over the artwork",
           showNowPlayingTitleArtist,
           () => setShowNowPlayingTitleArtist((value) => !value),
+        )}
+        {settingsSwitch(
+          "Debug mode",
+          "Display technical metadata for the current track",
+          debugMode,
+          () => setDebugMode((value) => !value),
         )}
         {settingsSwitch(
           "Show title unicode",
