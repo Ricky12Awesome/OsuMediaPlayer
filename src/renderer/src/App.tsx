@@ -535,7 +535,7 @@ export function App({
     }
     let cancelled = false;
     void api
-      .getTrackDebugInfo(trackId)
+      .getTrackDebugInfo(trackId, player.videoSource)
       .then((info) => {
         if (!cancelled) setDebugInfo(info);
       })
@@ -545,7 +545,7 @@ export function App({
     return () => {
       cancelled = true;
     };
-  }, [debugMode, player.track?.id]);
+  }, [debugMode, player.track?.id, player.videoSource]);
   useEffect(
     () => writePreference("showTitleUnicode", showTitleUnicode),
     [showTitleUnicode],

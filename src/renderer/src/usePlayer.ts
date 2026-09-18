@@ -13,6 +13,7 @@ import type {
   VideoEncodingCodec,
   VideoEncodingQuality,
   VideoMaxFps,
+  VideoSource,
 } from "../../shared/types";
 import {
   cloneQueueQuery,
@@ -88,7 +89,7 @@ export interface PlayerState {
   analyser: AnalyserNode | null;
   videoRef: RefObject<HTMLVideoElement | null>;
   videoUrl: string | null;
-  videoSource: "none" | "Original" | "Cache" | "HLS";
+  videoSource: VideoSource;
   videoLoading: boolean;
   videoEncoding: boolean;
   videoEncodingProgress: number | null;

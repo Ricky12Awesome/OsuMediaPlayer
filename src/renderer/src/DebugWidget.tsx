@@ -32,6 +32,7 @@ export interface DebugWidgetData {
   audio?: DebugMediaInfo | null;
   background?: DebugMediaInfo | null;
   video?: DebugMediaInfo | null;
+  encodedVideo?: DebugMediaInfo | null;
 }
 
 interface DebugWidgetProps {
@@ -155,7 +156,8 @@ function rowsFor(data: DebugWidgetData): DebugRow[] {
   const audio = data.audio ?? {};
   const background = data.background ?? {};
   const video = data.video ?? {};
-  return [
+  const encodedVideo = data.encodedVideo;
+  const rows: DebugRow[] = [
     { label: "online id", value: data.onlineId },
     { label: "md5hash", value: data.md5Hash },
     { label: "title", value: data.title },
@@ -199,6 +201,24 @@ function rowsFor(data: DebugWidgetData): DebugRow[] {
       source: video.source,
     },
   ];
+  if (encodedVideo) {
+    rows.push(
+      { label: "encoded name", value: encodedVideo.name },
+      { label: "encoded path", value: encodedVideo.path },
+      { label: "encoded video codec", value: encodedVideo.codec },
+      {
+        label: "encoded video bitrate",
+        value: encodedVideo.bitrate,
+        format: formatBitrate,
+      },
+      {
+        label: "encoded resolution",
+        value: encodedVideo.resolution,
+        format: (value) => formatVideoResolution(value, encodedVideo.frameRate),
+      },
+    );
+  }
+  return rows;
 }
 
 async function copyText(value: string): Promise<boolean> {

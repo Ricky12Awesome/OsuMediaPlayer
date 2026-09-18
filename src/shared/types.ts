@@ -62,6 +62,7 @@ export interface TrackDebugInfo {
   audio: TrackDebugMediaInfo | null;
   background: TrackDebugMediaInfo | null;
   video: TrackDebugMediaInfo | null;
+  encodedVideo?: TrackDebugMediaInfo | null;
 }
 
 export interface LibraryFacet {
@@ -151,6 +152,7 @@ export type VideoEncodingCodec =
   "auto" | "av1" | "hevc" | "h264-hardware" | "h264-software";
 
 export type VideoMaxFps = 0 | 24 | 30 | 60;
+export type VideoSource = "none" | "Original" | "Cache" | "HLS";
 
 export interface VideoEncodingSettings {
   codec: VideoEncodingCodec;
@@ -187,7 +189,10 @@ export interface PlayerAPI {
   loadCachedLibrary?: (installPath?: string) => Promise<LibrarySummary | null>;
   queryLibrary: (query?: LibraryQuery) => Promise<LibraryPage>;
   getTrack: (id: string) => Promise<Track | null>;
-  getTrackDebugInfo: (id: string) => Promise<TrackDebugInfo | null>;
+  getTrackDebugInfo: (
+    id: string,
+    videoSource?: VideoSource,
+  ) => Promise<TrackDebugInfo | null>;
   copyText?: (value: string) => Promise<void>;
   getTrackLocation?: (
     id: string,

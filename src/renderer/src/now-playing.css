@@ -102,7 +102,7 @@
   overflow-x: hidden;
   overflow-y: auto;
   font-family: monospace;
-  font-size: 10px;
+  font-size: 1rem;
   line-height: 1.35;
   position: absolute;
   bottom: 14px;
@@ -120,6 +120,7 @@
 .debug-widget-key {
   flex: 0 0 auto;
   color: #fff;
+  font-weight: 700;
 }
 .debug-widget-value {
   appearance: none;

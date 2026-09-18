@@ -116,6 +116,44 @@ export class VideoTranscoder {
       : null;
   }
 
+  /** Return the converted file or active HLS playlist served to the player. */
+  async playbackFilename(
+    hash: string,
+    source: "Cache" | "HLS",
+  ): Promise<string | null> {
+    if (source === "Cache")
+      return this.cache.ready.get(hash.toLowerCase())?.filename ?? null;
+    const stream = await this.cache.readStreamMetadata();
+    return stream?.hash === hash.toLowerCase() &&
+      (await fileHasContents(this.playlist))
+      ? this.playlist
+      : null;
+  }
+
+  async playbackCodec(
+    hash: string,
+    source: "Cache" | "HLS",
+  ): Promise<string | null> {
+    const filename = await this.playbackFilename(hash, source);
+    let encoder: string | undefined;
+    if (source === "Cache") {
+      encoder = (await this.cache.readCacheManifest(hash))?.encoder;
+    } else {
+      const stream = await this.cache.readStreamMetadata();
+      encoder = stream?.encoder;
+    }
+    if (!filename) return null;
+    const codec = (await this.probeSource(filename)).codec;
+    if (codec) return codec;
+    const normalized = encoder?.toLowerCase() ?? "";
+    if (normalized.includes("av1")) return "av1";
+    if (normalized.includes("hevc") || normalized.includes("265"))
+      return "hevc";
+    if (normalized.includes("264") || normalized.includes("x264"))
+      return "h264";
+    return null;
+  }
+
   private get streamDirectory(): string {
     return join(this.cacheDirectory, streamDirectoryName);
   }

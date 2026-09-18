@@ -10,7 +10,7 @@ import {
   session,
   shell,
 } from "electron";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import type {
   LibraryQuery,
@@ -22,6 +22,7 @@ import type {
   TrackContextMenuAction,
   TrackContextMenuInfo,
   VideoEncodingSettings,
+  VideoSource,
 } from "../shared/types";
 import { LibraryIndex } from "./library/index";
 import { directorySize } from "./cache";
@@ -401,6 +402,7 @@ async function probeDebugMedia(
 async function getTrackDebugInfo(
   index: LibraryIndex,
   track: Track,
+  videoSource: VideoSource = "none",
 ): Promise<TrackDebugInfo> {
   const resolve = async (
     kind: DebugMediaKind,
@@ -418,12 +420,46 @@ async function getTrackDebugInfo(
       ...probe,
     };
   };
-  const [audio, background, video] = await Promise.all([
+  const [audio, background, originalVideo] = await Promise.all([
     resolve("audio", track.audioHash),
     resolve("background", track.backgroundHash),
     resolve("video", track.videoHash),
   ]);
-  return { audio, background, video };
+  let encodedVideo: TrackDebugMediaInfo | null = null;
+  if (
+    track.videoHash &&
+    (videoSource === "Cache" || videoSource === "HLS") &&
+    videoTranscoder
+  ) {
+    const encodedPath = await videoTranscoder.playbackFilename(
+      track.videoHash,
+      videoSource,
+    );
+    if (encodedPath) {
+      try {
+        const [file, probe] = await Promise.all([
+          stat(encodedPath),
+          probeDebugMedia(encodedPath, "video"),
+        ]);
+        const codec =
+          probe.codec ??
+          (await videoTranscoder.playbackCodec(track.videoHash, videoSource)) ??
+          originalVideo?.codec ??
+          null;
+        encodedVideo = {
+          name: debugAssetName(encodedPath),
+          path: encodedPath,
+          hash: track.videoHash,
+          fileSize: file.size,
+          ...probe,
+          codec,
+        };
+      } catch {
+        // The stream can disappear while playback changes source.
+      }
+    }
+  }
+  return { audio, background, video: originalVideo, encodedVideo };
 }
 
 function copyTextForAction(
@@ -625,12 +661,19 @@ function setupIPC(): void {
     requireTrusted(event);
     return typeof id === "string" ? (library?.getTrack(id) ?? null) : null;
   });
-  ipcMain.handle("library:track-debug-info", async (event, id: unknown) => {
-    requireTrusted(event);
-    if (typeof id !== "string" || !library) return null;
-    const track = library.getTrack(id);
-    return track ? getTrackDebugInfo(library, track) : null;
-  });
+  ipcMain.handle(
+    "library:track-debug-info",
+    async (event, id: unknown, source: unknown) => {
+      requireTrusted(event);
+      if (typeof id !== "string" || !library) return null;
+      const track = library.getTrack(id);
+      const videoSource: VideoSource =
+        source === "Original" || source === "Cache" || source === "HLS"
+          ? source
+          : "none";
+      return track ? getTrackDebugInfo(library, track, videoSource) : null;
+    },
+  );
   ipcMain.handle("clipboard:write-text", async (event, value: unknown) => {
     requireTrusted(event);
     if (typeof value !== "string") throw new Error("Invalid clipboard text.");
