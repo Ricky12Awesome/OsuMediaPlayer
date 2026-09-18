@@ -160,7 +160,7 @@ export function SortPicker({ value, options, onChange }: SortPickerProps) {
           <div
             ref={popupRef}
             id={id + "-listbox"}
-            className="sort-picker-popup"
+            className="control-popover sort-picker-popup"
             role="listbox"
             aria-label="Sort songs"
             style={position}
@@ -172,15 +172,20 @@ export function SortPicker({ value, options, onChange }: SortPickerProps) {
                 role="option"
                 aria-selected={option.value === value}
                 className={
-                  "sort-picker-option " + (active === index ? "is-active" : "")
+                  "control-option sort-picker-option " +
+                  (active === index ? "is-active" : "")
                 }
                 onMouseDown={(event) => event.preventDefault()}
                 onMouseMove={() => setActive(index)}
                 onClick={() => choose(option.value)}
               >
-                <span>{option.label}</span>
+                <span className="control-option-label">{option.label}</span>
                 {option.value === value && (
-                  <Check size={13} aria-hidden="true" />
+                  <Check
+                    className="control-option-check"
+                    size={13}
+                    aria-hidden="true"
+                  />
                 )}
               </div>
             ))}

@@ -104,11 +104,13 @@ export function VisualizerControls({
       <span className="settings-label">AUDIO VISUALIZER</span>
       {toggleGlobal("Show visualizer", "Display bars over the artwork")}
       <div
-        className="visualizer-choice-fieldset"
+        className="settings-row visualizer-choice-fieldset"
         role="group"
         aria-label="Visualizer style"
       >
-        <span className="visualizer-choice-label">Style</span>
+        <span className="settings-row-label visualizer-choice-label">
+          Style
+        </span>
         <div className="settings-choice-group visualizer-choice-options">
           {(["line", "circle"] as const).map((layout) => (
             <button
@@ -136,11 +138,11 @@ export function VisualizerControls({
         </div>
       </div>
       <div
-        className="visualizer-choice-fieldset"
+        className="settings-row visualizer-choice-fieldset"
         role="group"
         aria-label="Visualizer mode"
       >
-        <span className="visualizer-choice-label">Mode</span>
+        <span className="settings-row-label visualizer-choice-label">Mode</span>
         <div className="settings-choice-group visualizer-choice-options">
           {(["fft", "waveform"] as const).map((mode) => (
             <button
@@ -160,7 +162,7 @@ export function VisualizerControls({
       </div>
       {settings.layout === "line" ? (
         <fieldset className="visualizer-toggle-fieldset">
-          <legend>Mirroring</legend>
+          <legend className="settings-label">Mirroring</legend>
           {toggle(
             "mirrored",
             "Mirror horizontally",
@@ -180,7 +182,7 @@ export function VisualizerControls({
         </fieldset>
       ) : (
         <fieldset className="visualizer-toggle-fieldset">
-          <legend>Mirroring</legend>
+          <legend className="settings-label">Mirroring</legend>
           {toggle(
             "mirrored",
             "Mirror horizontally",
@@ -200,7 +202,7 @@ export function VisualizerControls({
         </fieldset>
       )}
       <fieldset className="visualizer-dimensions">
-        <legend>Bars</legend>
+        <legend className="settings-label">Bars</legend>
         {(
           [
             ["bars", "Bars", 8, 256, ""],
@@ -226,7 +228,7 @@ export function VisualizerControls({
         ).map(([name, label, min, max, unit]) => (
           <div className="visualizer-slider-card" key={name}>
             <label
-              className="visualizer-slider-label"
+              className="settings-row-label visualizer-slider-label"
               htmlFor={`visualizer-${name}`}
             >
               {label.replace(" (%)", "")}

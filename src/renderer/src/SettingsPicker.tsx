@@ -165,7 +165,7 @@ export function SettingsPicker<T extends string | number>({
           <div
             ref={popupRef}
             id={id + "-listbox"}
-            className="settings-picker-popup"
+            className="control-popover settings-picker-popup"
             role="listbox"
             aria-label={label}
             style={position}
@@ -177,16 +177,20 @@ export function SettingsPicker<T extends string | number>({
                 role="option"
                 aria-selected={option.value === value}
                 className={
-                  "settings-picker-option " +
+                  "control-option settings-picker-option " +
                   (active === index ? "is-active" : "")
                 }
                 onMouseDown={(event) => event.preventDefault()}
                 onMouseMove={() => setActive(index)}
                 onClick={() => choose(option.value)}
               >
-                <span>{option.label}</span>
+                <span className="control-option-label">{option.label}</span>
                 {option.value === value && (
-                  <Check size={13} aria-hidden="true" />
+                  <Check
+                    className="control-option-check"
+                    size={13}
+                    aria-hidden="true"
+                  />
                 )}
               </div>
             ))}

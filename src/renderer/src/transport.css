@@ -264,44 +264,6 @@
 .mobile-switch {
   display: none;
 }
-.primary-button,
-.secondary-button,
-.danger-button {
-  background: var(--pink);
-  color: var(--button-foreground);
-  border-radius: 0.4375rem;
-  justify-content: center;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.625rem 0.875rem;
-  font-size: 1rem;
-  font-weight: 800;
-  display: flex;
-}
-.primary-button:hover {
-  background: var(--pink-bright);
-}
-.secondary-button {
-  color: #c0a8cd;
-  background: #ffffff07;
-  border: 1px solid #ffffff10;
-}
-.secondary-button:hover {
-  background: #ffffff0d;
-}
-.danger-button {
-  color: #fff4f7;
-  background: #bd3f60;
-}
-.danger-button:hover:not(:disabled) {
-  background: #d45172;
-}
 .error-state > .primary-button {
   margin-top: 0.625rem;
-}
-.text-button {
-  color: var(--pink-text);
-  background: 0 0;
-  padding: 0.5rem;
-  font-size: 1rem;
 }

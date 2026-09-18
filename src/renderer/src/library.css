@@ -150,41 +150,7 @@ body.is-resizing-side-panel * {
   display: grid;
 }
 .library-tabs {
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-  align-items: center;
-  gap: 1.5625rem;
   margin-top: 1.0625rem;
-  display: flex;
-}
-.library-tabs button {
-  color: #8e809d;
-  white-space: nowrap;
-  background: 0 0;
-  align-items: center;
-  gap: 0.4375rem;
-  padding: 0.6875rem 0 0.875rem;
-  font-size: 1rem;
-  font-weight: 700;
-  display: flex;
-  position: relative;
-}
-.library-tabs button.active {
-  color: var(--pink);
-}
-.library-tabs button.active:after {
-  content: "";
-  background: var(--pink);
-  border-radius: 0.1875rem;
-  height: 0.125rem;
-  position: absolute;
-  bottom: -0.0625rem;
-  left: 0;
-  right: 0;
-  box-shadow: 0 0 10px rgb(var(--pink-rgb) / 0.4);
-}
-.library-tabs button:hover {
-  color: var(--pink-pale);
 }
 .library-tabs button > span {
   background: rgb(var(--pink-rgb) / 0.08);

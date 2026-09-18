@@ -56,12 +56,16 @@ export function PlayerToolsPanel({
           <X size={19} />
         </button>
       </div>
-      <div className="side-panel-tabs" role="tablist" aria-label="Player tools">
+      <div
+        className="panel-tabs side-panel-tabs"
+        role="tablist"
+        aria-label="Player tools"
+      >
         <button
           type="button"
           role="tab"
           id="settings-tab"
-          className={tab === "settings" ? "active" : ""}
+          className={"panel-tab " + (tab === "settings" ? "active" : "")}
           aria-selected={tab === "settings"}
           aria-controls="side-panel-tab-panel"
           tabIndex={tab === "settings" ? 0 : -1}
@@ -73,7 +77,7 @@ export function PlayerToolsPanel({
           type="button"
           role="tab"
           id="visualizer-tab"
-          className={tab === "visualizer" ? "active" : ""}
+          className={"panel-tab " + (tab === "visualizer" ? "active" : "")}
           aria-selected={tab === "visualizer"}
           aria-controls="side-panel-tab-panel"
           tabIndex={tab === "visualizer" ? 0 : -1}

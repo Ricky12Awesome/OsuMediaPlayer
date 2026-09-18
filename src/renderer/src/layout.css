@@ -168,51 +168,11 @@
   font-weight: 900;
 }
 .side-panel-tabs {
-  flex-shrink: 0;
-  border-bottom: 1px solid var(--border);
-  align-items: center;
-  gap: 1.5625rem;
   margin-top: 0.875rem;
-  display: flex;
-}
-.side-panel-tabs button {
-  color: #8e809d;
-  white-space: nowrap;
-  background: 0 0;
-  align-items: center;
-  gap: 0.4375rem;
-  padding: 0.6875rem 0 0.875rem;
-  font-size: 1rem;
-  font-weight: 700;
-  display: flex;
-  position: relative;
-}
-.side-panel-tabs button:hover {
-  color: var(--pink-pale);
-}
-.side-panel-tabs button.active {
-  color: var(--pink);
-}
-.side-panel-tabs button.active:after {
-  content: "";
-  background: var(--pink);
-  border-radius: 0.1875rem;
-  height: 0.125rem;
-  position: absolute;
-  bottom: -0.0625rem;
-  left: 0;
-  right: 0;
-  box-shadow: 0 0 10px rgb(var(--pink-rgb) / 0.4);
 }
 .side-panel-content {
   min-height: 0;
   overflow-y: auto;
   scrollbar-gutter: stable;
   padding-right: 0.625rem;
-}
-.side-panel .visualizer-settings {
-  margin-top: 0.625rem;
-}
-.side-panel .visualizer-settings > .settings-label {
-  display: none;
 }
