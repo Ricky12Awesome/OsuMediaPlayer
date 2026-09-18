@@ -1,6 +1,7 @@
 /* Playback transport and shared action controls. */
 
 .transport {
+  --transport-height: 4.5rem;
   z-index: 5;
   background: var(--transport-background);
   border-top: 1px solid var(--border);
@@ -8,7 +9,7 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: center;
   gap: 1.5rem;
-  height: 4.5rem;
+  height: var(--transport-height);
   padding: 0.8125rem 1.5rem 0.5rem;
   display: grid;
   position: relative;

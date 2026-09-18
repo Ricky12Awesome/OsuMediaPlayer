@@ -15,6 +15,7 @@ export interface KeyboardShortcutsOptions {
   sidePanelOpen: boolean;
   setSidePanelOpen: Dispatch<SetStateAction<boolean>>;
   setSidebarHidden: Dispatch<SetStateAction<boolean>>;
+  setAlwaysShowControls: Dispatch<SetStateAction<boolean>>;
   settingsPanelOpen: boolean;
   shortcutsOpen: boolean;
   setShortcutsOpen: Dispatch<SetStateAction<boolean>>;
@@ -32,6 +33,7 @@ export function useKeyboardShortcuts({
   sidePanelOpen,
   setSidePanelOpen,
   setSidebarHidden,
+  setAlwaysShowControls,
   settingsPanelOpen,
   shortcutsOpen,
   setShortcutsOpen,
@@ -81,6 +83,11 @@ export function useKeyboardShortcuts({
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();
         setSidebarHidden((value) => !value);
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "e") {
+        event.preventDefault();
+        setAlwaysShowControls((value) => !value);
         return;
       }
       if (

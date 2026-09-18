@@ -282,6 +282,7 @@ export function App({
   });
   const [fullscreen, setFullscreen] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
+  const [alwaysShowControls, setAlwaysShowControls] = useState(true);
   const [sidePanelOpen, setSidePanelOpen] = useState(() =>
     readPreference("visualizerPanelOpen"),
   );
@@ -341,6 +342,19 @@ export function App({
     frame: number | null;
   } | null>(null);
   const stopCaptionDrag = useRef<(() => void) | null>(null);
+
+  const controlsActivity = useCallback(() => {
+    setControlsVisible(true);
+    if (hideControlsTimer.current !== null) {
+      window.clearTimeout(hideControlsTimer.current);
+      hideControlsTimer.current = null;
+    }
+    if (alwaysShowControls) return;
+    hideControlsTimer.current = window.setTimeout(
+      () => setControlsVisible(false),
+      1000,
+    );
+  }, [alwaysShowControls]);
 
   useEffect(
     () => () => {
@@ -692,10 +706,6 @@ export function App({
   }, [shortcutsOpen]);
 
   useEffect(() => {
-    if (!fullscreen) {
-      setControlsVisible(true);
-      return;
-    }
     const onActivity = () => controlsActivity();
     window.addEventListener("pointermove", onActivity, { passive: true });
     window.addEventListener("pointerdown", onActivity, { passive: true });
@@ -710,7 +720,11 @@ export function App({
         hideControlsTimer.current = null;
       }
     };
-  }, [fullscreen]);
+  }, [controlsActivity, fullscreen]);
+
+  useEffect(() => {
+    if (alwaysShowControls) setControlsVisible(true);
+  }, [alwaysShowControls]);
 
   useKeyboardShortcuts({
     api,
@@ -719,6 +733,7 @@ export function App({
     sidePanelOpen,
     setSidePanelOpen,
     setSidebarHidden,
+    setAlwaysShowControls,
     settingsPanelOpen,
     shortcutsOpen,
     setShortcutsOpen,
@@ -1126,16 +1141,6 @@ export function App({
     window.addEventListener("blur", cancel);
   };
 
-  const controlsActivity = () => {
-    if (!fullscreen) return;
-    setControlsVisible(true);
-    if (hideControlsTimer.current !== null)
-      window.clearTimeout(hideControlsTimer.current);
-    hideControlsTimer.current = window.setTimeout(
-      () => setControlsVisible(false),
-      2500,
-    );
-  };
   const videoActive = Boolean(
     player.playVideos &&
     player.videoUrl &&
@@ -1185,10 +1190,13 @@ export function App({
         (activeArtworkTheme ? "dynamic-theme " : "") +
         (player.playing ? "is-playing " : "") +
         (fullscreen ? "is-fullscreen " : "") +
+        (alwaysShowControls ? "controls-always-visible " : "") +
         (controlsVisible ? "fullscreen-controls-visible" : "")
       }
       style={activeArtworkTheme?.variables as CSSProperties | undefined}
-      onPointerLeave={() => fullscreen && setControlsVisible(false)}
+      onPointerLeave={() =>
+        fullscreen && !alwaysShowControls && setControlsVisible(false)
+      }
     >
       <div className="workspace">
         <main
