@@ -378,6 +378,7 @@ export function App({
       : defaultSidePanelWidth;
   });
   const [sidePanelResizing, setSidePanelResizing] = useState(false);
+  const cacheLimitWheelRemainder = useRef(0);
   const settingsPanelOpen = sidePanelOpen && sidePanelTab === "settings";
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [settingsResetConfirmation, setSettingsResetConfirmation] =
@@ -1656,10 +1657,26 @@ export function App({
               if (document.activeElement !== event.currentTarget) return;
               event.preventDefault();
               event.stopPropagation();
-              const direction = event.deltaY < 0 ? 1 : -1;
-              player.setVideoCacheLimitGb((value) =>
-                Math.max(-1, value + direction),
-              );
+              // WheelEvent deltaY is positive toward the page (scroll down).
+              // The setting uses the opposite direction: up increases it.
+              const delta = -event.deltaY;
+              let steps: number;
+              if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) {
+                steps = Math.sign(delta);
+              } else {
+                // Wayland high-precision mice report pixel deltas, often as
+                // several fractional events per physical wheel unit.
+                cacheLimitWheelRemainder.current += delta;
+                steps = Math.trunc(cacheLimitWheelRemainder.current / 100);
+                cacheLimitWheelRemainder.current -= steps * 100;
+              }
+              if (steps)
+                player.setVideoCacheLimitGb((value) =>
+                  Math.max(-1, value + steps),
+                );
+            }}
+            onBlur={() => {
+              cacheLimitWheelRemainder.current = 0;
             }}
           />
         </div>
