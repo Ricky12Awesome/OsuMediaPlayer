@@ -20,7 +20,6 @@ import {
   navigateRandomHistory,
   navigateShuffleHistory,
   nextQueueIndex,
-  parsePlaybackSettings,
   type ShuffleHistory,
 } from "./player-utils";
 import {
@@ -33,7 +32,7 @@ import { usePlayerVideo } from "./usePlayerVideo";
 import { readPreference, writePreference } from "./preferences";
 
 function readSettings() {
-  return parsePlaybackSettings(JSON.stringify(readPreference("playback")));
+  return readPreference("playback");
 }
 
 function playbackError(error: unknown): string {
@@ -581,16 +580,16 @@ export function usePlayer(
     audio.muted = false;
     try {
       writePreference("playback", {
-          volume,
-          muted,
-          shuffle,
-          repeat,
-          playVideos,
-          videoEncodingCodec,
-          videoEncodingQuality,
-          videoMaxFps,
-          videoForceRemux,
-          videoCacheLimitGb,
+        volume,
+        muted,
+        shuffle,
+        repeat,
+        playVideos,
+        videoEncodingCodec,
+        videoEncodingQuality,
+        videoMaxFps,
+        videoForceRemux,
+        videoCacheLimitGb,
       });
     } catch {
       // Local storage is optional.

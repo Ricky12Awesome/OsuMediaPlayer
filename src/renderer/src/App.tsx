@@ -4,50 +4,12 @@ import {
   useMemo,
   useRef,
   useState,
-  type ChangeEvent,
   type CSSProperties,
   type KeyboardEvent,
   type PointerEvent,
 } from "react";
 import { createPortal } from "react-dom";
-import {
-  ArrowDownWideNarrow,
-  ArrowUpWideNarrow,
-  AudioWaveform,
-  CircleAlert,
-  FolderHeart,
-  FolderOpen,
-  Heart,
-  Keyboard,
-  LoaderCircle,
-  Maximize2,
-  Minimize2,
-  Music2,
-  PanelLeft,
-  PanelLeftClose,
-  PanelLeftOpen,
-  PanelRightClose,
-  PanelRightOpen,
-  Palette,
-  Pause,
-  Play,
-  RefreshCw,
-  Repeat,
-  Repeat1,
-  Search,
-  Settings2,
-  Shuffle,
-  SkipBack,
-  SkipForward,
-  SlidersHorizontal,
-  Sparkles,
-  Tag,
-  Trash2,
-  Volume1,
-  Volume2,
-  VolumeX,
-  X,
-} from "lucide-react";
+import { AudioWaveform, RefreshCw, Settings2, Trash2, X } from "lucide-react";
 import type {
   CacheKind,
   CacheUsage,
@@ -59,28 +21,31 @@ import type {
   TrackContextMenuAction,
   TrackContextMenuInfo,
 } from "../../shared/types";
-import { FacetPicker } from "./FacetPicker";
-import { SortPicker } from "./SortPicker";
-import { SettingsPicker } from "./SettingsPicker";
-import { TrackArt } from "./TrackArt";
 import { TrackContextMenu } from "./TrackContextMenu";
 import { extractArtworkTheme, type ArtworkTheme } from "./artwork-theme";
 import {
   cacheLastArtworkTheme,
   clearCachedLastArtworkTheme,
 } from "./artwork-theme-cache";
-import {
-  VirtualTrackList,
-  type VirtualTrackListKeyboardControls,
-} from "./VirtualTrackList";
-import {
-  AudioVisualizer,
-  VisualizerControls,
-  useVisualizerSettings,
-} from "./AudioVisualizer";
+import { type VirtualTrackListKeyboardControls } from "./VirtualTrackList";
+import { VisualizerControls, useVisualizerSettings } from "./AudioVisualizer";
 import { usePlayer } from "./usePlayer";
-import { displayTrackArtist, displayTrackTitle } from "./track-title";
 import { parseVisualizer } from "./visualizer-settings";
+import { LibraryPanel, type LibraryTab } from "./LibraryPanel";
+import { NowPlaying, type CaptionPosition } from "./NowPlaying";
+import {
+  SettingsPanel,
+  type LibraryPosition,
+  type TransportLayout,
+} from "./SettingsPanel";
+import { Transport } from "./Transport";
+import { useKeyboardShortcuts } from "./useKeyboardShortcuts";
+import {
+  readPreference,
+  removePreference,
+  writePreference,
+  type Preferences,
+} from "./preferences";
 
 const defaultPosition = "top-left";
 const defaultLibraryPosition = "right";
@@ -97,35 +62,7 @@ const positions = [
   "bottom-left",
   "left-center",
 ] as const;
-type CaptionPosition = (typeof positions)[number];
-type LibraryTab = "all" | "favorites";
-type LibraryPosition = "left" | "right";
-type TransportLayout = "controls-left" | "controls-centered";
 type SidePanelTab = "visualizer" | "settings";
-type SeekPreview = {
-  time: number;
-  position: number;
-};
-const videoCodecOptions = [
-  { value: "auto", label: "Auto (best available)" },
-  { value: "av1", label: "AV1" },
-  { value: "hevc", label: "H.265 / HEVC" },
-  { value: "h264-hardware", label: "H.264 (hardware)" },
-  { value: "h264-software", label: "H.264 (software)" },
-] as const;
-const videoQualityOptions = [
-  { value: "very-low", label: "Very low" },
-  { value: "low", label: "Low" },
-  { value: "medium", label: "Medium" },
-  { value: "high", label: "High" },
-  { value: "very-high", label: "Very high" },
-] as const;
-const videoFpsOptions = [
-  { value: 0, label: "No cap" },
-  { value: 24, label: "24 FPS" },
-  { value: 30, label: "30 FPS" },
-  { value: 60, label: "60 FPS" },
-] as const;
 type TrackContextMenuState = {
   track: Track;
   x: number;
@@ -148,9 +85,6 @@ const sortOptions: Array<{ value: SortKey; label: string }> = [
   { value: "tags", label: "Tags" },
 ];
 
-const lastPlayedTrackKey = "osu-music-last-played-track";
-const sortKey = "osu-music-sort";
-const sortDescendingKey = "osu-music-sort-descending";
 const showTitleUnicodeKey = "osu-music-show-title-unicode";
 const showArtistUnicodeKey = "osu-music-show-artist-unicode";
 const combinedShowUnicodeKey = "osu-music-show-unicode";
@@ -187,34 +121,18 @@ const defaultApi: PlayerAPI = {
 
 const api = window.playerAPI ?? defaultApi;
 
-function readStorage<T>(key: string, fallback: T): T {
+function readLegacyBoolean(key: string): boolean | undefined {
   try {
-    const value = localStorage.getItem(key);
-    return value ? (JSON.parse(value) as T) : fallback;
+    const raw = localStorage.getItem(key);
+    if (raw === null) return undefined;
+    return JSON.parse(raw) === true;
   } catch {
-    return fallback;
-  }
-}
-
-function writeStorage(key: string, value: unknown): void {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // Preferences are optional.
-  }
-}
-
-function removeStorage(key: string): void {
-  try {
-    localStorage.removeItem(key);
-  } catch {
-    // Preferences are optional.
+    return undefined;
   }
 }
 
 function readStoredBoolean(key: string): boolean | undefined {
-  const stored = readStorage<unknown>(key, undefined);
-  return stored === undefined ? undefined : stored === true;
+  return readLegacyBoolean(key);
 }
 
 function readShowTitleUnicodeSetting(): boolean {
@@ -238,11 +156,6 @@ function isSortKey(value: unknown): value is SortKey {
   return sortOptions.some((option) => option.value === value);
 }
 
-function formatDuration(value: number): string {
-  const seconds = Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0;
-  return Math.floor(seconds / 60) + ":" + String(seconds % 60).padStart(2, "0");
-}
-
 function isCaptionPosition(value: unknown): value is CaptionPosition {
   return (
     typeof value === "string" && positions.includes(value as CaptionPosition)
@@ -255,18 +168,6 @@ function isLibraryPosition(value: unknown): value is LibraryPosition {
 
 function cacheName(kind: CacheKind): string {
   return kind === "index" ? "Index cache" : "Video cache";
-}
-
-function formatCacheSize(bytes: number | undefined): string {
-  if (bytes === undefined) return "—";
-  if (bytes === 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB"];
-  const unit = Math.min(
-    Math.floor(Math.log(bytes) / Math.log(1024)),
-    units.length - 1,
-  );
-  const value = bytes / 1024 ** unit;
-  return `${value.toFixed(unit === 0 || value >= 10 ? 0 : 1)} ${units[unit]}`;
 }
 
 export function App({
@@ -312,67 +213,55 @@ export function App({
   const [collection, setCollection] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [sort, setSort] = useState<SortKey>(() => {
-    const stored = readStorage<unknown>(sortKey, "title");
+    const stored = readPreference("sort");
     return isSortKey(stored) ? stored : "title";
   });
-  const [descending, setDescending] = useState(
-    () => readStorage<unknown>(sortDescendingKey, false) === true,
+  const [descending, setDescending] = useState(() =>
+    readPreference("sortDescending"),
   );
   const [favorites, setFavorites] = useState<Set<string>>(
-    () => new Set(readStorage<string[]>("osu-music-favorites", [])),
+    () => new Set(readPreference("favorites")),
   );
   const [captionPosition, setCaptionPosition] = useState<CaptionPosition>(
     () => {
-      const stored = readStorage(
-        "osu-music-now-playing-position",
-        defaultPosition,
-      );
+      const stored = readPreference("nowPlayingPosition");
       return isCaptionPosition(stored) ? stored : defaultPosition;
     },
   );
   const [sidebarHidden, setSidebarHidden] = useState(() =>
-    readStorage("osu-music-sidebar-hidden", false),
+    readPreference("sidebarHidden"),
   );
   const [libraryPosition, setLibraryPosition] = useState<LibraryPosition>(
     () => {
-      const stored = readStorage(
-        "osu-music-library-position",
-        defaultLibraryPosition,
-      );
+      const stored = readPreference("libraryPosition");
       return isLibraryPosition(stored) ? stored : defaultLibraryPosition;
     },
   );
   const [transportLayout, setTransportLayout] = useState<TransportLayout>(() =>
-    readStorage<string>("osu-music-transport-layout", "controls-centered") ===
-    "controls-left"
-      ? "controls-left"
-      : "controls-centered",
+    readPreference("transportLayout"),
   );
   const [showNowPlayingTitleArtist, setShowNowPlayingTitleArtist] = useState(
-    () => readStorage("osu-music-show-now-playing-title-artist", true),
+    () => readPreference("showNowPlayingTitleArtist"),
   );
   const [artworkThemeEnabled, setArtworkThemeEnabled] = useState(() =>
-    readStorage("osu-music-artwork-theme", true),
+    readPreference("artworkTheme"),
   );
   const [artworkTheme, setArtworkTheme] = useState<{
     url: string;
     theme: ArtworkTheme;
   } | null>(initialArtworkTheme);
   const [libraryWidth, setLibraryWidth] = useState(() => {
-    const value = readStorage("osu-music-library-width", 430);
+    const value = readPreference("libraryWidth");
     return Number.isFinite(value) ? Math.min(720, Math.max(320, value)) : 430;
   });
   const [fullscreen, setFullscreen] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
   const [sidePanelOpen, setSidePanelOpen] = useState(() =>
-    readStorage("osu-music-visualizer-panel-open", false),
+    readPreference("visualizerPanelOpen"),
   );
   const [sidePanelTab, setSidePanelTab] = useState<SidePanelTab>("settings");
   const [sidePanelWidth, setSidePanelWidth] = useState(() => {
-    const value = readStorage(
-      "osu-music-side-panel-width",
-      defaultSidePanelWidth,
-    );
+    const value = readPreference("sidePanelWidth");
     return Number.isFinite(value)
       ? Math.min(maxSidePanelWidth, Math.max(minSidePanelWidth, value))
       : defaultSidePanelWidth;
@@ -390,10 +279,6 @@ export function App({
     x: number;
     y: number;
   } | null>(null);
-  const [seekPreview, setSeekPreview] = useState<SeekPreview | null>(null);
-  const [seekTooltipPreview, setSeekTooltipPreview] =
-    useState<SeekPreview | null>(null);
-  const [scrubTime, setScrubTime] = useState<number | null>(null);
   const [resizing, setResizing] = useState(false);
   const [trackContextMenu, setTrackContextMenu] =
     useState<TrackContextMenuState | null>(null);
@@ -412,9 +297,6 @@ export function App({
   const zoomIndicatorTimer = useRef<number | null>(null);
   const zoomInitialized = useRef(false);
   const focusSearchAfterSidebar = useRef(false);
-  const seekPreviewClearTimer = useRef<number | null>(null);
-  const scrubPointer = useRef<number | null>(null);
-  const scrubTimeRef = useRef<number | null>(null);
   const resizeStart = useRef<{ x: number; width: number } | null>(null);
   const sidePanelResizeStart = useRef<{ x: number; width: number } | null>(
     null,
@@ -443,14 +325,14 @@ export function App({
       setImporting(true);
       setLoadError("");
       try {
-        const savedId = readStorage<unknown>(lastPlayedTrackKey, null);
+        const savedId = readPreference("lastPlayedTrack");
         const next = await api.loadLibrary(
           installPath,
           typeof savedId === "string" ? savedId : undefined,
         );
         setSummary(next);
         setRevision((value) => value + 1);
-        writeStorage("osu-music-library-path", next.installPath);
+        writePreference("libraryPath", next.installPath);
       } catch (reason) {
         setLoadError(reason instanceof Error ? reason.message : String(reason));
       } finally {
@@ -467,10 +349,7 @@ export function App({
         setRevision((value) => value + 1);
       }
     });
-    if (!initialLibrary)
-      void loadLibrary(
-        readStorage<string | undefined>("osu-music-library-path", undefined),
-      );
+    if (!initialLibrary) void loadLibrary(readPreference("libraryPath"));
     return removeProgress;
   }, [initialLibrary, loadLibrary]);
 
@@ -621,58 +500,55 @@ export function App({
   }, [searchDraft]);
 
   useEffect(() => {
-    writeStorage("osu-music-favorites", [...favorites]);
+    writePreference("favorites", [...favorites]);
   }, [favorites]);
   useEffect(
-    () => writeStorage("osu-music-library-width", libraryWidth),
+    () => writePreference("libraryWidth", libraryWidth),
     [libraryWidth],
   );
   useEffect(
-    () => writeStorage("osu-music-sidebar-hidden", sidebarHidden),
+    () => writePreference("sidebarHidden", sidebarHidden),
     [sidebarHidden],
   );
   useEffect(
-    () => writeStorage("osu-music-visualizer-panel-open", sidePanelOpen),
+    () => writePreference("visualizerPanelOpen", sidePanelOpen),
     [sidePanelOpen],
   );
   useEffect(
-    () => writeStorage("osu-music-side-panel-width", sidePanelWidth),
+    () => writePreference("sidePanelWidth", sidePanelWidth),
     [sidePanelWidth],
   );
   useEffect(
-    () => writeStorage("osu-music-library-position", libraryPosition),
+    () => writePreference("libraryPosition", libraryPosition),
     [libraryPosition],
   );
   useEffect(
-    () => writeStorage("osu-music-transport-layout", transportLayout),
+    () => writePreference("transportLayout", transportLayout),
     [transportLayout],
   );
   useEffect(
     () =>
-      writeStorage(
-        "osu-music-show-now-playing-title-artist",
-        showNowPlayingTitleArtist,
-      ),
+      writePreference("showNowPlayingTitleArtist", showNowPlayingTitleArtist),
     [showNowPlayingTitleArtist],
   );
   useEffect(
-    () => writeStorage(showTitleUnicodeKey, showTitleUnicode),
+    () => writePreference("showTitleUnicode", showTitleUnicode),
     [showTitleUnicode],
   );
   useEffect(
-    () => writeStorage(showArtistUnicodeKey, showArtistUnicode),
+    () => writePreference("showArtistUnicode", showArtistUnicode),
     [showArtistUnicode],
   );
   useEffect(
-    () => writeStorage("osu-music-artwork-theme", artworkThemeEnabled),
+    () => writePreference("artworkTheme", artworkThemeEnabled),
     [artworkThemeEnabled],
   );
   useEffect(
-    () => writeStorage("osu-music-now-playing-position", captionPosition),
+    () => writePreference("nowPlayingPosition", captionPosition),
     [captionPosition],
   );
-  useEffect(() => writeStorage(sortKey, sort), [sort]);
-  useEffect(() => writeStorage(sortDescendingKey, descending), [descending]);
+  useEffect(() => writePreference("sort", sort), [sort]);
+  useEffect(() => writePreference("sortDescending", descending), [descending]);
 
   useEffect(() => {
     if (!player.playing || !player.track) return;
@@ -682,7 +558,7 @@ export function App({
         : null;
     if (themeMatchesTrack) cacheLastArtworkTheme(themeMatchesTrack);
     else clearCachedLastArtworkTheme();
-    writeStorage(lastPlayedTrackKey, player.track.id);
+    writePreference("lastPlayedTrack", player.track.id);
   }, [artworkTheme, player.playing, player.track]);
 
   useEffect(() => {
@@ -737,22 +613,6 @@ export function App({
     };
   }, [activeArtworkTheme]);
 
-  useEffect(
-    () => () => {
-      if (seekPreviewClearTimer.current !== null) {
-        window.clearTimeout(seekPreviewClearTimer.current);
-        seekPreviewClearTimer.current = null;
-      }
-    },
-    [],
-  );
-
-  useEffect(() => {
-    scrubPointer.current = null;
-    scrubTimeRef.current = null;
-    setScrubTime(null);
-  }, [player.track?.id]);
-
   const focusSearch = useCallback(() => {
     if (isDesktop && sidebarHidden) {
       focusSearchAfterSidebar.current = true;
@@ -798,156 +658,22 @@ export function App({
     };
   }, [fullscreen]);
 
-  useEffect(() => {
-    const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      const target = event.target instanceof HTMLElement ? event.target : null;
-      const editing =
-        target &&
-        (["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(target.tagName) ||
-          target.isContentEditable);
-      const inTransport = Boolean(target?.closest(".transport"));
-      if (cacheConfirmation || settingsResetConfirmation) return;
-      if (event.key === "F11") {
-        event.preventDefault();
-        api.windowControl("fullscreen");
-        return;
-      }
-      if (event.key === "Escape" && sidePanelOpen && !shortcutsOpen) {
-        event.preventDefault();
-        setSidePanelOpen(false);
-        return;
-      }
-      if (
-        event.key === "Escape" &&
-        fullscreen &&
-        !sidePanelOpen &&
-        !shortcutsOpen
-      ) {
-        event.preventDefault();
-        api.windowControl("fullscreen");
-        return;
-      }
-      if (
-        (event.ctrlKey || event.metaKey) &&
-        ["f", "k"].includes(event.key.toLowerCase())
-      ) {
-        event.preventDefault();
-        focusSearch();
-        return;
-      }
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
-        event.preventDefault();
-        setSidebarHidden((value) => !value);
-        return;
-      }
-      if (
-        !settingsPanelOpen &&
-        !shortcutsOpen &&
-        event.key === "Tab" &&
-        !event.altKey &&
-        !event.ctrlKey &&
-        !event.metaKey
-      ) {
-        event.preventDefault();
-        target?.blur();
-        setShowNowPlayingTitleArtist((value) => !value);
-        return;
-      }
-      if (
-        inTransport &&
-        event.code === "Space" &&
-        !event.altKey &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.shiftKey
-      ) {
-        event.preventDefault();
-        target?.blur();
-        player.toggle();
-        return;
-      }
-      if (
-        !settingsPanelOpen &&
-        !shortcutsOpen &&
-        !target?.closest(".facet-picker, .sort-picker") &&
-        !target?.matches("input[type='range']") &&
-        (event.key === "ArrowUp" || event.key === "ArrowDown") &&
-        !event.altKey &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        trackListKeyboardRef.current
-      ) {
-        event.preventDefault();
-        event.stopPropagation();
-        trackListKeyboardRef.current.moveAndPlay(
-          event.key === "ArrowUp" ? -1 : 1,
-        );
-        return;
-      }
-      if (settingsPanelOpen || shortcutsOpen || editing) return;
-      if (
-        event.key === "F2" &&
-        !event.repeat &&
-        !event.altKey &&
-        !event.ctrlKey &&
-        !event.metaKey
-      ) {
-        event.preventDefault();
-        void player.jumpRandom(event.shiftKey ? -1 : 1);
-      } else if (
-        event.code === "Space" &&
-        !event.altKey &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.shiftKey
-      ) {
-        event.preventDefault();
-        player.toggle();
-      } else if (event.key === "ArrowRight") {
-        event.preventDefault();
-        player.seek(player.currentTime + 5);
-      } else if (event.key === "ArrowLeft") {
-        event.preventDefault();
-        player.seek(player.currentTime - 5);
-      } else if (
-        !event.shiftKey &&
-        !event.altKey &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        event.key.toLowerCase() === "a"
-      ) {
-        event.preventDefault();
-        void player.previous();
-      } else if (
-        !event.shiftKey &&
-        !event.altKey &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        event.key.toLowerCase() === "d"
-      ) {
-        event.preventDefault();
-        void player.next();
-      } else if (event.key.toLowerCase() === "m") player.toggleMute();
-      else if (event.key === "?") setShortcutsOpen(true);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [
+  useKeyboardShortcuts({
+    api,
+    player,
     fullscreen,
-    player.currentTime,
-    player.jumpRandom,
-    player.next,
-    player.previous,
-    player.seek,
-    player.toggle,
-    player.toggleMute,
-    focusSearch,
     sidePanelOpen,
+    setSidePanelOpen,
+    setSidebarHidden,
     settingsPanelOpen,
     shortcutsOpen,
+    setShortcutsOpen,
+    setShowNowPlayingTitleArtist,
     cacheConfirmation,
     settingsResetConfirmation,
-  ]);
+    focusSearch,
+    trackListKeyboardRef,
+  });
 
   const query = useMemo<LibraryQuery>(
     () => ({
@@ -977,7 +703,7 @@ export function App({
   const cueFirstTrack = useCallback(
     (track: Track) => {
       if (trackInitialized.current) return;
-      const savedId = readStorage<unknown>(lastPlayedTrackKey, null);
+      const savedId = readPreference("lastPlayedTrack");
       // Without a saved song, wait until all sorts are stable before choosing
       // the first result. A saved song can be restored as soon as its streamed
       // batch arrives, which makes uncached startup ready much sooner.
@@ -1007,7 +733,7 @@ export function App({
             // The saved song may be in a later streamed batch. Keep trying
             // until import completes before treating the saved ID as stale.
             if (importing) return;
-            removeStorage(lastPlayedTrackKey);
+            removePreference("lastPlayedTrack");
             trackInitialized.current = true;
             player.cueTrack(track, query, 0);
             return;
@@ -1033,7 +759,7 @@ export function App({
     (track: Track, index: number) => {
       initialTrackRestore.current += 1;
       trackInitialized.current = true;
-      writeStorage(lastPlayedTrackKey, track.id);
+      writePreference("lastPlayedTrack", track.id);
       player.playTrack(track, query, index);
     },
     [player.playTrack, query],
@@ -1321,80 +1047,6 @@ export function App({
       2500,
     );
   };
-  const duration = player.duration || player.track?.duration || 0;
-  const displayedTime = scrubTime ?? player.currentTime;
-  const beginScrubbing = (event: PointerEvent<HTMLInputElement>) => {
-    if (!player.track) return;
-    scrubPointer.current = event.pointerId;
-    const next = Number(event.currentTarget.value);
-    scrubTimeRef.current = next;
-    setScrubTime(next);
-    event.currentTarget.setPointerCapture(event.pointerId);
-  };
-  const updateScrubbing = (event: ChangeEvent<HTMLInputElement>) => {
-    const next = Number(event.currentTarget.value);
-    if (scrubPointer.current === null) {
-      player.seek(next);
-      return;
-    }
-    scrubTimeRef.current = next;
-    setScrubTime(next);
-  };
-  const finishScrubbing = (event: PointerEvent<HTMLInputElement>) => {
-    if (
-      scrubPointer.current === null ||
-      scrubPointer.current !== event.pointerId
-    )
-      return;
-    const next = scrubTimeRef.current ?? Number(event.currentTarget.value);
-    scrubPointer.current = null;
-    scrubTimeRef.current = null;
-    setScrubTime(null);
-    player.seek(next);
-  };
-  const cancelSeekPreviewClear = () => {
-    if (seekPreviewClearTimer.current !== null) {
-      window.clearTimeout(seekPreviewClearTimer.current);
-      seekPreviewClearTimer.current = null;
-    }
-  };
-  const updateSeekPreview = (event: PointerEvent<HTMLInputElement>) => {
-    if (!duration || !player.track) return;
-    cancelSeekPreviewClear();
-    const bounds = event.currentTarget.getBoundingClientRect();
-    if (!bounds.width) return;
-    const position = Math.max(
-      0,
-      Math.min(1, (event.clientX - bounds.left) / bounds.width),
-    );
-    const preview = { time: position * duration, position: position * 100 };
-    setSeekPreview(preview);
-    setSeekTooltipPreview(preview);
-  };
-  const clearSeekPreview = () => {
-    cancelSeekPreviewClear();
-    // The range highlight should disappear as soon as the pointer leaves.
-    setSeekPreview(null);
-    // Keep the tooltip snapshot while it fades out. Clearing it now would
-    // briefly replace it with the live position during that fade.
-    seekPreviewClearTimer.current = window.setTimeout(() => {
-      setSeekTooltipPreview(null);
-      seekPreviewClearTimer.current = null;
-    }, 150);
-  };
-  const resetSeekPreview = () => {
-    cancelSeekPreviewClear();
-    setSeekPreview(null);
-    setSeekTooltipPreview(null);
-  };
-  const currentProgress = duration
-    ? Math.max(0, Math.min(100, (displayedTime / duration) * 100))
-    : 0;
-  const previewPosition = seekPreview?.position ?? currentProgress;
-  const tooltipPosition =
-    seekPreview?.position ?? seekTooltipPreview?.position ?? currentProgress;
-  const previewStart = Math.min(currentProgress, previewPosition);
-  const previewEnd = Math.max(currentProgress, previewPosition);
   const videoActive = Boolean(
     player.playVideos &&
     player.videoUrl &&
@@ -1437,311 +1089,6 @@ export function App({
       );
   };
 
-  const settingsSwitch = (
-    title: string,
-    description: string,
-    active: boolean,
-    onClick: () => void,
-  ) => (
-    <div className="settings-row">
-      <span className="settings-row-label" title={description}>
-        {title}
-      </span>
-      <button
-        type="button"
-        className={"settings-switch " + (active ? "active" : "")}
-        aria-label={title}
-        aria-pressed={active}
-        title={description}
-        onClick={onClick}
-      >
-        {active ? "On" : "Off"}
-      </button>
-    </div>
-  );
-
-  const settingsPanelContent = (
-    <>
-      <div className="settings-block settings-library">
-        <span className="settings-label">
-          <FolderOpen size={16} /> OSU!LAZER LIBRARY
-        </span>
-        <div className="settings-row">
-          <span className="settings-row-label">Folder</span>
-          <span
-            className="settings-row-value install-path"
-            title={summary?.installPath || "Default osu!lazer installation"}
-          >
-            {summary?.installPath || "Default osu!lazer installation"}
-          </span>
-        </div>
-        <div className="settings-actions">
-          <button
-            className="primary-button"
-            onClick={() => void chooseLibrary()}
-          >
-            <FolderOpen size={15} /> Choose folder
-          </button>
-          <button
-            className="secondary-button"
-            disabled={importing}
-            onClick={() => {
-              setSidePanelOpen(false);
-              void loadLibrary(summary?.installPath);
-            }}
-          >
-            <RefreshCw size={15} /> Refresh library
-          </button>
-        </div>
-      </div>
-      <div className="settings-block transport-layout-setting">
-        <div className="settings-row">
-          <span className="settings-row-label">
-            <PanelLeft size={15} /> Panel
-          </span>
-          <div
-            className="settings-choice-group"
-            aria-label="Song list position"
-          >
-            <button
-              type="button"
-              className={
-                "settings-choice-option " +
-                (libraryPosition === "left" ? "active" : "")
-              }
-              aria-pressed={libraryPosition === "left"}
-              title="Show the song list on the left"
-              onClick={() => setLibraryPosition("left")}
-            >
-              Left
-            </button>
-            <button
-              type="button"
-              className={
-                "settings-choice-option " +
-                (libraryPosition === "right" ? "active" : "")
-              }
-              aria-pressed={libraryPosition === "right"}
-              title="Show the song list on the right"
-              onClick={() => setLibraryPosition("right")}
-            >
-              Right
-            </button>
-          </div>
-        </div>
-      </div>
-      <div className="settings-block transport-layout-setting">
-        <div className="settings-row">
-          <span className="settings-row-label">
-            <SlidersHorizontal size={15} /> Controls
-          </span>
-          <div className="settings-choice-group" aria-label="Bottom bar layout">
-            <button
-              type="button"
-              className={
-                "settings-choice-option " +
-                (transportLayout === "controls-left" ? "active" : "")
-              }
-              aria-pressed={transportLayout === "controls-left"}
-              title="Keep playback controls on the left"
-              onClick={() => setTransportLayout("controls-left")}
-            >
-              Left
-            </button>
-            <button
-              type="button"
-              className={
-                "settings-choice-option " +
-                (transportLayout === "controls-centered" ? "active" : "")
-              }
-              aria-pressed={transportLayout === "controls-centered"}
-              title="Center playback controls"
-              onClick={() => setTransportLayout("controls-centered")}
-            >
-              Center
-            </button>
-          </div>
-        </div>
-      </div>
-      <div className="settings-block artwork-theme-setting">
-        <span className="settings-label">
-          <Palette size={16} /> APPEARANCE
-        </span>
-        {settingsSwitch(
-          "Show Videos",
-          "Show beatmap videos when available; otherwise show the background art",
-          player.playVideos,
-          () => player.setPlayVideos((value) => !value),
-        )}
-        {settingsSwitch(
-          "Dynamic Theme",
-          "Theme the app background from the current song's artwork",
-          artworkThemeEnabled,
-          () => setArtworkThemeEnabled((value) => !value),
-        )}
-        {settingsSwitch(
-          "Show title / artist",
-          "Display track details over the artwork",
-          showNowPlayingTitleArtist,
-          () => setShowNowPlayingTitleArtist((value) => !value),
-        )}
-        {settingsSwitch(
-          "Show title unicode",
-          "Use a song's Unicode title when one is available",
-          showTitleUnicode,
-          () => setShowTitleUnicode((value) => !value),
-        )}
-        {settingsSwitch(
-          "Show artist unicode",
-          "Use a song's Unicode artist when one is available",
-          showArtistUnicode,
-          () => setShowArtistUnicode((value) => !value),
-        )}
-      </div>
-      <div className="settings-block video-encoding-setting">
-        <span className="settings-label">
-          <SlidersHorizontal size={16} /> VIDEO ENCODING
-        </span>
-        <div className="settings-row">
-          <span className="settings-row-label">Codec</span>
-          <SettingsPicker
-            label="Video codec"
-            value={player.videoEncodingCodec}
-            options={videoCodecOptions}
-            onChange={player.setVideoEncodingCodec}
-          />
-        </div>
-        <div className="settings-row">
-          <span className="settings-row-label">Quality</span>
-          <SettingsPicker
-            label="Video quality"
-            value={player.videoEncodingQuality}
-            options={videoQualityOptions}
-            onChange={player.setVideoEncodingQuality}
-          />
-        </div>
-        <div className="settings-row">
-          <span className="settings-row-label">FPS Cap</span>
-          <SettingsPicker
-            label="Video FPS cap"
-            value={player.videoMaxFps}
-            options={videoFpsOptions}
-            onChange={player.setVideoMaxFps}
-          />
-        </div>
-        {settingsSwitch(
-          "Force remux when possible",
-          "Copy compatible video without re-encoding; automatically encode when copying is not supported",
-          player.videoForceRemux,
-          () => player.setVideoForceRemux((value) => !value),
-        )}
-        <div className="settings-row">
-          <span
-            className="settings-row-label"
-            title="Converted-video cache size in GB. Use 0 for HLS streaming only or -1 for no limit."
-          >
-            Cache limit (GB)
-          </span>
-          <input
-            className="settings-number-input"
-            type="text"
-            inputMode="decimal"
-            value={player.videoCacheLimitGb}
-            aria-label="Video cache limit in gigabytes"
-            onChange={(event) => {
-              const value = Number(event.currentTarget.value);
-              if (Number.isFinite(value) && value >= -1)
-                player.setVideoCacheLimitGb(value);
-            }}
-            onWheel={(event) => {
-              if (document.activeElement !== event.currentTarget) return;
-              event.preventDefault();
-              event.stopPropagation();
-              // WheelEvent deltaY is positive toward the page (scroll down).
-              // The setting uses the opposite direction: up increases it.
-              const delta = -event.deltaY;
-              let steps: number;
-              if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) {
-                steps = Math.sign(delta);
-              } else {
-                // Wayland high-precision mice report pixel deltas, often as
-                // several fractional events per physical wheel unit.
-                cacheLimitWheelRemainder.current += delta;
-                steps = Math.trunc(cacheLimitWheelRemainder.current / 100);
-                cacheLimitWheelRemainder.current -= steps * 100;
-              }
-              if (steps)
-                player.setVideoCacheLimitGb((value) =>
-                  Math.max(-1, value + steps),
-                );
-            }}
-            onBlur={() => {
-              cacheLimitWheelRemainder.current = 0;
-            }}
-          />
-        </div>
-        <p className="settings-hint">
-          0 uses HLS only · -1 keeps converted videos without a limit
-        </p>
-      </div>
-      <div className="settings-stats">
-        <span>
-          <strong>{summary?.trackCount.toLocaleString() ?? "—"}</strong> songs
-        </span>
-        <span>
-          <strong>{summary?.beatmapCount.toLocaleString() ?? "—"}</strong>{" "}
-          beatmaps
-        </span>
-        <span>
-          <strong>{summary?.collectionCount ?? "—"}</strong> collections
-        </span>
-      </div>
-      <div className="settings-block maintenance-setting">
-        <span className="settings-label">
-          <Trash2 size={16} /> CACHE &amp; SETTINGS
-        </span>
-        <div className="settings-actions maintenance-actions">
-          <button
-            type="button"
-            className="secondary-button settings-reset-button"
-            title="Restore playback, layout, appearance, sorting, and visualizer preferences to their original defaults"
-            onClick={requestSettingsReset}
-          >
-            <RefreshCw size={15} /> Reset
-          </button>
-          {(["index", "video"] as CacheKind[]).map((kind) => {
-            const active = clearingCache === kind;
-            const disabled =
-              clearingCache !== null || (kind === "index" && importing);
-            return (
-              <button
-                key={kind}
-                type="button"
-                className="danger-button cache-button"
-                aria-label={`Clear ${cacheName(kind)} cache`}
-                disabled={disabled}
-                onClick={() => requestCacheClear(kind)}
-              >
-                <strong>
-                  {active && <LoaderCircle className="spin" size={13} />}
-                  {active ? "Deleting…" : cacheName(kind)}
-                </strong>
-                <span className="cache-button-usage">
-                  {formatCacheSize(cacheUsage?.[kind])}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-        {cacheNotice && (
-          <p className={"cache-notice " + cacheNotice.kind} role="status">
-            {cacheNotice.message}
-          </p>
-        )}
-      </div>
-    </>
-  );
-
   return (
     <div
       className={
@@ -1773,98 +1120,19 @@ export function App({
             } as CSSProperties
           }
         >
-          <section className="now-playing-panel" aria-label="Now playing">
-            <div
-              ref={captionRef}
-              className={
-                "artwork-stage " +
-                (player.track?.artworkUrl ? "has-artwork " : "") +
-                (player.playVideos && player.track?.videoUrl
-                  ? "has-video "
-                  : "") +
-                (videoActive ? "video-is-active" : "")
-              }
-            >
-              {player.track?.artworkUrl && (
-                <img
-                  className="hero-background"
-                  src={player.track.artworkUrl}
-                  alt=""
-                  draggable={false}
-                  onError={(event) => {
-                    event.currentTarget.style.display = "none";
-                  }}
-                />
-              )}
-              {player.playVideos && player.videoUrl && (
-                <video
-                  ref={player.videoRef}
-                  className={"hero-video " + (videoActive ? "is-active" : "")}
-                  muted
-                  playsInline
-                  disablePictureInPicture
-                  preload="metadata"
-                  aria-hidden="true"
-                />
-              )}
-              <div className="artwork-grain" />
-              {player.videoEncoding && (
-                <div className="video-encoding-indicator" role="status">
-                  <LoaderCircle className="spin" size={14} />
-                  <span>
-                    Encoding video
-                    {player.videoEncodingProgress !== null
-                      ? ` · ${Math.round(player.videoEncodingProgress * 100)}%`
-                      : "…"}
-                    {player.videoEncoder ? ` · ${player.videoEncoder}` : ""}
-                  </span>
-                </div>
-              )}
-              <AudioVisualizer
-                analyser={player.analyser}
-                playing={player.playing}
-                settings={visualizer}
-              />
-              {showNowPlayingTitleArtist && (
-                <div
-                  className={
-                    "hero-caption hero-caption-" +
-                    captionPosition +
-                    (captionDragging ? " is-dragging" : "")
-                  }
-                  aria-label="Now playing information. Drag to move it to an edge."
-                  style={
-                    captionDragPosition
-                      ? ({
-                          "--caption-drag-x": captionDragPosition.x + "px",
-                          "--caption-drag-y": captionDragPosition.y + "px",
-                        } as CSSProperties)
-                      : undefined
-                  }
-                  onPointerDown={beginCaptionDrag}
-                >
-                  <h2 title={displayTrackTitle(player.track, showTitleUnicode)}>
-                    {displayTrackTitle(player.track, showTitleUnicode) ||
-                      "A little more rhythm."}
-                  </h2>
-                  <p
-                    title={displayTrackArtist(player.track, showArtistUnicode)}
-                  >
-                    {displayTrackArtist(player.track, showArtistUnicode) ||
-                      "Your osu! library. A whole new way to listen."}
-                  </p>
-                  {player.track?.source && (
-                    <span className="hero-source">{player.track.source}</span>
-                  )}
-                </div>
-              )}
-            </div>
-            <div className="player-note">
-              <span className="tiny-osu">osu!</span>
-              <span>Less clicking circles. More listening.</span>
-              <Sparkles size={14} />
-            </div>
-          </section>
+          <NowPlaying
+            player={player}
+            visualizer={visualizer}
+            showNowPlayingTitleArtist={showNowPlayingTitleArtist}
+            showTitleUnicode={showTitleUnicode}
+            showArtistUnicode={showArtistUnicode}
+            captionPosition={captionPosition}
+            captionDragging={captionDragging}
+            captionDragPosition={captionDragPosition}
+            videoActive={videoActive}
+            captionRef={captionRef}
+            beginCaptionDrag={beginCaptionDrag}
+          />
 
           <aside
             ref={sidePanelRef}
@@ -1941,7 +1209,36 @@ export function App({
                   onChange={setVisualizer}
                 />
               ) : (
-                settingsPanelContent
+                <SettingsPanel
+                  summary={summary}
+                  importing={importing}
+                  player={player}
+                  chooseLibrary={chooseLibrary}
+                  refreshLibrary={async () => {
+                    setSidePanelOpen(false);
+                    await loadLibrary(summary?.installPath);
+                  }}
+                  libraryPosition={libraryPosition}
+                  setLibraryPosition={setLibraryPosition}
+                  transportLayout={transportLayout}
+                  setTransportLayout={setTransportLayout}
+                  artworkThemeEnabled={artworkThemeEnabled}
+                  setArtworkThemeEnabled={setArtworkThemeEnabled}
+                  showNowPlayingTitleArtist={showNowPlayingTitleArtist}
+                  setShowNowPlayingTitleArtist={setShowNowPlayingTitleArtist}
+                  showTitleUnicode={showTitleUnicode}
+                  setShowTitleUnicode={setShowTitleUnicode}
+                  showArtistUnicode={showArtistUnicode}
+                  setShowArtistUnicode={setShowArtistUnicode}
+                  visualizer={visualizer}
+                  setVisualizer={setVisualizer}
+                  clearingCache={clearingCache}
+                  cacheUsage={cacheUsage}
+                  cacheNotice={cacheNotice}
+                  requestCacheClear={requestCacheClear}
+                  requestSettingsReset={requestSettingsReset}
+                  cacheLimitWheelRemainder={cacheLimitWheelRemainder}
+                />
               )}
             </div>
           </aside>
@@ -2035,188 +1332,54 @@ export function App({
             <span />
           </div>
 
-          <section
-            ref={libraryRef}
-            className="library-panel"
-            aria-label="Music library"
-            aria-hidden={libraryHidden}
-            inert={libraryHidden || undefined}
-          >
-            <div className="library-search-row">
-              <div className="search-box">
-                <Search size={19} />
-                <input
-                  ref={searchRef}
-                  value={searchDraft}
-                  onChange={(event) => setSearchDraft(event.target.value)}
-                  onKeyDown={handleSearchKeyDown}
-                  placeholder="Search songs, artists, tags…"
-                  aria-label="Search library"
-                />
-                {searchDraft ? (
-                  <button
-                    aria-label="Clear search"
-                    onClick={() => setSearchDraft("")}
-                  >
-                    <X size={15} />
-                  </button>
-                ) : (
-                  <kbd>Ctrl F</kbd>
-                )}
-              </div>
-              <button
-                className={
-                  "icon-button refresh-button " + (importing ? "spinning" : "")
-                }
-                title="Refresh library"
-                aria-label="Refresh library"
-                disabled={importing}
-                onClick={() => void loadLibrary(summary?.installPath)}
-              >
-                <RefreshCw size={17} />
-              </button>
-            </div>
-
-            <div
-              className="library-tabs"
-              role="tablist"
-              aria-label="Library view"
-            >
-              <button
-                role="tab"
-                aria-selected={tab === "all"}
-                className={tab === "all" ? "active" : ""}
-                onClick={() => setTab("all")}
-              >
-                <Music2 size={15} /> All songs
-              </button>
-              <button
-                role="tab"
-                aria-selected={tab === "favorites"}
-                className={tab === "favorites" ? "active" : ""}
-                onClick={() => setTab("favorites")}
-              >
-                <Heart size={15} /> Favorites
-                {favorites.size > 0 && <span>{favorites.size}</span>}
-              </button>
-            </div>
-
-            <div className="filter-bar">
-              <FacetPicker
-                label="Filter by tag"
-                allLabel="All tags"
-                value={tags}
-                multiple
-                onChange={(value) =>
-                  setTags(Array.isArray(value) ? value : value ? [value] : [])
-                }
-                items={summary?.tags ?? []}
-                icon={<Tag size={13} />}
-              />
-              <div className="collection-filter">
-                <FacetPicker
-                  label="Filter by collection"
-                  allLabel="All collections"
-                  value={collection}
-                  onChange={setCollection}
-                  items={summary?.collections ?? []}
-                  icon={<FolderHeart size={16} />}
-                />
-              </div>
-              <div className="sort-controls">
-                <span>Sort by</span>
-                <div className="sort-select">
-                  <SortPicker
-                    value={sort}
-                    options={sortOptions}
-                    onChange={changeSort}
-                  />
-                </div>
-                <button
-                  className="icon-button sort-direction"
-                  aria-label={descending ? "Sort ascending" : "Sort descending"}
-                  title={descending ? "Descending order" : "Ascending order"}
-                  onClick={() => setDescending((value) => !value)}
-                >
-                  {descending ? (
-                    <ArrowDownWideNarrow size={16} />
-                  ) : (
-                    <ArrowUpWideNarrow size={16} />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {hasFilters && (
-              <div className="active-filters">
-                <span>
-                  {tags.length
-                    ? tags.map((value) => "#" + value).join(", ")
-                    : collection ||
-                      (tab === "favorites"
-                        ? "Your favorites"
-                        : "“" + search + "”")}
-                </span>
-                <button onClick={clearFilters}>
-                  Clear filters <X size={12} />
-                </button>
-              </div>
-            )}
-
-            <div className="list-area">
-              {loadError ? (
-                <div className="library-state error-state">
-                  <CircleAlert size={35} />
-                  <h3>Let’s find your music</h3>
-                  <p>{loadError}</p>
-                  <button
-                    className="primary-button"
-                    onClick={() => void chooseLibrary()}
-                  >
-                    <FolderOpen size={16} /> Choose osu! folder
-                  </button>
-                  <button
-                    className="text-button"
-                    onClick={() => void loadLibrary(summary?.installPath)}
-                  >
-                    Try again
-                  </button>
-                </div>
-              ) : summary ? (
-                <VirtualTrackList
-                  api={api}
-                  query={query}
-                  revision={revision}
-                  currentTrackId={player.track?.id}
-                  followCurrentTrackIndex={
-                    queueMatches ? (player.queueIndex ?? undefined) : undefined
-                  }
-                  libraryReady={!importing}
-                  playing={player.playing}
-                  showTitleUnicode={showTitleUnicode}
-                  showArtistUnicode={showArtistUnicode}
-                  favorites={favorites}
-                  onPlay={playTrack}
-                  onFavorite={toggleFavorite}
-                  onContextMenu={openTrackContextMenu}
-                  onTotal={setResultTotal}
-                  onFirstTrack={cueFirstTrack}
-                  keyboardControlsRef={trackListKeyboardRef}
-                />
-              ) : null}
-            </div>
-
-            <div className="library-footer">
-              <span>
-                <i />
-                {importing
-                  ? (summary?.trackCount ?? 0).toLocaleString() +
-                    " songs loaded"
-                  : resultTotal.toLocaleString() +
-                    (hasFilters ? " songs found" : " songs in your library")}
-              </span>
-            </div>
-          </section>
+          <LibraryPanel
+            api={api}
+            libraryRef={libraryRef}
+            libraryHidden={libraryHidden}
+            searchRef={searchRef}
+            searchDraft={searchDraft}
+            setSearchDraft={setSearchDraft}
+            onSearchKeyDown={handleSearchKeyDown}
+            importing={importing}
+            refreshLibrary={async () => {
+              await loadLibrary(summary?.installPath);
+            }}
+            summary={summary}
+            tab={tab}
+            setTab={setTab}
+            favorites={favorites}
+            tags={tags}
+            setTags={setTags}
+            collection={collection}
+            setCollection={setCollection}
+            sort={sort}
+            sortOptions={sortOptions}
+            onSort={changeSort}
+            descending={descending}
+            setDescending={setDescending}
+            hasFilters={hasFilters}
+            search={search}
+            clearFilters={clearFilters}
+            loadError={loadError}
+            chooseLibrary={chooseLibrary}
+            query={query}
+            revision={revision}
+            currentTrackId={player.track?.id}
+            followCurrentTrackIndex={
+              queueMatches ? (player.queueIndex ?? undefined) : undefined
+            }
+            libraryReady={!importing}
+            playing={player.playing}
+            showTitleUnicode={showTitleUnicode}
+            showArtistUnicode={showArtistUnicode}
+            onPlay={playTrack}
+            onFavorite={toggleFavorite}
+            onContextMenu={openTrackContextMenu}
+            onTotal={setResultTotal}
+            onFirstTrack={cueFirstTrack}
+            keyboardControlsRef={trackListKeyboardRef}
+            resultTotal={resultTotal}
+          />
         </main>
       </div>
 
@@ -2251,296 +1414,29 @@ export function App({
           document.body,
         )}
 
-      <footer
-        className={
-          "transport " +
-          (transportLayout === "controls-centered"
-            ? "transport-controls-centered"
-            : "")
-        }
-        aria-label="Playback controls"
-        onPointerMove={controlsActivity}
-        onFocus={controlsActivity}
-      >
-        <div
-          className="transport-scrubber"
-          onPointerEnter={cancelSeekPreviewClear}
-          onPointerLeave={clearSeekPreview}
-        >
-          <span
-            className="seek-tooltip seek-current-tooltip"
-            aria-hidden="true"
-            style={
-              {
-                "--seek-tooltip-position": currentProgress + "%",
-              } as CSSProperties
-            }
-          >
-            {formatDuration(displayedTime)} / {formatDuration(duration)}
-          </span>
-          {seekTooltipPreview && (
-            <span
-              className="seek-tooltip seek-hover-tooltip"
-              aria-hidden="true"
-              style={
-                {
-                  "--seek-tooltip-position": tooltipPosition + "%",
-                } as CSSProperties
-              }
-            >
-              {formatDuration(seekTooltipPreview.time)}
-            </span>
-          )}
-          <input
-            className="seek-slider"
-            type="range"
-            min="0"
-            max={duration || 1}
-            step="0.1"
-            value={Math.min(displayedTime, duration || 1)}
-            disabled={!player.track}
-            aria-label="Seek"
-            aria-valuetext={
-              formatDuration(displayedTime) + " of " + formatDuration(duration)
-            }
-            style={
-              {
-                "--range-progress": currentProgress + "%",
-                "--range-preview-start": previewStart + "%",
-                "--range-preview-end": previewEnd + "%",
-              } as CSSProperties
-            }
-            onFocus={resetSeekPreview}
-            onPointerDown={beginScrubbing}
-            onPointerMove={updateSeekPreview}
-            onPointerUp={finishScrubbing}
-            onPointerCancel={finishScrubbing}
-            onLostPointerCapture={finishScrubbing}
-            onChange={updateScrubbing}
-          />
-        </div>
-
-        {transportLayout !== "controls-centered" && (
-          <button
-            className={
-              "icon-button shuffle-button " + (player.shuffle ? "active" : "")
-            }
-            aria-label="Shuffle"
-            aria-pressed={player.shuffle}
-            title={player.shuffle ? "Turn off shuffle" : "Turn on shuffle"}
-            onClick={() => player.setShuffle((value) => !value)}
-          >
-            <Shuffle size={17} />
-          </button>
-        )}
-        <div className="transport-buttons">
-          {transportLayout === "controls-centered" && (
-            <button
-              className={
-                "icon-button shuffle-button " + (player.shuffle ? "active" : "")
-              }
-              aria-label="Shuffle"
-              aria-pressed={player.shuffle}
-              title={player.shuffle ? "Turn off shuffle" : "Turn on shuffle"}
-              onClick={() => player.setShuffle((value) => !value)}
-            >
-              <Shuffle size={17} />
-            </button>
-          )}
-          <button
-            className="icon-button skip-button"
-            aria-label="Previous track"
-            disabled={!player.track}
-            onClick={() => void player.previous()}
-          >
-            <SkipBack size={20} fill="currentColor" />
-          </button>
-          <button
-            className="play-button"
-            aria-label={player.playing ? "Pause" : "Play"}
-            disabled={!player.track}
-            onClick={player.toggle}
-          >
-            {player.loading ? (
-              <LoaderCircle className="spin" size={21} />
-            ) : player.playing ? (
-              <Pause size={21} fill="currentColor" />
-            ) : (
-              <Play size={21} fill="currentColor" />
-            )}
-          </button>
-          <button
-            className="icon-button skip-button"
-            aria-label="Next track"
-            disabled={!player.track}
-            onClick={() => void player.next()}
-          >
-            <SkipForward size={20} fill="currentColor" />
-          </button>
-          <button
-            className={
-              "icon-button repeat-button " +
-              (player.repeat !== "off" ? "active" : "")
-            }
-            aria-label={
-              player.repeat === "one"
-                ? "Repeat one"
-                : player.repeat === "all"
-                  ? "Repeat all"
-                  : "Repeat off"
-            }
-            aria-pressed={player.repeat !== "off"}
-            title={
-              player.repeat === "one"
-                ? "Repeat one"
-                : player.repeat === "all"
-                  ? "Repeat all"
-                  : "Repeat off"
-            }
-            onClick={player.cycleRepeat}
-          >
-            {player.repeat === "one" ? (
-              <Repeat1 size={17} />
-            ) : (
-              <Repeat size={17} />
-            )}
-          </button>
-        </div>
-
-        <div className="transport-track">
-          <TrackArt
-            className="transport-track-art"
-            track={player.track}
-            playing={false}
-          />
-          <div className="transport-track-text">
-            <strong title={displayTrackTitle(player.track, showTitleUnicode)}>
-              {displayTrackTitle(player.track, showTitleUnicode) ||
-                "Your soundtrack starts here"}
-            </strong>
-            <span title={displayTrackArtist(player.track, showArtistUnicode)}>
-              {displayTrackArtist(player.track, showArtistUnicode) ||
-                "Pick a song and press play"}
-            </span>
-          </div>
-          <button
-            className={
-              "icon-button transport-heart " +
-              (player.track && favorites.has(player.track.id)
-                ? "is-favorite"
-                : "")
-            }
-            disabled={!player.track}
-            aria-label={
-              player.track && favorites.has(player.track.id)
-                ? "Unfavorite song"
-                : "Favorite song"
-            }
-            onClick={() => player.track && toggleFavorite(player.track)}
-          >
-            <Heart
-              size={17}
-              fill={
-                player.track && favorites.has(player.track.id)
-                  ? "currentColor"
-                  : "none"
-              }
-            />
-          </button>
-        </div>
-
-        <div className="transport-extra">
-          <button
-            className="icon-button"
-            aria-label="Keyboard shortcuts"
-            title="Keyboard shortcuts"
-            onClick={() => setShortcutsOpen(true)}
-          >
-            <Keyboard size={17} />
-          </button>
-          <button
-            className={
-              "icon-button settings-panel-toggle " +
-              (sidePanelOpen ? "active" : "")
-            }
-            aria-label={sidePanelOpen ? "Hide settings" : "Show settings"}
-            aria-pressed={sidePanelOpen}
-            aria-expanded={sidePanelOpen}
-            aria-controls="side-settings-panel"
-            title={sidePanelOpen ? "Hide settings" : "Show settings"}
-            onClick={() => {
-              if (sidePanelOpen) {
-                setSidePanelOpen(false);
-              } else {
-                setSidePanelTab("settings");
-                setSidePanelOpen(true);
-              }
-            }}
-          >
-            <Settings2 size={17} />
-          </button>
-          <button
-            className={
-              "icon-button sidebar-toggle " + (sidebarHidden ? "" : "active")
-            }
-            aria-label={
-              sidebarHidden ? "Show library sidebar" : "Hide library sidebar"
-            }
-            onClick={() => setSidebarHidden((value) => !value)}
-          >
-            {sidebarHidden ? (
-              libraryPosition === "left" ? (
-                <PanelLeftOpen size={19} />
-              ) : (
-                <PanelRightOpen size={19} />
-              )
-            ) : libraryPosition === "left" ? (
-              <PanelLeftClose size={19} />
-            ) : (
-              <PanelRightClose size={19} />
-            )}
-          </button>
-          <button
-            className="icon-button"
-            aria-label={player.muted ? "Unmute" : "Mute"}
-            onClick={player.toggleMute}
-          >
-            {player.muted || player.volume === 0 ? (
-              <VolumeX size={19} />
-            ) : player.volume < 0.5 ? (
-              <Volume1 size={19} />
-            ) : (
-              <Volume2 size={19} />
-            )}
-          </button>
-          <input
-            className="volume-slider"
-            type="range"
-            min="0"
-            max="1"
-            step="0.01"
-            value={player.muted ? 0 : player.volume}
-            aria-label="Volume"
-            style={
-              {
-                "--range-progress":
-                  (player.muted ? 0 : player.volume) * 100 + "%",
-              } as CSSProperties
-            }
-            onChange={(event) => player.setVolume(Number(event.target.value))}
-          />
-          <button
-            className="icon-button fullscreen-toggle"
-            aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-            title={
-              fullscreen ? "Exit fullscreen (Esc)" : "Fullscreen view (F11)"
-            }
-            onClick={() => api.windowControl("fullscreen")}
-          >
-            {fullscreen ? <Minimize2 size={19} /> : <Maximize2 size={19} />}
-          </button>
-        </div>
-      </footer>
+      <Transport
+        player={player}
+        transportLayout={transportLayout}
+        showTitleUnicode={showTitleUnicode}
+        showArtistUnicode={showArtistUnicode}
+        favorites={favorites}
+        onFavorite={toggleFavorite}
+        fullscreen={fullscreen}
+        sidebarHidden={sidebarHidden}
+        libraryPosition={libraryPosition}
+        sidePanelOpen={sidePanelOpen}
+        onOpenShortcuts={() => setShortcutsOpen(true)}
+        onToggleSidePanel={() => {
+          if (sidePanelOpen) setSidePanelOpen(false);
+          else {
+            setSidePanelTab("settings");
+            setSidePanelOpen(true);
+          }
+        }}
+        onToggleSidebar={() => setSidebarHidden((value) => !value)}
+        onFullscreen={() => api.windowControl("fullscreen")}
+        onControlsActivity={controlsActivity}
+      />
 
       <dialog
         ref={dialogRef}
