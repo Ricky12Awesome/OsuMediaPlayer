@@ -10,16 +10,19 @@ import {
   session,
   shell,
 } from "electron";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import type {
   LibraryQuery,
   LibrarySummary,
   MediaAction,
   Track,
+  TrackDebugInfo,
+  TrackDebugMediaInfo,
   TrackContextMenuAction,
   TrackContextMenuInfo,
   VideoEncodingSettings,
+  VideoSource,
 } from "../shared/types";
 import { LibraryIndex } from "./library/index";
 import { directorySize } from "./cache";
@@ -32,6 +35,7 @@ import {
   type ResolvedMediaFile,
 } from "./media";
 import { VideoTranscoder } from "./video/transcoder";
+import { ffprobeFor, runProcess } from "./video/process";
 import { resolveRendererUrl } from "./renderer-url";
 
 const isWaylandSession =
@@ -297,6 +301,167 @@ async function getTrackContextMenuInfo(
   };
 }
 
+type DebugMediaKind = "audio" | "background" | "video";
+
+function debugAssetName(filename: string): string {
+  const normalized = filename.replaceAll("\\", "/");
+  return normalized.slice(normalized.lastIndexOf("/") + 1) || filename;
+}
+
+/** Probe optional media properties without making playback depend on ffprobe. */
+async function probeDebugMedia(
+  filename: string,
+  kind: DebugMediaKind,
+): Promise<
+  Pick<
+    TrackDebugMediaInfo,
+    "duration" | "resolution" | "frameRate" | "codec" | "bitrate"
+  >
+> {
+  const stream = kind === "audio" ? "a:0" : "v:0";
+  const { result } = runProcess(
+    ffprobeFor(process.env.FFMPEG_PATH || "ffmpeg"),
+    [
+      "-v",
+      "error",
+      "-select_streams",
+      stream,
+      "-show_entries",
+      "stream=width,height,codec_name,avg_frame_rate,bit_rate,duration:format=duration,bit_rate",
+      "-of",
+      "json",
+      filename,
+    ],
+  );
+  const completed = await result;
+  if (completed.code !== 0)
+    return {
+      duration: null,
+      resolution: null,
+      frameRate: null,
+      codec: null,
+      bitrate: null,
+    };
+  try {
+    const parsed = JSON.parse(completed.stdout) as {
+      streams?: Array<{
+        width?: number;
+        height?: number;
+        codec_name?: string;
+        avg_frame_rate?: string;
+        r_frame_rate?: string;
+        bit_rate?: string;
+        duration?: string;
+      }>;
+      format?: { duration?: string; bit_rate?: string };
+    };
+    const streamInfo = parsed.streams?.[0];
+    const parseFrameRate = (value: string | undefined): number | null => {
+      const [numerator, denominator] = (value ?? "").split("/").map(Number);
+      if (denominator > 0 && Number.isFinite(numerator / denominator))
+        return numerator / denominator;
+      return null;
+    };
+    const frameRate =
+      parseFrameRate(streamInfo?.avg_frame_rate) ??
+      parseFrameRate(streamInfo?.r_frame_rate);
+    const durationValue = Number(
+      streamInfo?.duration ?? parsed.format?.duration,
+    );
+    const bitrateValue = Number(
+      streamInfo?.bit_rate ?? parsed.format?.bit_rate,
+    );
+    return {
+      duration:
+        Number.isFinite(durationValue) && durationValue >= 0
+          ? durationValue
+          : null,
+      resolution:
+        Number.isFinite(streamInfo?.width) &&
+        Number.isFinite(streamInfo?.height) &&
+        streamInfo?.width &&
+        streamInfo?.height
+          ? { width: streamInfo.width, height: streamInfo.height }
+          : null,
+      frameRate,
+      codec: streamInfo?.codec_name ?? null,
+      bitrate:
+        Number.isFinite(bitrateValue) && bitrateValue > 0 ? bitrateValue : null,
+    };
+  } catch {
+    return {
+      duration: null,
+      resolution: null,
+      frameRate: null,
+      codec: null,
+      bitrate: null,
+    };
+  }
+}
+
+async function getTrackDebugInfo(
+  index: LibraryIndex,
+  track: Track,
+  videoSource: VideoSource = "none",
+): Promise<TrackDebugInfo> {
+  const resolve = async (
+    kind: DebugMediaKind,
+    hash: string | undefined,
+  ): Promise<TrackDebugMediaInfo | null> => {
+    if (!hash) return null;
+    const resolved = await resolveTrackAsset(index, track, kind);
+    if (!resolved) return null;
+    const probe = await probeDebugMedia(resolved.filename, kind);
+    return {
+      name: debugAssetName(resolved.asset.filename),
+      path: resolved.filename,
+      hash: resolved.asset.hash,
+      fileSize: resolved.size,
+      ...probe,
+    };
+  };
+  const [audio, background, originalVideo] = await Promise.all([
+    resolve("audio", track.audioHash),
+    resolve("background", track.backgroundHash),
+    resolve("video", track.videoHash),
+  ]);
+  let encodedVideo: TrackDebugMediaInfo | null = null;
+  if (
+    track.videoHash &&
+    (videoSource === "Cache" || videoSource === "HLS") &&
+    videoTranscoder
+  ) {
+    const encodedPath = await videoTranscoder.playbackFilename(
+      track.videoHash,
+      videoSource,
+    );
+    if (encodedPath) {
+      try {
+        const [file, probe] = await Promise.all([
+          stat(encodedPath),
+          probeDebugMedia(encodedPath, "video"),
+        ]);
+        const codec =
+          probe.codec ??
+          (await videoTranscoder.playbackCodec(track.videoHash, videoSource)) ??
+          originalVideo?.codec ??
+          null;
+        encodedVideo = {
+          name: debugAssetName(encodedPath),
+          path: encodedPath,
+          hash: track.videoHash,
+          fileSize: file.size,
+          ...probe,
+          codec,
+        };
+      } catch {
+        // The stream can disappear while playback changes source.
+      }
+    }
+  }
+  return { audio, background, video: originalVideo, encodedVideo };
+}
+
 function copyTextForAction(
   track: Track,
   action: TrackContextMenuAction,
@@ -495,6 +660,24 @@ function setupIPC(): void {
   ipcMain.handle("library:track", (event, id: unknown) => {
     requireTrusted(event);
     return typeof id === "string" ? (library?.getTrack(id) ?? null) : null;
+  });
+  ipcMain.handle(
+    "library:track-debug-info",
+    async (event, id: unknown, source: unknown) => {
+      requireTrusted(event);
+      if (typeof id !== "string" || !library) return null;
+      const track = library.getTrack(id);
+      const videoSource: VideoSource =
+        source === "Original" || source === "Cache" || source === "HLS"
+          ? source
+          : "none";
+      return track ? getTrackDebugInfo(library, track, videoSource) : null;
+    },
+  );
+  ipcMain.handle("clipboard:write-text", async (event, value: unknown) => {
+    requireTrusted(event);
+    if (typeof value !== "string") throw new Error("Invalid clipboard text.");
+    clipboard.writeText(value);
   });
   ipcMain.handle(
     "library:track-location",

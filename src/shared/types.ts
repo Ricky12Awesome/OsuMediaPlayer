@@ -43,6 +43,28 @@ export interface Track {
   lastPlayedAt?: number;
 }
 
+/** A media asset's technical metadata used by the now-playing debug widget. */
+export interface TrackDebugMediaInfo {
+  /** The original asset filename without its parent directories. */
+  name: string;
+  /** The resolved absolute path on disk. */
+  path: string;
+  hash: string;
+  fileSize: number;
+  duration: number | null;
+  resolution: { width: number; height: number } | null;
+  frameRate: number | null;
+  codec: string | null;
+  bitrate: number | null;
+}
+
+export interface TrackDebugInfo {
+  audio: TrackDebugMediaInfo | null;
+  background: TrackDebugMediaInfo | null;
+  video: TrackDebugMediaInfo | null;
+  encodedVideo?: TrackDebugMediaInfo | null;
+}
+
 export interface LibraryFacet {
   name: string;
   count: number;
@@ -130,6 +152,7 @@ export type VideoEncodingCodec =
   "auto" | "av1" | "hevc" | "h264-hardware" | "h264-software";
 
 export type VideoMaxFps = 0 | 24 | 30 | 60;
+export type VideoSource = "none" | "Original" | "Cache" | "HLS";
 
 export interface VideoEncodingSettings {
   codec: VideoEncodingCodec;
@@ -166,6 +189,11 @@ export interface PlayerAPI {
   loadCachedLibrary?: (installPath?: string) => Promise<LibrarySummary | null>;
   queryLibrary: (query?: LibraryQuery) => Promise<LibraryPage>;
   getTrack: (id: string) => Promise<Track | null>;
+  getTrackDebugInfo: (
+    id: string,
+    videoSource?: VideoSource,
+  ) => Promise<TrackDebugInfo | null>;
+  copyText?: (value: string) => Promise<void>;
   getTrackLocation?: (
     id: string,
     query?: LibraryQuery,

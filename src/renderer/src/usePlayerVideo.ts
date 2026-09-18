@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   PlayerAPI,
   Track,
+  VideoSource,
   VideoEncodingCodec,
   VideoEncodingQuality,
   VideoMaxFps,
@@ -11,6 +12,7 @@ type VideoSync = (autoPlay?: boolean) => void;
 
 export interface PlayerVideoState {
   videoUrl: string | null;
+  videoSource: VideoSource;
   videoLoading: boolean;
   videoEncoding: boolean;
   videoEncodingProgress: number | null;
@@ -274,6 +276,14 @@ export function usePlayerVideo({
 
   return {
     videoUrl,
+    videoSource:
+      !playVideos || !track?.videoUrl || !videoUrl
+        ? "none"
+        : videoStreaming
+          ? "HLS"
+          : videoUrl.startsWith("osu-media://video-cache/")
+            ? "Cache"
+            : "Original",
     videoLoading,
     videoEncoding:
       Boolean(track?.videoHash) &&

@@ -57,6 +57,8 @@ export interface SettingsPanelProps {
   setArtworkThemeEnabled: Dispatch<SetStateAction<boolean>>;
   showNowPlayingTitleArtist: boolean;
   setShowNowPlayingTitleArtist: Dispatch<SetStateAction<boolean>>;
+  debugMode: boolean;
+  setDebugMode: Dispatch<SetStateAction<boolean>>;
   showTitleUnicode: boolean;
   setShowTitleUnicode: Dispatch<SetStateAction<boolean>>;
   showArtistUnicode: boolean;
@@ -101,6 +103,8 @@ export function SettingsPanel({
   setArtworkThemeEnabled,
   showNowPlayingTitleArtist,
   setShowNowPlayingTitleArtist,
+  debugMode,
+  setDebugMode,
   showTitleUnicode,
   setShowTitleUnicode,
   showArtistUnicode,
@@ -409,6 +413,14 @@ export function SettingsPanel({
           <p className={"cache-notice " + cacheNotice.kind} role="status">
             {cacheNotice.message}
           </p>
+        )}
+      </div>
+      <div className="settings-block debug-setting">
+        {settingsSwitch(
+          "Debug mode",
+          "Display technical metadata for the current track",
+          debugMode,
+          () => setDebugMode((value) => !value),
         )}
       </div>
     </>
