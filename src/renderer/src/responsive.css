@@ -1,130 +1,130 @@
 /* Responsive layout overrides. */
 
-@media (width>=1550px) {
+@media (width>=96.875rem) {
   .hero-caption h2 {
-    font-size: 48px;
+    font-size: 3rem;
   }
   .track-row {
-    gap: 17px;
+    gap: 1.0625rem;
   }
   .track-title {
-    font-size: 14px;
+    font-size: 1rem;
   }
   .track-artist {
-    font-size: 11px;
+    font-size: 1rem;
   }
   .transport {
-    height: 76px;
+    height: 4.75rem;
   }
   .transport-track-text strong {
-    font-size: 13px;
+    font-size: 1rem;
   }
   .transport-track-text > span {
-    font-size: 11px;
+    font-size: 1rem;
   }
 }
-@media (height<=760px) and (width>=761px) {
+@media (height<=47.5rem) and (width>=47.5625rem) {
   .player-note {
-    margin-top: 12px;
-    padding-top: 10px;
+    margin-top: 0.75rem;
+    padding-top: 0.625rem;
   }
   .hero-caption h2 {
-    font-size: 29px;
+    font-size: 1.8125rem;
   }
   .transport {
-    height: 68px;
+    height: 4.25rem;
   }
   .library-tabs {
-    margin-top: 11px;
+    margin-top: 0.6875rem;
   }
   .filter-bar {
-    padding: 10px 0;
+    padding: 0.625rem 0;
   }
 }
-@media (width<=1100px) {
+@media (width<=68.75rem) {
   .transport {
-    gap: 16px;
-    padding-left: 18px;
-    padding-right: 20px;
+    gap: 1rem;
+    padding-left: 1.125rem;
+    padding-right: 1.25rem;
   }
   .volume-slider {
-    width: 58px;
+    width: 3.625rem;
   }
   .library-tabs {
-    gap: 20px;
+    gap: 1.25rem;
   }
   .hero-caption h2 {
-    font-size: 31px;
+    font-size: 1.9375rem;
   }
   .track-row {
-    gap: 9px;
-    padding-left: 9px;
-    padding-right: 9px;
+    gap: 0.5625rem;
+    padding-left: 0.5625rem;
+    padding-right: 0.5625rem;
   }
   .track-art {
-    width: 49px;
-    height: 49px;
+    width: 3.0625rem;
+    height: 3.0625rem;
   }
   .track-favorite {
-    width: 20px;
+    width: 1.25rem;
   }
   .player-note {
-    font-size: 8px;
+    font-size: 1rem;
   }
 }
-@media (width<=850px) {
+@media (width<=53.125rem) {
   .transport {
-    gap: 12px;
-    padding-left: 16px;
-    padding-right: 16px;
+    gap: 0.75rem;
+    padding-left: 1rem;
+    padding-right: 1rem;
   }
   .hero-caption h2 {
-    font-size: 26px;
+    font-size: 1.625rem;
   }
   .eyebrow {
-    letter-spacing: 1.5px;
-    font-size: 8px;
+    letter-spacing: 0.1875em;
+    font-size: 1rem;
   }
   .track-row {
-    gap: 8px;
+    gap: 0.5rem;
   }
   .track-art {
-    width: 43px;
-    height: 48px;
+    width: 2.6875rem;
+    height: 3rem;
   }
   .track-title {
-    font-size: 11px;
+    font-size: 1rem;
   }
   .track-artist {
-    font-size: 9px;
+    font-size: 1rem;
   }
 }
-@media (width<=760px) {
+@media (width<=47.5rem) {
   .app-shell {
-    min-height: 440px;
+    min-height: 27.5rem;
   }
   .main-content {
     flex-direction: column;
-    gap: 10px;
-    padding: 13px 20px 0;
+    gap: 0.625rem;
+    padding: 0.8125rem 1.25rem 0;
     display: flex;
   }
   .side-panel {
     z-index: 6;
     position: absolute;
-    inset: 13px auto 0 13px;
-    width: min(330px, calc(100% - 26px));
-    max-height: calc(100% - 13px);
-    padding: 12px 13px 16px;
+    inset: 0.8125rem auto 0 0.8125rem;
+    width: min(20.625rem, calc(100% - 1.625rem));
+    max-height: calc(100% - 0.8125rem);
+    padding: 0.75rem 0.8125rem 1rem;
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: 0.75rem;
     box-shadow: 12px 16px 45px #09050e66;
-    transform: translate(-24px);
+    transform: translate(-1.5rem);
   }
   .main-content.library-position-left .side-panel {
-    inset: 13px 13px 0 auto;
+    inset: 0.8125rem 0.8125rem 0 auto;
     border: 1px solid var(--border);
-    transform: translate(24px);
+    transform: translate(1.5rem);
   }
   .main-content.side-panel-is-open .side-panel {
     transform: translate(0);
@@ -137,21 +137,21 @@
   .now-playing-panel {
     background: 0 0;
     flex: 0 42%;
-    min-height: 160px;
+    min-height: 10rem;
     padding-bottom: 0;
     overflow: visible;
   }
   .library-tabs {
     justify-content: space-between;
     gap: 0;
-    margin-top: 10px;
+    margin-top: 0.625rem;
   }
   .library-tabs button {
-    padding: 11px 6px 13px;
-    font-size: 11px;
+    padding: 0.6875rem 0.375rem 0.8125rem;
+    font-size: 1rem;
   }
   .search-box {
-    height: 42px;
+    height: 2.625rem;
   }
   .library-resizer,
   .side-panel-resizer {
@@ -169,44 +169,44 @@
     box-shadow: none;
   }
   .search-box input {
-    font-size: 12px;
+    font-size: 1rem;
   }
   .filter-bar {
-    padding: 10px 0;
+    padding: 0.625rem 0;
   }
   .track-art {
-    width: 54px;
-    height: 54px;
+    width: 3.375rem;
+    height: 3.375rem;
   }
   .track-row {
-    gap: 13px;
-    padding: 10px 13px;
+    gap: 0.8125rem;
+    padding: 0.625rem 0.8125rem;
   }
   .track-title {
-    font-size: 12px;
+    font-size: 1rem;
   }
   .track-artist {
-    font-size: 11px;
+    font-size: 1rem;
   }
   .track-favorite {
-    width: 29px;
+    width: 1.8125rem;
   }
   .track-favorite svg {
     width: 17px;
     height: 17px;
   }
   .track-duration {
-    font-size: 11px;
+    font-size: 1rem;
   }
   .transport {
-    gap: 8px;
-    height: 70px;
-    min-height: 70px;
-    padding: 12px 12px 6px;
+    gap: 0.5rem;
+    height: 4.375rem;
+    min-height: 4.375rem;
+    padding: 0.75rem 0.75rem 0.375rem;
   }
   .transport-buttons {
-    gap: 8px;
-    margin-left: 30px;
+    gap: 0.5rem;
+    margin-left: 1.875rem;
   }
   .transport-controls-centered .transport-track {
     max-width: 100%;
@@ -214,118 +214,118 @@
   }
   .transport-buttons .icon-button,
   .shuffle-button {
-    width: 22px;
-    height: 24px;
+    width: 1.375rem;
+    height: 1.5rem;
   }
   .transport-buttons .icon-button svg,
   .shuffle-button svg {
     width: 17px;
   }
   .transport-buttons .skip-button > svg {
-    transform: translate(-2px);
+    transform: translate(-0.125rem);
   }
   .transport-buttons .play-button {
-    width: 34px;
-    height: 34px;
+    width: 2.125rem;
+    height: 2.125rem;
   }
   .transport-buttons .play-button svg {
     width: 18px;
     height: 18px;
   }
   .transport-extra {
-    gap: 3px;
+    gap: 0.1875rem;
   }
   .transport-extra .icon-button {
-    width: 23px;
-    height: 24px;
+    width: 1.4375rem;
+    height: 1.5rem;
   }
   .transport-extra svg {
     width: 14px;
   }
   .volume-slider {
-    width: 42px;
+    width: 2.625rem;
   }
   .transport-heart {
-    width: 24px;
-    height: 24px;
+    width: 1.5rem;
+    height: 1.5rem;
   }
   .transport-track-text strong {
-    font-size: 10px;
+    font-size: 1rem;
   }
   .transport-track-text > span {
-    font-size: 8px;
+    font-size: 1rem;
   }
   .artwork-stage {
     border: 1px solid #ffffff0c;
-    border-radius: 15px;
+    border-radius: 0.9375rem;
     flex: 1;
-    min-height: 150px;
+    min-height: 9.375rem;
     position: relative;
     inset: auto;
   }
   .hero-caption h2 {
-    font-size: 30px;
+    font-size: 1.875rem;
   }
   .player-note {
     display: none;
   }
   .playback-error {
-    font-size: 11px;
-    bottom: 82px;
-    left: 15px;
-    right: 15px;
+    font-size: 1rem;
+    bottom: 5.125rem;
+    left: 0.9375rem;
+    right: 0.9375rem;
   }
   .settings-dialog {
-    padding: 22px;
+    padding: 1.375rem;
   }
   .settings-actions {
-    gap: 8px;
+    gap: 0.5rem;
   }
   .library-footer {
-    height: 33px;
-    margin-top: 5px;
+    height: 2.0625rem;
+    margin-top: 0.3125rem;
   }
 }
-@media (width<=400px) {
+@media (width<=25rem) {
   .main-content,
   .transport {
-    padding-left: 13px;
-    padding-right: 13px;
+    padding-left: 0.8125rem;
+    padding-right: 0.8125rem;
   }
   .transport-buttons {
-    gap: 5px;
-    margin-left: 27px;
+    gap: 0.3125rem;
+    margin-left: 1.6875rem;
   }
   .transport-controls-centered .transport-track {
     max-width: 100%;
     margin-left: 0;
   }
   .track-row {
-    gap: 10px;
-    padding-left: 9px;
-    padding-right: 9px;
+    gap: 0.625rem;
+    padding-left: 0.5625rem;
+    padding-right: 0.5625rem;
   }
   .track-art {
-    width: 48px;
-    height: 48px;
+    width: 3rem;
+    height: 3rem;
   }
   .track-favorite {
-    width: 22px;
+    width: 1.375rem;
   }
   .hero-caption h2 {
-    font-size: 25px;
+    font-size: 1.5625rem;
   }
   .library-tabs button {
-    font-size: 10px;
+    font-size: 1rem;
   }
 }
-@media (width<=520px) {
+@media (width<=32.5rem) {
   .transport {
     grid-template-rows: repeat(3, minmax(0, 1fr));
     grid-template-columns: minmax(0, 1fr);
     gap: 0;
-    height: 120px;
-    min-height: 120px;
+    height: 7.5rem;
+    min-height: 7.5rem;
   }
   .transport-track,
   .transport-controls-centered .transport-track {
@@ -342,7 +342,7 @@
   }
   .transport:not(.transport-controls-centered) .transport-buttons {
     justify-self: start;
-    margin-left: 30px;
+    margin-left: 1.875rem;
   }
   .shuffle-button {
     grid-area: 2/1;
@@ -352,9 +352,9 @@
     justify-self: end;
   }
 }
-@media (width<=400px) {
+@media (width<=25rem) {
   .transport:not(.transport-controls-centered) .transport-buttons {
-    margin-left: 27px;
+    margin-left: 1.6875rem;
   }
 }
 @media (prefers-reduced-motion: reduce) {

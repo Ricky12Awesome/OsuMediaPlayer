@@ -1,7 +1,7 @@
 /* A mouse drag leaves the range input focused, so focus-within alone keeps
  * the tooltip visible after the pointer has left the scrubber. */
 .transport-scrubber .seek-tooltip {
-  font-size: 18px;
+  font-size: 1.125rem;
   left: var(--seek-tooltip-position, 50%);
 }
 
@@ -15,7 +15,7 @@
 
 .transport-scrubber:focus-within .seek-tooltip {
   opacity: 0;
-  transform: translate(-50%, 4px);
+  transform: translate(-50%, 0.25rem);
 }
 
 .transport-scrubber:hover .seek-tooltip,
@@ -26,7 +26,7 @@
 
 .transport-scrubber:has(.seek-slider:active) .seek-hover-tooltip {
   opacity: 0;
-  transform: translate(-50%, 4px);
+  transform: translate(-50%, 0.25rem);
 }
 
 .seek-slider {

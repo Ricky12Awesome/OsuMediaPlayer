@@ -3,15 +3,15 @@
 .app-shell {
   flex-direction: column;
   height: 100dvh;
-  min-height: 480px;
+  min-height: 30rem;
   display: flex;
   overflow: hidden;
 }
 .library-footer > span i {
   background: #91c9ad;
   border-radius: 50%;
-  width: 5px;
-  height: 5px;
+  width: 0.3125rem;
+  height: 0.3125rem;
   box-shadow: 0 0 9px #91c9ad33;
 }
 .workspace {
@@ -20,11 +20,11 @@
   display: flex;
 }
 .main-content {
-  --side-panel-width: 0px;
-  --side-panel-resizer-width: 0px;
+  --side-panel-width: 0;
+  --side-panel-resizer-width: 0;
   grid-template-columns:
     var(--side-panel-width) var(--side-panel-resizer-width) minmax(0, 1fr)
-    7px var(--library-width, 430px);
+    0.4375rem var(--library-width, 26.875rem);
   grid-template-areas: "visualizer visualizer-resizer player resizer library";
   flex: 1;
   gap: 0;
@@ -34,17 +34,17 @@
   display: grid;
   position: relative;
 }
-@media (width>=761px) {
+@media (width>=47.5625rem) {
   .main-content {
     transition: grid-template-columns 0.28s cubic-bezier(0.22, 1, 0.36, 1);
     overflow: hidden;
   }
   .main-content.side-panel-is-open {
-    --side-panel-resizer-width: 7px;
+    --side-panel-resizer-width: 0.4375rem;
   }
   .main-content.library-position-left {
     grid-template-columns:
-      var(--library-width, 430px) 7px minmax(0, 1fr)
+      var(--library-width, 26.875rem) 0.4375rem minmax(0, 1fr)
       var(--side-panel-resizer-width) var(--side-panel-width);
     grid-template-areas: "library resizer player visualizer-resizer visualizer";
   }
@@ -91,7 +91,7 @@
   .main-content.sidebar-is-hidden .library-panel {
     opacity: 0;
     pointer-events: none;
-    transform: translate(28px);
+    transform: translate(1.75rem);
   }
   .main-content:not(.side-panel-is-open) .side-panel-resizer {
     opacity: 0;
@@ -106,7 +106,7 @@
   }
   .main-content.library-position-left.sidebar-is-hidden .library-resizer,
   .main-content.library-position-left.sidebar-is-hidden .library-panel {
-    transform: translate(-28px);
+    transform: translate(-1.75rem);
   }
 }
 
@@ -119,11 +119,11 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  padding: 14px 14px 18px;
+  padding: 0.875rem 0.875rem 1.125rem;
   display: flex;
   opacity: 0;
   pointer-events: none;
-  transform: translate(-28px);
+  transform: translate(-1.75rem);
   visibility: hidden;
   transition:
     opacity 0.18s,
@@ -134,7 +134,7 @@
   border-right: 0;
   border-left: 1px solid var(--border);
   box-shadow: -18px 0 50px #09050e24;
-  transform: translate(28px);
+  transform: translate(1.75rem);
 }
 .main-content.side-panel-is-open .side-panel {
   opacity: 1;
@@ -150,29 +150,29 @@
   flex-shrink: 0;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 0.75rem;
   display: flex;
 }
 .side-panel-heading .icon-button {
-  width: 28px;
-  height: 28px;
+  width: 1.75rem;
+  height: 1.75rem;
 }
 .side-panel-heading .settings-label {
-  gap: 7px;
+  gap: 0.4375rem;
 }
 .side-panel-heading h2 {
-  letter-spacing: -0.7px;
+  letter-spacing: -0.035em;
   color: #eaddf0;
-  margin: 2px 0 0;
-  font-size: 20px;
+  margin: 0.125rem 0 0;
+  font-size: 1.25rem;
   font-weight: 900;
 }
 .side-panel-tabs {
   flex-shrink: 0;
   border-bottom: 1px solid var(--border);
   align-items: center;
-  gap: 25px;
-  margin-top: 14px;
+  gap: 1.5625rem;
+  margin-top: 0.875rem;
   display: flex;
 }
 .side-panel-tabs button {
@@ -180,9 +180,9 @@
   white-space: nowrap;
   background: 0 0;
   align-items: center;
-  gap: 7px;
-  padding: 11px 0 14px;
-  font-size: 10px;
+  gap: 0.4375rem;
+  padding: 0.6875rem 0 0.875rem;
+  font-size: 1rem;
   font-weight: 700;
   display: flex;
   position: relative;
@@ -196,10 +196,10 @@
 .side-panel-tabs button.active:after {
   content: "";
   background: var(--pink);
-  border-radius: 3px;
-  height: 2px;
+  border-radius: 0.1875rem;
+  height: 0.125rem;
   position: absolute;
-  bottom: -1px;
+  bottom: -0.0625rem;
   left: 0;
   right: 0;
   box-shadow: 0 0 10px rgb(var(--pink-rgb) / 0.4);
@@ -208,10 +208,10 @@
   min-height: 0;
   overflow-y: auto;
   scrollbar-gutter: stable;
-  padding-right: 10px;
+  padding-right: 0.625rem;
 }
 .side-panel .visualizer-settings {
-  margin-top: 10px;
+  margin-top: 0.625rem;
 }
 .side-panel .visualizer-settings > .settings-label {
   display: none;

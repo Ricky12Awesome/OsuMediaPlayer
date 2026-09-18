@@ -1,6 +1,6 @@
 .zoom-indicator {
   position: fixed;
-  top: 18px;
+  top: 1.125rem;
   left: 50%;
   z-index: 20;
   pointer-events: none;
@@ -8,11 +8,11 @@
   color: #f8e9f4;
   background: var(--panel-muted);
   border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 8px 12px;
-  font-size: 11px;
+  border-radius: 999rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 1rem;
   font-weight: 800;
-  letter-spacing: 0.2px;
+  letter-spacing: 0.018em;
   box-shadow: 0 8px 28px #08051066;
   animation: zoom-indicator-in 0.16s ease-out both;
 }
@@ -20,7 +20,7 @@
 @keyframes zoom-indicator-in {
   from {
     opacity: 0;
-    transform: translate(-50%, -5px);
+    transform: translate(-50%, -0.3125rem);
   }
   to {
     opacity: 1;

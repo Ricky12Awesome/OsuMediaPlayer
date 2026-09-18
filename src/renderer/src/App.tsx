@@ -53,6 +53,7 @@ const defaultLibraryPosition = "right";
 const defaultSidePanelWidth = 320;
 const minSidePanelWidth = 280;
 const maxSidePanelWidth = 520;
+const cssRem = (pixels: number): string => `${pixels / 16}rem`;
 const positions = [
   "top-left",
   "top-center",
@@ -1203,8 +1204,8 @@ export function App({
           }
           style={
             {
-              "--library-width": libraryWidth + "px",
-              "--side-panel-width": (sidePanelOpen ? sidePanelWidth : 0) + "px",
+              "--library-width": cssRem(libraryWidth),
+              "--side-panel-width": cssRem(sidePanelOpen ? sidePanelWidth : 0),
             } as CSSProperties
           }
         >
