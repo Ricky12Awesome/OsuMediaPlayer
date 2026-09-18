@@ -122,6 +122,7 @@ export function AppOverlays({
               ["Previous track", "A"],
               ["Next track", "D"],
               ["Toggle song list", "Ctrl / ⌘ S"],
+              ["Always show bottom bar", "Ctrl / ⌘ E"],
               ["Show / hide title / artist", "Tab"],
               ["Random track", "F2"],
               ["Previous random track", "Shift F2"],
