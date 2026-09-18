@@ -5,34 +5,28 @@ import type {
   Beatmap,
   BeatmapCollection,
   BeatmapSet,
-} from "../shared/client-model";
+} from "../../shared/client-model";
 import type {
   LibraryFacet,
   LibraryProgress,
   LibrarySummary,
   Track,
-} from "../shared/types";
+} from "../../shared/types";
 import {
   assetUrl,
   hashedFileCandidates,
   isAssetHash,
   type MediaAsset,
-} from "./media";
-import { resolveLazerInstallPath } from "./lazer-path";
-import { LibraryIndex } from "./library-index";
-import { sortedLibraryBeatmaps } from "./library-realm";
+} from "../media";
+import { resolveLazerInstallPath } from "../lazer-path";
+import { LibraryIndex } from "./index";
+import { sortedLibraryBeatmaps } from "./realm";
 import type {
   LibraryCancellation,
   LibraryCollection,
   LibrarySnapshot,
-} from "./library-types";
-import {
-  collator,
-  dateTimestamp,
-  normalize,
-  number,
-  string,
-} from "./library-utils";
+} from "./types";
+import { collator, dateTimestamp, normalize, number, string } from "./utils";
 
 interface RawSet {
   identity: string;

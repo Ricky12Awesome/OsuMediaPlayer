@@ -1,12 +1,12 @@
-import { assetUrl, isAssetHash, type MediaAsset } from "./media";
-import type { LibrarySummary, SortKey, Track } from "../shared/types";
+import { assetUrl, isAssetHash, type MediaAsset } from "../media";
+import type { LibrarySummary, SortKey, Track } from "../../shared/types";
 import type {
   LibraryCollection,
   LibraryCollectionFingerprint,
   LibrarySnapshot,
-} from "./library-types";
-import type { LibraryCacheSummary } from "./library-cache-types";
-import { collator, normalize, trackSearch } from "./library-utils";
+} from "./types";
+import type { LibraryCacheSummary } from "./cache-types";
+import { collator, normalize, trackSearch } from "./utils";
 
 const sortKeyList: SortKey[] = [
   "title",

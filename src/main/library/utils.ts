@@ -1,4 +1,4 @@
-import type { Track } from "../shared/types";
+import type { Track } from "../../shared/types";
 
 export const collator = new Intl.Collator(undefined, {
   numeric: true,

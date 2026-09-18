@@ -6,15 +6,15 @@ import type {
   SortKey,
   Track,
   TrackLocation,
-} from "../shared/types";
-import { assetUrl, type MediaAsset } from "./media";
-import { realmTrackOrder } from "./library-realm";
+} from "../../shared/types";
+import { assetUrl, type MediaAsset } from "../media";
+import { realmTrackOrder } from "./realm";
 import type {
   LibraryCancellation,
   LibraryCollection,
   LibrarySnapshot,
   IndexedTrack,
-} from "./library-types";
+} from "./types";
 import {
   collator,
   normalize,
@@ -23,7 +23,24 @@ import {
   string,
   strings,
   trackSearch,
-} from "./library-utils";
+} from "./utils";
+
+export { loadLibraryFromRealm, parseBeatmapVideoEvent } from "./builder";
+export {
+  readLibraryCollections,
+  readLibraryFingerprint,
+  readLibraryFingerprints,
+  sortedLibraryBeatmaps,
+} from "./realm";
+export type { BeatmapVideoEvent } from "./builder";
+export type {
+  IndexedTrack,
+  LibraryCancellation,
+  LibraryCollection,
+  LibraryCollectionFingerprint,
+  LibraryFingerprint,
+  LibrarySnapshot,
+} from "./types";
 
 export class LibraryIndex {
   readonly assets: Map<string, MediaAsset>;

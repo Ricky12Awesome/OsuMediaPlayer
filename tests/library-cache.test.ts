@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
-import { clearLibraryCache } from "../src/main/library-cache";
-import { VideoTranscoder } from "../src/main/video";
+import { clearLibraryCache } from "../src/main/library/cache";
+import { VideoTranscoder } from "../src/main/video/transcoder";
 
 test("clearing the library cache removes all cached files", async () => {
   const directory = await mkdtemp(join(process.cwd(), ".library-cache-test-"));

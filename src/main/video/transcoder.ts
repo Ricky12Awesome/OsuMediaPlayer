@@ -6,17 +6,17 @@ import type {
   VideoEncodingSettings,
   VideoEncodingStatus,
   PreparedVideo,
-} from "../shared/types";
-import type { LibraryIndex } from "./library";
-import { isAssetHash, resolveMediaFile } from "./media";
+} from "../../shared/types";
+import type { LibraryIndex } from "../library/index";
+import { isAssetHash, resolveMediaFile } from "../media";
 import {
   ffprobeFor,
   fileHasContents,
   runProcess,
   type ProcessResult,
-} from "./video-process";
-import { VideoCache, type StreamMetadata } from "./video-cache";
-import { convertedVideoUrl, playlistName, serveHlsRequest } from "./video-hls";
+} from "./process";
+import { VideoCache, type StreamMetadata } from "./cache";
+import { convertedVideoUrl, playlistName, serveHlsRequest } from "./hls";
 import {
   cacheLimitBytes,
   encodingProfile,
@@ -28,15 +28,15 @@ import {
   selectedCodec,
   type CacheManifest,
   videoEncodingProfileHash,
-} from "./video-encoding";
+} from "./encoding";
 
-export { convertedVideoUrl } from "./video-hls";
+export { convertedVideoUrl } from "./hls";
 export {
   orderedVideoEncoders,
   parseAvailableVideoEncoders,
   videoEncodingProfileHash,
-} from "./video-encoding";
-export type { VideoEncoderChoice } from "./video-encoding";
+} from "./encoding";
+export type { VideoEncoderChoice } from "./encoding";
 
 const directlyPlayableExtensions = new Set([".mp4", ".m4v", ".webm"]);
 const streamDirectoryName = "stream";

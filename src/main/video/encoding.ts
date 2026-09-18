@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type {
   VideoEncodingQuality,
   VideoEncodingSettings,
-} from "../shared/types";
+} from "../../shared/types";
 
 export const encodingProfileVersion = 1;
 export const bytesPerGiB = 1024 ** 3;

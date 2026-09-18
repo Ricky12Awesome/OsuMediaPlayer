@@ -8,14 +8,14 @@ import {
   unlink,
   writeFile,
 } from "node:fs/promises";
-import type { LibrarySummary } from "../shared/types";
+import type { LibrarySummary } from "../../shared/types";
 import type {
   LibraryCollection,
   LibraryCollectionFingerprint,
   LibraryFingerprint,
   LibrarySnapshot,
   LibraryCancellation,
-} from "./library-types";
+} from "./types";
 import {
   libraryCacheVersion,
   type LibraryCacheData,
@@ -23,7 +23,7 @@ import {
   type LibraryCachePaths,
   type LibraryCacheSummary,
   type LibraryRealmMetadata,
-} from "./library-cache-types";
+} from "./cache-types";
 import {
   deserializeCollections,
   deserializeOrders,
@@ -34,16 +34,16 @@ import {
   serializeOrders,
   serializeTagCounts,
   serializeTracks,
-} from "./library-cache-format";
+} from "./cache-format";
 
-export { libraryCacheVersion } from "./library-cache-types";
+export { libraryCacheVersion } from "./cache-types";
 export type {
   LibraryCacheData,
   LibraryCacheManifest,
   LibraryCachePaths,
   LibraryCacheSummary,
   LibraryRealmMetadata,
-} from "./library-cache-types";
+} from "./cache-types";
 
 export function libraryCachePath(
   cacheDirectory: string,

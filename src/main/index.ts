@@ -21,17 +21,17 @@ import type {
   TrackContextMenuInfo,
   VideoEncodingSettings,
 } from "../shared/types";
-import { LibraryIndex } from "./library";
+import { LibraryIndex } from "./library/index";
 import { directorySize } from "./cache";
-import { clearLibraryCache } from "./library-cache";
-import { loadLibraryInWorker, waitForLibraryWorkers } from "./library-loader";
+import { clearLibraryCache } from "./library/cache";
+import { loadLibraryInWorker, waitForLibraryWorkers } from "./library/loader";
 import {
   mimeForFilename,
   resolveMediaFile,
   serveMedia,
   type ResolvedMediaFile,
 } from "./media";
-import { VideoTranscoder } from "./video";
+import { VideoTranscoder } from "./video/transcoder";
 
 const isWaylandSession =
   process.platform === "linux" &&

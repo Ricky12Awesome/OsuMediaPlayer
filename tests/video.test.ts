@@ -11,7 +11,7 @@ import {
 } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
-import type { LibraryIndex } from "../src/main/library";
+import type { LibraryIndex } from "../src/main/library/index";
 import { assetUrl } from "../src/main/media";
 import {
   convertedVideoUrl,
@@ -19,7 +19,7 @@ import {
   parseAvailableVideoEncoders,
   videoEncodingProfileHash,
   VideoTranscoder,
-} from "../src/main/video";
+} from "../src/main/video/transcoder";
 import type { VideoEncodingSettings } from "../src/shared/types";
 
 const videoSettings: VideoEncodingSettings = {

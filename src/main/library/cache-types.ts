@@ -1,9 +1,9 @@
-import type { LibrarySummary } from "../shared/types";
+import type { LibrarySummary } from "../../shared/types";
 import type {
   LibraryCollectionFingerprint,
   LibraryFingerprint,
   LibrarySnapshot,
-} from "./library-types";
+} from "./types";
 
 export const libraryCacheVersion = 8;
 

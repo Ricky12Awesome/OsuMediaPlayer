@@ -1,5 +1,5 @@
-import type { MediaAsset } from "./media";
-import type { LibrarySummary, Track } from "../shared/types";
+import type { MediaAsset } from "../media";
+import type { LibrarySummary, Track } from "../../shared/types";
 
 /** A track plus the normalized values used to answer library queries. */
 export interface IndexedTrack {

@@ -1,7 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { isAssetHash, streamMediaFile } from "./media";
-import type { CachedVideo, StreamMetadata } from "./video-cache";
+import { isAssetHash, streamMediaFile } from "../media";
+import type { CachedVideo, StreamMetadata } from "./cache";
 
 export const playlistName = "playlist.m3u8";
 

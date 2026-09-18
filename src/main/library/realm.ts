@@ -3,17 +3,17 @@ import type {
   Beatmap,
   BeatmapCollection,
   BeatmapSet,
-} from "../shared/client-model";
-import type { LibraryProgress, SortKey } from "../shared/types";
+} from "../../shared/client-model";
+import type { LibraryProgress, SortKey } from "../../shared/types";
 import { join } from "node:path";
-import { resolveLazerInstallPath } from "./lazer-path";
+import { resolveLazerInstallPath } from "../lazer-path";
 import type {
   LibraryCancellation,
   LibraryCollection,
   LibraryCollectionFingerprint,
   LibraryFingerprint,
-} from "./library-types";
-import { collator, dateTimestamp } from "./library-utils";
+} from "./types";
+import { collator, dateTimestamp } from "./utils";
 
 /** Sort persisted title fields in Realm before materializing songs. */
 export function sortedLibraryBeatmaps(realm: Realm, descending = false) {
