@@ -378,6 +378,7 @@ export function App({
       : defaultSidePanelWidth;
   });
   const [sidePanelResizing, setSidePanelResizing] = useState(false);
+  const cacheLimitWheelRemainder = useRef(0);
   const settingsPanelOpen = sidePanelOpen && sidePanelTab === "settings";
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [settingsResetConfirmation, setSettingsResetConfirmation] =
@@ -1634,6 +1635,54 @@ export function App({
           player.videoForceRemux,
           () => player.setVideoForceRemux((value) => !value),
         )}
+        <div className="settings-row">
+          <span
+            className="settings-row-label"
+            title="Converted-video cache size in GB. Use 0 for HLS streaming only or -1 for no limit."
+          >
+            Cache limit (GB)
+          </span>
+          <input
+            className="settings-number-input"
+            type="text"
+            inputMode="decimal"
+            value={player.videoCacheLimitGb}
+            aria-label="Video cache limit in gigabytes"
+            onChange={(event) => {
+              const value = Number(event.currentTarget.value);
+              if (Number.isFinite(value) && value >= -1)
+                player.setVideoCacheLimitGb(value);
+            }}
+            onWheel={(event) => {
+              if (document.activeElement !== event.currentTarget) return;
+              event.preventDefault();
+              event.stopPropagation();
+              // WheelEvent deltaY is positive toward the page (scroll down).
+              // The setting uses the opposite direction: up increases it.
+              const delta = -event.deltaY;
+              let steps: number;
+              if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) {
+                steps = Math.sign(delta);
+              } else {
+                // Wayland high-precision mice report pixel deltas, often as
+                // several fractional events per physical wheel unit.
+                cacheLimitWheelRemainder.current += delta;
+                steps = Math.trunc(cacheLimitWheelRemainder.current / 100);
+                cacheLimitWheelRemainder.current -= steps * 100;
+              }
+              if (steps)
+                player.setVideoCacheLimitGb((value) =>
+                  Math.max(-1, value + steps),
+                );
+            }}
+            onBlur={() => {
+              cacheLimitWheelRemainder.current = 0;
+            }}
+          />
+        </div>
+        <p className="settings-hint">
+          0 uses HLS only · -1 keeps converted videos without a limit
+        </p>
       </div>
       <div className="settings-stats">
         <span>
@@ -1756,14 +1805,19 @@ export function App({
                   disablePictureInPicture
                   preload="metadata"
                   aria-hidden="true"
-                  onError={player.handleVideoError}
                 />
               )}
               <div className="artwork-grain" />
               {player.videoEncoding && (
                 <div className="video-encoding-indicator" role="status">
                   <LoaderCircle className="spin" size={14} />
-                  Encoding video…
+                  <span>
+                    Encoding video
+                    {player.videoEncodingProgress !== null
+                      ? ` · ${Math.round(player.videoEncodingProgress * 100)}%`
+                      : "…"}
+                    {player.videoEncoder ? ` · ${player.videoEncoder}` : ""}
+                  </span>
                 </div>
               )}
               <AudioVisualizer

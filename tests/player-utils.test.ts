@@ -95,6 +95,7 @@ test("stored playback settings are clamped and validated", () => {
       videoEncodingQuality: "very-high",
       videoMaxFps: 24,
       videoForceRemux: false,
+      videoCacheLimitGb: 5,
     },
   );
   assert.deepEqual(parsePlaybackSettings("{bad"), {
@@ -107,5 +108,6 @@ test("stored playback settings are clamped and validated", () => {
     videoEncodingQuality: "medium",
     videoMaxFps: 60,
     videoForceRemux: false,
+    videoCacheLimitGb: 5,
   });
 });

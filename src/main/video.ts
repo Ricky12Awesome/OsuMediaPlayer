@@ -1,6 +1,15 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import {
+  mkdir,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  stat,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
 import type {
   VideoEncodingQuality,
@@ -15,11 +24,14 @@ const directlyPlayableExtensions = new Set([".mp4", ".m4v", ".webm"]);
 const streamDirectoryName = "stream";
 const streamMetadataName = "stream.json";
 const playlistName = "playlist.m3u8";
+const encodingProfileVersion = 1;
+const bytesPerGiB = 1024 ** 3;
 const defaultSettings: VideoEncodingSettings = {
   codec: "auto",
   quality: "medium",
   maxFps: 60,
   forceRemux: false,
+  cacheLimitGb: 5,
 };
 const videoEncodingSupersededMessage = "Video encoding was superseded.";
 
@@ -103,8 +115,15 @@ export function orderedVideoEncoders(
 export const videoNeedsConversion = (filename: string): boolean =>
   !directlyPlayableExtensions.has(extname(filename).toLocaleLowerCase());
 
-export const convertedVideoUrl = (hash: string): string =>
-  `osu-media://video-cache/${hash.toLowerCase()}`;
+export const convertedVideoUrl = (
+  hash: string,
+  profileHash?: string,
+): string => {
+  const base = `osu-media://video-cache/${hash.toLowerCase()}`;
+  return profileHash
+    ? `${base}?profile=${encodeURIComponent(profileHash.toLowerCase())}`
+    : base;
+};
 
 function hashFromAssetUrl(value: string): string | null {
   try {
@@ -146,7 +165,54 @@ function normalizeSettings(
       typeof input?.forceRemux === "boolean"
         ? input.forceRemux
         : defaultSettings.forceRemux,
+    cacheLimitGb:
+      typeof input?.cacheLimitGb === "number" &&
+      Number.isFinite(input.cacheLimitGb) &&
+      (input.cacheLimitGb === -1 || input.cacheLimitGb >= 0)
+        ? input.cacheLimitGb
+        : defaultSettings.cacheLimitGb,
   };
+}
+
+interface EncodingProfile {
+  encoderVersion: number;
+  codec: VideoEncodingSettings["codec"];
+  quality: VideoEncodingSettings["quality"];
+  maxFps: VideoEncodingSettings["maxFps"];
+  forceRemux: boolean;
+}
+
+interface CacheManifest {
+  hash: string;
+  profileHash: string;
+  profile: EncodingProfile;
+  encoder: string;
+}
+
+function encodingProfile(settings: VideoEncodingSettings): EncodingProfile {
+  return {
+    encoderVersion: encodingProfileVersion,
+    codec: settings.codec,
+    quality: settings.quality,
+    maxFps: settings.maxFps,
+    forceRemux: settings.forceRemux,
+  };
+}
+
+export function videoEncodingProfileHash(
+  settings: VideoEncodingSettings,
+): string {
+  return hashEncodingProfile(encodingProfile(settings));
+}
+
+function hashEncodingProfile(profile: EncodingProfile): string {
+  return createHash("sha256").update(JSON.stringify(profile)).digest("hex");
+}
+
+function cacheLimitBytes(settings: VideoEncodingSettings): number {
+  return settings.cacheLimitGb < 0
+    ? -1
+    : Math.floor(settings.cacheLimitGb * bytesPerGiB);
 }
 
 function selectedCodec(
@@ -177,6 +243,7 @@ function runProcess(
   executable: string,
   args: string[],
   children?: Set<ChildProcess>,
+  onStdout?: (chunk: string) => void,
 ): { child: ChildProcess; result: Promise<ProcessResult> } {
   const child = spawn(executable, args, {
     stdio: ["ignore", "pipe", "pipe"],
@@ -186,6 +253,7 @@ function runProcess(
   let stdout = "";
   let stderr = "";
   child.stdout?.on("data", (chunk: Buffer) => {
+    onStdout?.(chunk.toString());
     if (stdout.length < 1_000_000)
       stdout += chunk.toString().slice(0, 1_000_000 - stdout.length);
   });
@@ -217,6 +285,10 @@ async function fileHasContents(filename: string): Promise<boolean> {
 
 interface StreamMetadata {
   hash: string;
+  profileHash?: string;
+  profile?: EncodingProfile;
+  cacheLimitBytes?: number;
+  encoder?: string;
 }
 
 interface EncodingSession {
@@ -224,6 +296,10 @@ interface EncodingSession {
   child: ChildProcess | null;
   cancelled: boolean;
   encoding: boolean;
+  encoder: string | null;
+  progress: number | null;
+  profileHash: string;
+  settings: VideoEncodingSettings;
   ready: Promise<void>;
   done: Promise<void>;
 }
@@ -231,7 +307,7 @@ interface EncodingSession {
 export class VideoTranscoder {
   private readonly ready = new Map<
     string,
-    { filename: string; size: number }
+    { filename: string; size: number; profileHash: string }
   >();
   private readonly children = new Set<ChildProcess>();
   private active: EncodingSession | null = null;
@@ -251,7 +327,16 @@ export class VideoTranscoder {
 
   get encodingStatus(): VideoEncodingStatus | null {
     return this.active?.encoding
-      ? { hash: this.active.hash, encoding: true }
+      ? {
+          hash: this.active.hash,
+          encoding: true,
+          ...(this.active.encoder
+            ? {
+                encoder: this.active.encoder,
+                progress: this.active.progress ?? undefined,
+              }
+            : {}),
+        }
       : null;
   }
 
@@ -299,6 +384,7 @@ export class VideoTranscoder {
       return { url: track.videoUrl, streaming: false };
     }
     const settings = normalizeSettings(inputSettings);
+    const profileHash = videoEncodingProfileHash(settings);
     let source: Awaited<ReturnType<typeof resolveMediaFile>> = null;
     try {
       source = await resolveMediaFile(library, hash);
@@ -316,17 +402,16 @@ export class VideoTranscoder {
           throw new Error("The video cache was cleared.");
         await mkdir(this.cacheDirectory, { recursive: true });
         const destination = join(this.cacheDirectory, `${hash}.mp4`);
-        const streamHash = await this.readStreamHash();
-        let cachedMatches = await this.rememberCached(hash, destination);
-        const requestedCodec = selectedCodec(settings.codec);
-        if (cachedMatches && requestedCodec) {
-          const cachedInfo = await this.probeSource(destination);
-          if (cachedInfo.codec !== requestedCodec) {
-            this.ready.delete(hash);
-            await rm(destination, { force: true });
-            cachedMatches = false;
-          }
-        }
+        const streamMetadata = await this.readStreamMetadata();
+        const streamHash = streamMetadata?.hash ?? null;
+        const streamMatchesProfile =
+          streamMetadata?.profileHash === profileHash;
+        let cachedMatches =
+          cacheLimitBytes(settings) !== 0 &&
+          (await this.rememberCached(hash, destination, profileHash));
+        if (cachedMatches) await this.touchCached(destination);
+        await this.enforceCacheLimit(cacheLimitBytes(settings));
+        if (cachedMatches && !this.ready.has(hash)) cachedMatches = false;
         if (cachedMatches) {
           const cachedInfo = await this.probeSource(destination);
           const sourceInfo = source
@@ -337,8 +422,7 @@ export class VideoTranscoder {
             sourceInfo.duration !== null &&
             cachedInfo.duration + 2 < sourceInfo.duration;
           if (durationMismatch) {
-            this.ready.delete(hash);
-            await rm(destination, { force: true });
+            await this.removeCached(hash, destination);
             cachedMatches = false;
           }
         }
@@ -353,7 +437,7 @@ export class VideoTranscoder {
           return { ready: null as Promise<void> | null };
         }
 
-        if (streamHash === hash) {
+        if (streamHash === hash && streamMatchesProfile) {
           if (requestVersion !== this.requestVersion)
             throw new VideoEncodingSupersededError();
           if (this.active?.hash === hash) return { ready: this.active.ready };
@@ -363,7 +447,12 @@ export class VideoTranscoder {
             return { ready: null as Promise<void> | null };
           }
         }
-        if (streamHash) await this.rotateStream(streamHash, generation);
+        if (streamHash)
+          await this.rotateStream(
+            streamHash,
+            generation,
+            streamHash !== hash || streamMatchesProfile,
+          );
 
         if (requestVersion !== this.requestVersion)
           throw new VideoEncodingSupersededError();
@@ -375,6 +464,7 @@ export class VideoTranscoder {
           hash,
           source.filename,
           settings,
+          profileHash,
           generation,
         );
         return { ready: session.ready };
@@ -384,12 +474,16 @@ export class VideoTranscoder {
         throw new VideoEncodingSupersededError();
       if (generation !== this.cacheGeneration)
         throw new Error("The video cache was cleared.");
+      const converted = this.ready.get(hash);
+      const streamMetadata = await this.readStreamMetadata();
       const streaming =
-        !this.ready.has(hash) && (await this.readStreamHash()) === hash;
+        converted?.profileHash !== profileHash &&
+        streamMetadata?.hash === hash &&
+        streamMetadata.profileHash === profileHash;
       if (requestVersion !== this.requestVersion)
         throw new VideoEncodingSupersededError();
       return {
-        url: convertedVideoUrl(hash),
+        url: convertedVideoUrl(hash, profileHash),
         streaming,
       };
     } catch (error) {
@@ -401,30 +495,112 @@ export class VideoTranscoder {
   private async rememberCached(
     hash: string,
     filename: string,
+    profileHash: string,
   ): Promise<boolean> {
     try {
-      const cached = await stat(filename);
-      if (!cached.isFile() || cached.size === 0) return false;
-      this.ready.set(hash, { filename, size: cached.size });
+      const [cached, manifest] = await Promise.all([
+        stat(filename),
+        this.readCacheManifest(hash),
+      ]);
+      if (
+        !cached.isFile() ||
+        cached.size === 0 ||
+        manifest?.hash !== hash ||
+        manifest.profileHash !== profileHash ||
+        hashEncodingProfile(manifest.profile) !== manifest.profileHash
+      ) {
+        await this.removeCached(hash, filename);
+        return false;
+      }
+      this.ready.set(hash, { filename, size: cached.size, profileHash });
       return true;
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
       if (code !== "ENOENT" && code !== "ENOTDIR") throw error;
+      await rm(this.manifestFile(hash), { force: true });
       return false;
     }
   }
 
-  private async readStreamHash(): Promise<string | null> {
+  private manifestFile(hash: string): string {
+    return join(this.cacheDirectory, `${hash}.manifest.json`);
+  }
+
+  private async readCacheManifest(hash: string): Promise<CacheManifest | null> {
     try {
       const parsed = JSON.parse(
-        await readFile(this.metadataFile, "utf8"),
-      ) as Partial<StreamMetadata>;
-      return typeof parsed.hash === "string" && isAssetHash(parsed.hash)
-        ? parsed.hash.toLowerCase()
+        await readFile(this.manifestFile(hash), "utf8"),
+      ) as Partial<CacheManifest>;
+      return typeof parsed.hash === "string" &&
+        typeof parsed.profileHash === "string" &&
+        typeof parsed.encoder === "string" &&
+        parsed.profile &&
+        typeof parsed.profile === "object"
+        ? (parsed as CacheManifest)
         : null;
     } catch {
       return null;
     }
+  }
+
+  private async removeCached(hash: string, filename?: string): Promise<void> {
+    this.ready.delete(hash);
+    await Promise.all([
+      rm(filename ?? join(this.cacheDirectory, `${hash}.mp4`), { force: true }),
+      rm(this.manifestFile(hash), { force: true }),
+    ]);
+  }
+
+  private async touchCached(filename: string): Promise<void> {
+    const now = new Date();
+    await utimes(filename, now, now).catch(() => {});
+  }
+
+  private async enforceCacheLimit(limit: number): Promise<void> {
+    if (limit < 0) return;
+    let entries;
+    try {
+      entries = await readdir(this.cacheDirectory, { withFileTypes: true });
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "ENOENT" || code === "ENOTDIR") return;
+      throw error;
+    }
+    const cached = await Promise.all(
+      entries
+        .filter(
+          (entry) => entry.isFile() && /^[0-9a-f]{64}\.mp4$/i.test(entry.name),
+        )
+        .map(async (entry) => {
+          const hash = entry.name.slice(0, 64).toLowerCase();
+          const filename = join(this.cacheDirectory, entry.name);
+          const info = await stat(filename);
+          return { hash, filename, size: info.size, usedAt: info.mtimeMs };
+        }),
+    );
+    let total = cached.reduce((sum, entry) => sum + entry.size, 0);
+    for (const entry of cached.sort((a, b) => a.usedAt - b.usedAt)) {
+      if (total <= limit) break;
+      await this.removeCached(entry.hash, entry.filename);
+      total -= entry.size;
+    }
+  }
+
+  private async readStreamMetadata(): Promise<StreamMetadata | null> {
+    try {
+      const parsed = JSON.parse(
+        await readFile(this.metadataFile, "utf8"),
+      ) as Partial<StreamMetadata>;
+      if (typeof parsed.hash !== "string" || !isAssetHash(parsed.hash))
+        return null;
+      return { ...parsed, hash: parsed.hash.toLowerCase() } as StreamMetadata;
+    } catch {
+      return null;
+    }
+  }
+
+  private async readStreamHash(): Promise<string | null> {
+    return (await this.readStreamMetadata())?.hash ?? null;
   }
 
   private async availableEncoders(): Promise<Set<string>> {
@@ -500,13 +676,17 @@ export class VideoTranscoder {
     hash: string,
     source: string,
     settings: VideoEncodingSettings,
+    profileHash: string,
     generation: number,
   ): Promise<EncodingSession> {
     await mkdir(this.streamDirectory, { recursive: true });
-    await writeFile(
-      this.metadataFile,
-      JSON.stringify({ hash } satisfies StreamMetadata),
-    );
+    const metadata: StreamMetadata = {
+      hash,
+      profileHash,
+      profile: encodingProfile(settings),
+      cacheLimitBytes: cacheLimitBytes(settings),
+    };
+    await writeFile(this.metadataFile, JSON.stringify(metadata));
 
     let resolveReady!: () => void;
     let rejectReady!: (error: Error) => void;
@@ -519,11 +699,15 @@ export class VideoTranscoder {
       child: null,
       cancelled: false,
       encoding: true,
+      encoder: null,
+      progress: 0,
+      profileHash,
+      settings,
       ready,
       done: Promise.resolve(),
     };
     this.active = session;
-    this.onStatus?.({ hash, encoding: true });
+    this.emitEncodingStatus(session);
     let finalized = false;
     session.done = this.encodeToHls(
       session,
@@ -535,7 +719,8 @@ export class VideoTranscoder {
     )
       .then(async () => {
         if (session.cancelled || generation !== this.cacheGeneration) return;
-        finalized = await this.finalizeStream(hash, generation, true);
+        if (cacheLimitBytes(settings) !== 0)
+          finalized = await this.finalizeStream(hash, generation, true);
       })
       .catch((error: unknown) => {
         rejectReady(
@@ -556,9 +741,24 @@ export class VideoTranscoder {
           });
           await rm(this.metadataFile, { force: true });
         }
-        this.onStatus?.({ hash, encoding: false, finalized });
+        this.onStatus?.({
+          hash,
+          encoding: false,
+          encoder: session.encoder ?? undefined,
+          progress: session.progress ?? undefined,
+          finalized,
+        });
       });
     return session;
+  }
+
+  private emitEncodingStatus(session: EncodingSession): void {
+    this.onStatus?.({
+      hash: session.hash,
+      encoding: true,
+      encoder: session.encoder ?? undefined,
+      progress: session.progress ?? undefined,
+    });
   }
 
   private encoderArguments(
@@ -723,6 +923,41 @@ export class VideoTranscoder {
         return;
       }
       await this.removeHlsFiles();
+      session.encoder = attempt.label;
+      session.progress = 0;
+      await writeFile(
+        this.metadataFile,
+        JSON.stringify({
+          hash: session.hash,
+          profileHash: session.profileHash,
+          profile: encodingProfile(session.settings),
+          cacheLimitBytes: cacheLimitBytes(session.settings),
+          encoder: attempt.label,
+        } satisfies StreamMetadata),
+      );
+      this.emitEncodingStatus(session);
+      let progressOutput = "";
+      let lastPercent = 0;
+      const updateProgress = (chunk: string) => {
+        if (!sourceInfo.duration || sourceInfo.duration <= 0) return;
+        progressOutput += chunk;
+        const lines = progressOutput.split(/\r?\n/);
+        progressOutput = lines.pop() ?? "";
+        for (const line of lines) {
+          const match = line.match(/^out_time_(?:us|ms)=(\d+)$/);
+          if (!match) continue;
+          const elapsed = Number(match[1]) / 1_000_000;
+          const progress = Math.max(
+            0,
+            Math.min(1, elapsed / sourceInfo.duration),
+          );
+          const percent = Math.floor(progress * 100);
+          if (percent <= lastPercent) continue;
+          lastPercent = percent;
+          session.progress = progress;
+          this.emitEncodingStatus(session);
+        }
+      };
       const { child, result } = runProcess(
         this.executable,
         [
@@ -730,10 +965,14 @@ export class VideoTranscoder {
           "-loglevel",
           "error",
           "-nostdin",
+          "-progress",
+          "pipe:1",
+          "-nostats",
           "-y",
           ...attempt.args,
         ],
         this.children,
+        updateProgress,
       );
       session.child = child;
       if (session.cancelled) child.kill("SIGTERM");
@@ -765,6 +1004,8 @@ export class VideoTranscoder {
           resolveReady();
         }
         if (!ready) throw new Error("FFmpeg did not produce an HLS playlist.");
+        session.progress = 1;
+        this.emitEncodingStatus(session);
         return;
       }
       const unavailable =
@@ -793,7 +1034,11 @@ export class VideoTranscoder {
     await mkdir(this.streamDirectory, { recursive: true });
   }
 
-  private async rotateStream(hash: string, generation: number): Promise<void> {
+  private async rotateStream(
+    hash: string,
+    generation: number,
+    preserveInCache: boolean,
+  ): Promise<void> {
     const session = this.active?.hash === hash ? this.active : null;
     if (session?.encoding) {
       session.cancelled = true;
@@ -802,7 +1047,9 @@ export class VideoTranscoder {
     }
     if (generation !== this.cacheGeneration)
       throw new Error("The video cache was cleared.");
-    await this.finalizeStream(hash, generation, false);
+    const finalized =
+      preserveInCache && (await this.finalizeStream(hash, generation, false));
+    if (!finalized) await this.removeStreamFiles(hash);
   }
 
   private async finalizeStream(
@@ -815,8 +1062,17 @@ export class VideoTranscoder {
       !(await fileHasContents(this.playlist))
     )
       return false;
+    const metadata = await this.readStreamMetadata();
+    if (
+      metadata?.hash !== hash ||
+      !metadata.profileHash ||
+      !metadata.profile ||
+      !metadata.encoder ||
+      metadata.cacheLimitBytes === 0
+    )
+      return false;
     const destination = join(this.cacheDirectory, `${hash}.mp4`);
-    if (!(await this.rememberCached(hash, destination))) {
+    if (!(await this.rememberCached(hash, destination, metadata.profileHash))) {
       const temporary = join(
         this.cacheDirectory,
         `${hash}.${process.pid}.${randomUUID()}.partial.mp4`,
@@ -852,8 +1108,32 @@ export class VideoTranscoder {
         const converted = await stat(temporary);
         if (!converted.isFile() || converted.size === 0)
           throw new Error("FFmpeg did not finalize the previous video stream.");
+        if (
+          typeof metadata.cacheLimitBytes === "number" &&
+          metadata.cacheLimitBytes >= 0 &&
+          converted.size > metadata.cacheLimitBytes
+        )
+          return false;
+        if (
+          typeof metadata.cacheLimitBytes === "number" &&
+          metadata.cacheLimitBytes >= 0
+        )
+          await this.enforceCacheLimit(
+            Math.max(0, metadata.cacheLimitBytes - converted.size),
+          );
         await rename(temporary, destination);
-        this.ready.set(hash, { filename: destination, size: converted.size });
+        const manifest: CacheManifest = {
+          hash,
+          profileHash: metadata.profileHash,
+          profile: metadata.profile,
+          encoder: metadata.encoder,
+        };
+        await writeFile(this.manifestFile(hash), JSON.stringify(manifest));
+        this.ready.set(hash, {
+          filename: destination,
+          size: converted.size,
+          profileHash: metadata.profileHash,
+        });
       } finally {
         await rm(temporary, { force: true }).catch(() => {});
       }
@@ -932,9 +1212,14 @@ export class VideoTranscoder {
   }
 
   private streamFileFromUrl(url: URL): string | null {
-    if (!url.search) return playlistName;
-    if ([...url.searchParams.keys()].some((key) => key !== "file")) return null;
+    if (
+      [...url.searchParams.keys()].some(
+        (key) => key !== "file" && key !== "profile",
+      )
+    )
+      return null;
     const file = url.searchParams.get("file");
+    if (!file) return playlistName;
     return file === "init.mp4" || /^segment-\d{6}\.m4s$/.test(file ?? "")
       ? file
       : null;
@@ -943,10 +1228,14 @@ export class VideoTranscoder {
   private async servePlaylist(
     request: Request,
     hash: string,
+    profileHash: string | null,
   ): Promise<Response> {
     let playlist = await readFile(this.playlist, "utf8");
-    const mediaUrl = (file: string) =>
-      `${convertedVideoUrl(hash)}?file=${encodeURIComponent(file)}`;
+    const mediaUrl = (file: string) => {
+      const url = new URL(convertedVideoUrl(hash, profileHash ?? undefined));
+      url.searchParams.set("file", file);
+      return url.toString();
+    };
     playlist = playlist
       .replace(
         /URI="([^"]+)"/g,
@@ -984,21 +1273,38 @@ export class VideoTranscoder {
         !isAssetHash(hash)
       )
         return new Response(null, { status: 400 });
+      const requestedProfile = url.searchParams.get("profile");
+      if (requestedProfile !== null && !isAssetHash(requestedProfile))
+        return new Response(null, { status: 400 });
       const converted = this.ready.get(hash);
-      if (converted && !url.search)
+      const file = url.searchParams.get("file");
+      if (
+        converted &&
+        !file &&
+        requestedProfile === converted.profileHash &&
+        [...url.searchParams.keys()].every((key) => key === "profile")
+      ) {
+        await this.touchCached(converted.filename);
         return streamMediaFile(
           request,
           converted.filename,
           converted.size,
           "video/mp4",
         );
+      }
 
-      if ((await this.readStreamHash()) !== hash)
-        return new Response(null, { status: 404 });
-      const file = this.streamFileFromUrl(url);
-      if (!file) return new Response(null, { status: 400 });
-      if (file === playlistName) return await this.servePlaylist(request, hash);
-      const filename = join(this.streamDirectory, file);
+      const streamMetadata = await this.readStreamMetadata();
+      const streamMatches =
+        streamMetadata?.hash === hash &&
+        (streamMetadata.profileHash
+          ? requestedProfile === streamMetadata.profileHash
+          : requestedProfile === null);
+      if (!streamMatches) return new Response(null, { status: 404 });
+      const streamFile = this.streamFileFromUrl(url);
+      if (!streamFile) return new Response(null, { status: 400 });
+      if (streamFile === playlistName)
+        return await this.servePlaylist(request, hash, requestedProfile);
+      const filename = join(this.streamDirectory, streamFile);
       const info = await stat(filename);
       if (!info.isFile()) return new Response(null, { status: 404 });
       const response = streamMediaFile(
