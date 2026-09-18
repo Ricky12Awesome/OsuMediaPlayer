@@ -16,6 +16,7 @@ export interface PlaybackSettings {
   videoEncodingQuality: VideoEncodingQuality;
   videoMaxFps: VideoMaxFps;
   videoForceRemux: boolean;
+  videoCacheLimitGb: number;
 }
 
 export interface ShuffleHistory {
@@ -208,6 +209,7 @@ export const defaultPlaybackSettings: PlaybackSettings = {
   videoEncodingQuality: "medium",
   videoMaxFps: 60,
   videoForceRemux: false,
+  videoCacheLimitGb: 5,
 };
 
 export function parsePlaybackSettings(
@@ -267,6 +269,12 @@ export function parsePlaybackSettings(
         typeof record.videoForceRemux === "boolean"
           ? record.videoForceRemux
           : defaultPlaybackSettings.videoForceRemux,
+      videoCacheLimitGb:
+        typeof record.videoCacheLimitGb === "number" &&
+        Number.isFinite(record.videoCacheLimitGb) &&
+        (record.videoCacheLimitGb === -1 || record.videoCacheLimitGb >= 0)
+          ? record.videoCacheLimitGb
+          : defaultPlaybackSettings.videoCacheLimitGb,
     };
   } catch {
     return defaultPlaybackSettings;

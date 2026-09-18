@@ -136,11 +136,17 @@ export interface VideoEncodingSettings {
   quality: VideoEncodingQuality;
   maxFps: VideoMaxFps;
   forceRemux: boolean;
+  /** Converted-video cache size in GiB. 0 disables caching; -1 is unlimited. */
+  cacheLimitGb: number;
 }
 
 export interface VideoEncodingStatus {
   hash: string;
   encoding: boolean;
+  /** FFmpeg encoder name, or "stream copy" when remuxing. */
+  encoder?: string;
+  /** Encoding completion from 0 to 1 when the source duration is known. */
+  progress?: number;
   /** The HLS stream has been finalized into its cached MP4. */
   finalized?: boolean;
 }

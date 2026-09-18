@@ -378,6 +378,7 @@ export function App({
       : defaultSidePanelWidth;
   });
   const [sidePanelResizing, setSidePanelResizing] = useState(false);
+  const cacheLimitWheelAt = useRef(0);
   const settingsPanelOpen = sidePanelOpen && sidePanelTab === "settings";
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [settingsResetConfirmation, setSettingsResetConfirmation] =
@@ -1634,6 +1635,41 @@ export function App({
           player.videoForceRemux,
           () => player.setVideoForceRemux((value) => !value),
         )}
+        <div className="settings-row">
+          <span
+            className="settings-row-label"
+            title="Converted-video cache size in GB. Use 0 for HLS streaming only or -1 for no limit."
+          >
+            Cache limit (GB)
+          </span>
+          <input
+            className="settings-number-input"
+            type="number"
+            min={-1}
+            step={1}
+            value={player.videoCacheLimitGb}
+            aria-label="Video cache limit in gigabytes"
+            onChange={(event) => {
+              const value = Number(event.currentTarget.value);
+              if (Number.isFinite(value) && value >= -1)
+                player.setVideoCacheLimitGb(value);
+            }}
+            onWheel={(event) => {
+              if (document.activeElement !== event.currentTarget) return;
+              event.preventDefault();
+              const now = performance.now();
+              if (now - cacheLimitWheelAt.current < 120) return;
+              cacheLimitWheelAt.current = now;
+              const direction = event.deltaY < 0 ? 1 : -1;
+              player.setVideoCacheLimitGb((value) =>
+                Math.max(-1, value + direction),
+              );
+            }}
+          />
+        </div>
+        <p className="settings-hint">
+          0 uses HLS only · -1 keeps converted videos without a limit
+        </p>
       </div>
       <div className="settings-stats">
         <span>
@@ -1756,14 +1792,19 @@ export function App({
                   disablePictureInPicture
                   preload="metadata"
                   aria-hidden="true"
-                  onError={player.handleVideoError}
                 />
               )}
               <div className="artwork-grain" />
               {player.videoEncoding && (
                 <div className="video-encoding-indicator" role="status">
                   <LoaderCircle className="spin" size={14} />
-                  Encoding video…
+                  <span>
+                    Encoding video
+                    {player.videoEncodingProgress !== null
+                      ? ` · ${Math.round(player.videoEncodingProgress * 100)}%`
+                      : "…"}
+                    {player.videoEncoder ? ` · ${player.videoEncoder}` : ""}
+                  </span>
                 </div>
               )}
               <AudioVisualizer

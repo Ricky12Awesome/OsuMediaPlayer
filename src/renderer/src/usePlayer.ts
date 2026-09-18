@@ -75,6 +75,8 @@ export interface PlayerState {
   setVideoMaxFps: React.Dispatch<React.SetStateAction<VideoMaxFps>>;
   videoForceRemux: boolean;
   setVideoForceRemux: React.Dispatch<React.SetStateAction<boolean>>;
+  videoCacheLimitGb: number;
+  setVideoCacheLimitGb: React.Dispatch<React.SetStateAction<number>>;
   resetPlaybackSettings: () => void;
   error: string | null;
   clearError: () => void;
@@ -93,6 +95,8 @@ export interface PlayerState {
   videoUrl: string | null;
   videoLoading: boolean;
   videoEncoding: boolean;
+  videoEncodingProgress: number | null;
+  videoEncoder: string | null;
   videoError: string | null;
   handleVideoError: () => void;
 }
@@ -140,6 +144,9 @@ export function usePlayer(
   const [videoForceRemux, setVideoForceRemux] = useState(
     settings.videoForceRemux,
   );
+  const [videoCacheLimitGb, setVideoCacheLimitGb] = useState(
+    settings.videoCacheLimitGb,
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -148,6 +155,12 @@ export function usePlayer(
   const [videoLoading, setVideoLoading] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [encodingHash, setEncodingHash] = useState<string | null>(null);
+  const [videoEncodingProgress, setVideoEncodingProgress] = useState<
+    number | null
+  >(null);
+  const [videoEncoder, setVideoEncoder] = useState<string | null>(null);
+  const videoRequestVersion = useRef(0);
+  const videoHls = useRef<{ destroy: () => void } | null>(null);
   const activeTrack = useRef<Track | null>(initialTrack);
   const queue = useRef<{ query: LibraryQuery; index: number; total?: number }>({
     query: {},
@@ -548,6 +561,7 @@ export function usePlayer(
     setVideoEncodingQuality(defaultPlaybackSettings.videoEncodingQuality);
     setVideoMaxFps(defaultPlaybackSettings.videoMaxFps);
     setVideoForceRemux(defaultPlaybackSettings.videoForceRemux);
+    setVideoCacheLimitGb(defaultPlaybackSettings.videoCacheLimitGb);
   }, []);
 
   const controls = useRef({
@@ -577,6 +591,7 @@ export function usePlayer(
           videoEncodingQuality,
           videoMaxFps,
           videoForceRemux,
+          videoCacheLimitGb,
         }),
       );
     } catch {
@@ -590,6 +605,7 @@ export function usePlayer(
     repeat,
     shuffle,
     videoEncodingQuality,
+    videoCacheLimitGb,
     videoForceRemux,
     videoMaxFps,
     volume,
@@ -751,6 +767,13 @@ export function usePlayer(
             ? null
             : current,
       );
+      if (status.encoding) {
+        setVideoEncodingProgress(status.progress ?? null);
+        setVideoEncoder(status.encoder ?? null);
+      } else {
+        setVideoEncodingProgress(null);
+        setVideoEncoder(null);
+      }
       if (
         status.finalized &&
         activeTrack.current?.videoHash?.toLowerCase() === status.hash
@@ -763,6 +786,15 @@ export function usePlayer(
 
   useEffect(() => {
     let active = true;
+    videoRequestVersion.current += 1;
+    videoHls.current?.destroy();
+    videoHls.current = null;
+    const currentVideo = videoRef.current;
+    if (currentVideo) {
+      currentVideo.pause();
+      currentVideo.removeAttribute("src");
+      currentVideo.load();
+    }
     setVideoError(null);
     if (!playVideos || !track?.videoUrl) {
       videoRef.current?.pause();
@@ -782,11 +814,13 @@ export function usePlayer(
         quality: videoEncodingQuality,
         maxFps: videoMaxFps,
         forceRemux: videoForceRemux,
+        cacheLimitGb: videoCacheLimitGb,
       })
       .then((prepared) => {
         if (active && activeTrack.current?.id === track.id) {
           setVideoUrl(prepared?.url ?? null);
           setVideoStreaming(prepared?.streaming ?? false);
+          setVideoSourceRevision((revision) => revision + 1);
           setVideoLoading(false);
           if (!prepared)
             setVideoError("The beatmap video could not be prepared.");
@@ -811,6 +845,7 @@ export function usePlayer(
     track?.id,
     track?.videoUrl,
     videoEncodingQuality,
+    videoCacheLimitGb,
     videoEncodingCodec,
     videoForceRemux,
     videoMaxFps,
@@ -825,6 +860,7 @@ export function usePlayer(
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !videoUrl) return;
+    const requestVersion = videoRequestVersion.current;
     video.defaultMuted = true;
     video.muted = true;
     video.preload = "metadata";
@@ -844,10 +880,15 @@ export function usePlayer(
       if (!videoStreaming && isManagedVideo && track?.videoHash)
         void api.completeVideoStream(track.videoHash);
     };
+    const mediaError = () => {
+      if (!disposed && requestVersion === videoRequestVersion.current)
+        handleVideoError();
+    };
     video.removeEventListener("loadedmetadata", sync);
     video.addEventListener("loadedmetadata", loadedMetadata);
+    video.addEventListener("error", mediaError);
     const loadNative = () => {
-      if (disposed) return;
+      if (disposed || requestVersion !== videoRequestVersion.current) return;
       video.src = videoUrl;
       video.load();
       sync();
@@ -855,7 +896,8 @@ export function usePlayer(
     if (videoStreaming) {
       void import("hls.js/light")
         .then(({ default: Hls }) => {
-          if (disposed) return;
+          if (disposed || requestVersion !== videoRequestVersion.current)
+            return;
           if (!Hls.isSupported()) {
             loadNative();
             return;
@@ -869,8 +911,14 @@ export function usePlayer(
             startPosition: 0,
           });
           hls = instance;
+          videoHls.current = instance;
           instance.on(Hls.Events.ERROR, (_event, data) => {
-            if (!disposed && data.fatal) handleVideoError();
+            if (
+              !disposed &&
+              data.fatal &&
+              requestVersion === videoRequestVersion.current
+            )
+              handleVideoError();
           });
           instance.loadSource(videoUrl);
           instance.attachMedia(video);
@@ -882,9 +930,11 @@ export function usePlayer(
     return () => {
       disposed = true;
       video.removeEventListener("loadedmetadata", loadedMetadata);
+      video.removeEventListener("error", mediaError);
       video.removeEventListener("canplay", sync);
       video.pause();
       hls?.destroy();
+      if (videoHls.current === hls) videoHls.current = null;
       video.removeAttribute("src");
       video.load();
     };
@@ -1006,6 +1056,8 @@ export function usePlayer(
     setVideoMaxFps,
     videoForceRemux,
     setVideoForceRemux,
+    videoCacheLimitGb,
+    setVideoCacheLimitGb,
     resetPlaybackSettings,
     error,
     clearError: () => setError(null),
@@ -1026,6 +1078,8 @@ export function usePlayer(
     videoEncoding:
       Boolean(track?.videoHash) &&
       encodingHash === track?.videoHash?.toLowerCase(),
+    videoEncodingProgress,
+    videoEncoder,
     videoError,
     handleVideoError,
   };
