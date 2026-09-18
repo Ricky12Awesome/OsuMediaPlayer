@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { fork } from "node:child_process";
-import { LibraryIndex, type LibrarySnapshot } from "./library";
-import type { LibraryProgress } from "../shared/types";
+import { LibraryIndex, type LibrarySnapshot } from "./index";
+import type { LibraryProgress } from "../../shared/types";
 
 type WorkerMessage =
   | { type: "progress"; progress: LibraryProgress }

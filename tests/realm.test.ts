@@ -9,7 +9,7 @@ import { Schema } from "../src/shared/client-model";
 import {
   loadLibraryFromRealm,
   sortedLibraryBeatmaps,
-} from "../src/main/library";
+} from "../src/main/library/index";
 import {
   defaultLazerInstallPath,
   resolveLazerInstallPath,

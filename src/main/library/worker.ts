@@ -7,8 +7,8 @@ import {
   loadLibraryFromRealm,
   readLibraryFingerprints,
   type LibraryFingerprint,
-} from "./library";
-import { resolveLazerInstallPath } from "./lazer-path";
+} from "./index";
+import { resolveLazerInstallPath } from "../lazer-path";
 import {
   collectionFingerprintsEqual,
   libraryCachePath,
@@ -17,7 +17,7 @@ import {
   readLibraryCache,
   writeLibraryCache,
   type LibraryRealmMetadata,
-} from "./library-cache";
+} from "./cache";
 
 // Realm's native addon owns process-wide state. Keep it outside Electron's
 // main process rather than sharing that state across worker-thread environments.

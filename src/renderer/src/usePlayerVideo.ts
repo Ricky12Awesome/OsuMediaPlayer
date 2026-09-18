@@ -1,0 +1,287 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import type {
+  PlayerAPI,
+  Track,
+  VideoEncodingCodec,
+  VideoEncodingQuality,
+  VideoMaxFps,
+} from "../../shared/types";
+
+type VideoSync = (autoPlay?: boolean) => void;
+
+export interface PlayerVideoState {
+  videoUrl: string | null;
+  videoLoading: boolean;
+  videoEncoding: boolean;
+  videoEncodingProgress: number | null;
+  videoEncoder: string | null;
+  videoError: string | null;
+  resetVideo: () => void;
+  handleVideoError: () => void;
+}
+
+interface UsePlayerVideoOptions {
+  api: PlayerAPI;
+  track: Track | null;
+  activeTrack: { current: Track | null };
+  playVideos: boolean;
+  videoEncodingCodec: VideoEncodingCodec;
+  videoEncodingQuality: VideoEncodingQuality;
+  videoMaxFps: VideoMaxFps;
+  videoForceRemux: boolean;
+  videoCacheLimitGb: number;
+  videoRef: React.MutableRefObject<HTMLVideoElement | null>;
+  syncVideo: VideoSync;
+}
+
+/** Owns source preparation, HLS attachment, and encoding status for the player video. */
+export function usePlayerVideo({
+  api,
+  track,
+  activeTrack,
+  playVideos,
+  videoEncodingCodec,
+  videoEncodingQuality,
+  videoMaxFps,
+  videoForceRemux,
+  videoCacheLimitGb,
+  videoRef,
+  syncVideo,
+}: UsePlayerVideoOptions): PlayerVideoState {
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [videoStreaming, setVideoStreaming] = useState(false);
+  const [videoSourceRevision, setVideoSourceRevision] = useState(0);
+  const [videoLoading, setVideoLoading] = useState(false);
+  const [videoError, setVideoError] = useState<string | null>(null);
+  const [encodingHash, setEncodingHash] = useState<string | null>(null);
+  const [videoEncodingProgress, setVideoEncodingProgress] = useState<
+    number | null
+  >(null);
+  const [videoEncoder, setVideoEncoder] = useState<string | null>(null);
+  const videoRequestVersion = useRef(0);
+  const videoHls = useRef<{ destroy: () => void } | null>(null);
+  const lastVideoTrackId = useRef<string | null>(null);
+
+  const stopCurrentVideo = useCallback(() => {
+    videoRequestVersion.current += 1;
+    videoHls.current?.destroy();
+    videoHls.current = null;
+    const currentVideo = videoRef.current;
+    if (currentVideo) {
+      currentVideo.pause();
+      currentVideo.removeAttribute("src");
+      currentVideo.load();
+    }
+    setVideoUrl(null);
+  }, [videoRef]);
+
+  const resetVideo = useCallback(() => {
+    stopCurrentVideo();
+    setVideoStreaming(false);
+    setVideoLoading(false);
+    setVideoError(null);
+  }, [stopCurrentVideo]);
+
+  useEffect(() => {
+    return api.onVideoEncodingChange((status) => {
+      setEncodingHash((current) =>
+        status.encoding
+          ? status.hash
+          : current === status.hash
+            ? null
+            : current,
+      );
+      if (status.encoding) {
+        setVideoEncodingProgress(status.progress ?? null);
+        setVideoEncoder(status.encoder ?? null);
+      } else {
+        setVideoEncodingProgress(null);
+        setVideoEncoder(null);
+      }
+      if (
+        status.finalized &&
+        activeTrack.current?.videoHash?.toLowerCase() === status.hash
+      ) {
+        setVideoStreaming(false);
+        setVideoSourceRevision((revision) => revision + 1);
+      }
+    });
+  }, [activeTrack, api]);
+
+  useEffect(() => {
+    let active = true;
+    setVideoError(null);
+    const sameTrack = lastVideoTrackId.current === (track?.id ?? null);
+    lastVideoTrackId.current = track?.id ?? null;
+    if (!playVideos || !track?.videoUrl) {
+      stopCurrentVideo();
+      void api.cancelVideoEncoding().catch(() => {
+        // Video cancellation is best-effort while the renderer is changing sources.
+      });
+      setVideoStreaming(false);
+      setVideoLoading(false);
+      return;
+    }
+    const prepare = () => {
+      if (!active) return;
+      stopCurrentVideo();
+      setVideoLoading(true);
+      api
+        .prepareVideo(track.id, {
+          codec: videoEncodingCodec,
+          quality: videoEncodingQuality,
+          maxFps: videoMaxFps,
+          forceRemux: videoForceRemux,
+          cacheLimitGb: videoCacheLimitGb,
+        })
+        .then((prepared) => {
+          if (active && activeTrack.current?.id === track.id) {
+            setVideoUrl(prepared?.url ?? null);
+            setVideoStreaming(prepared?.streaming ?? false);
+            setVideoSourceRevision((revision) => revision + 1);
+            setVideoLoading(false);
+            if (!prepared)
+              setVideoError("The beatmap video could not be prepared.");
+          }
+        })
+        .catch((reason: unknown) => {
+          if (active && activeTrack.current?.id === track.id) {
+            setVideoLoading(false);
+            setVideoError(
+              reason instanceof Error
+                ? reason.message
+                : "The beatmap video could not be prepared.",
+            );
+          }
+        });
+    };
+    const timer = window.setTimeout(prepare, sameTrack ? 150 : 0);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [
+    api,
+    playVideos,
+    stopCurrentVideo,
+    track?.id,
+    track?.videoUrl,
+    videoCacheLimitGb,
+    videoEncodingQuality,
+    videoEncodingCodec,
+    videoForceRemux,
+    videoMaxFps,
+  ]);
+
+  const handleVideoError = useCallback(() => {
+    setVideoUrl(null);
+    setVideoLoading(false);
+    setVideoError("This video's codec is not supported by Electron.");
+  }, []);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !videoUrl) return;
+    const requestVersion = videoRequestVersion.current;
+    video.defaultMuted = true;
+    video.muted = true;
+    video.preload = "metadata";
+    const sync = () => syncVideo();
+    let hls: import("hls.js").default | null = null;
+    let disposed = false;
+    let isManagedVideo = false;
+    try {
+      const source = new URL(videoUrl);
+      isManagedVideo =
+        source.protocol === "osu-media:" && source.host === "video-cache";
+    } catch {
+      // Let the media element report a malformed direct URL normally.
+    }
+    const loadedMetadata = () => {
+      sync();
+      if (!videoStreaming && isManagedVideo && track?.videoHash)
+        void api.completeVideoStream(track.videoHash);
+    };
+    const mediaError = () => {
+      if (!disposed && requestVersion === videoRequestVersion.current)
+        handleVideoError();
+    };
+    video.removeEventListener("loadedmetadata", sync);
+    video.addEventListener("loadedmetadata", loadedMetadata);
+    video.addEventListener("error", mediaError);
+    const loadNative = () => {
+      if (disposed || requestVersion !== videoRequestVersion.current) return;
+      video.src = videoUrl;
+      video.load();
+      sync();
+    };
+    if (videoStreaming) {
+      void import("hls.js/light")
+        .then(({ default: Hls }) => {
+          if (disposed || requestVersion !== videoRequestVersion.current)
+            return;
+          if (!Hls.isSupported()) {
+            loadNative();
+            return;
+          }
+          const instance = new Hls({
+            backBufferLength: 20,
+            enableWorker: false,
+            maxBufferLength: 20,
+            maxMaxBufferLength: 60,
+            startFragPrefetch: true,
+            startPosition: 0,
+          });
+          hls = instance;
+          videoHls.current = instance;
+          instance.on(Hls.Events.ERROR, (_event, data) => {
+            if (
+              !disposed &&
+              data.fatal &&
+              requestVersion === videoRequestVersion.current
+            )
+              handleVideoError();
+          });
+          instance.loadSource(videoUrl);
+          instance.attachMedia(video);
+        })
+        .catch(loadNative);
+    } else {
+      loadNative();
+    }
+    return () => {
+      disposed = true;
+      video.removeEventListener("loadedmetadata", loadedMetadata);
+      video.removeEventListener("error", mediaError);
+      video.removeEventListener("canplay", sync);
+      video.pause();
+      hls?.destroy();
+      if (videoHls.current === hls) videoHls.current = null;
+      video.removeAttribute("src");
+      video.load();
+    };
+  }, [
+    api,
+    handleVideoError,
+    syncVideo,
+    track?.videoHash,
+    track?.videoOffset,
+    videoSourceRevision,
+    videoStreaming,
+    videoUrl,
+    videoRef,
+  ]);
+
+  return {
+    videoUrl,
+    videoLoading,
+    videoEncoding:
+      Boolean(track?.videoHash) &&
+      encodingHash === track?.videoHash?.toLowerCase(),
+    videoEncodingProgress,
+    videoEncoder,
+    videoError,
+    resetVideo,
+    handleVideoError,
+  };
+}

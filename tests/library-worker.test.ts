@@ -10,23 +10,24 @@ import {
   LibraryIndex,
   loadLibraryFromRealm,
   readLibraryFingerprint,
-} from "../src/main/library";
+} from "../src/main/library/index";
 import {
   libraryCachePath,
   libraryCachePaths,
   libraryFingerprintsEqual,
   readLibraryCache,
   writeLibraryCache,
-} from "../src/main/library-cache";
-import type { loadLibraryInWorker } from "../src/main/library-loader";
+} from "../src/main/library/cache";
+import type { loadLibraryInWorker } from "../src/main/library/loader";
 import type { SortKey } from "../src/shared/types";
 
 test("worker imports Realm and transfers canonical sort orders; errors and cancellation reject", async () => {
   const directory = await mkdtemp(join(process.cwd(), ".worker-test-"));
   try {
     await build({
-      entryPoints: ["src/main/library-worker.ts", "src/main/library-loader.ts"],
+      entryPoints: ["src/main/library/worker.ts", "src/main/library/loader.ts"],
       outdir: directory,
+      entryNames: "library-[name]",
       outExtension: { ".js": ".cjs" },
       bundle: true,
       platform: "node",

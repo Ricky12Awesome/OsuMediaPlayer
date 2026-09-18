@@ -16,7 +16,7 @@ const common = {
 await Promise.all([
   build({
     ...common,
-    entryPoints: ["src/main/library-worker.ts"],
+    entryPoints: ["src/main/library/worker.ts"],
     outfile: "dist-electron/library-worker.cjs",
   }),
   build({

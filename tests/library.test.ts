@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { LibraryIndex, parseBeatmapVideoEvent } from "../src/main/library";
+import {
+  LibraryIndex,
+  parseBeatmapVideoEvent,
+} from "../src/main/library/index";
 import type { Track } from "../src/shared/types";
 
 test("beatmap video events parse quoted and unquoted filenames", () => {
