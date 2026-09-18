@@ -238,6 +238,35 @@ export function App({
   );
   const [debugMode, setDebugMode] = useState(() => readPreference("debugMode"));
   const [debugInfo, setDebugInfo] = useState<TrackDebugInfo | null>(null);
+  useEffect(() => {
+    const toggleDebugMode = (event: globalThis.KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.key.toLowerCase() !== "i" ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey
+      ) {
+        return;
+      }
+
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          target instanceof HTMLInputElement ||
+          target instanceof HTMLTextAreaElement ||
+          target instanceof HTMLSelectElement)
+      ) {
+        return;
+      }
+
+      setDebugMode((visible) => !visible);
+    };
+
+    window.addEventListener("keydown", toggleDebugMode);
+    return () => window.removeEventListener("keydown", toggleDebugMode);
+  }, []);
   const [artworkThemeEnabled, setArtworkThemeEnabled] = useState(() =>
     readPreference("artworkTheme"),
   );
