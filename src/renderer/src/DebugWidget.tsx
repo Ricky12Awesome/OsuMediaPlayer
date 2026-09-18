@@ -152,6 +152,19 @@ function sourceClass(source: DebugVideoSource | null | undefined): string {
   return ` debug-value-source-${source.toLowerCase()}`;
 }
 
+function hasMediaInfo(media: DebugMediaInfo | null | undefined): boolean {
+  return Boolean(
+    media &&
+    Object.values(media).some(
+      (value) =>
+        value !== null &&
+        value !== undefined &&
+        value !== "" &&
+        value !== "none",
+    ),
+  );
+}
+
 function rowsFor(data: DebugWidgetData): DebugRow[] {
   const audio = data.audio ?? {};
   const background = data.background ?? {};
@@ -170,37 +183,57 @@ function rowsFor(data: DebugWidgetData): DebugRow[] {
     { label: "audio hash", value: audio.hash },
     { label: "audio file size", value: audio.fileSize, format: formatFileSize },
     { label: "audio duration", value: audio.duration, format: formatDuration },
-    { label: "background name", value: background.name },
-    { label: "background path", value: background.path },
-    { label: "background hash", value: background.hash },
-    {
-      label: "background resolution",
-      value: background.resolution,
-      format: formatResolution,
-    },
-    {
-      label: "background file size",
-      value: background.fileSize,
-      format: formatFileSize,
-    },
-    { label: "video name", value: video.name },
-    { label: "video path", value: video.path },
-    { label: "video hash", value: video.hash },
-    { label: "video file size", value: video.fileSize, format: formatFileSize },
-    {
-      label: "video resolution@framerate",
-      value: video.resolution,
-      format: (value) => formatVideoResolution(value, video.frameRate),
-    },
-    { label: "video duration", value: video.duration, format: formatDuration },
-    { label: "video codec", value: video.codec },
-    { label: "video bitrate", value: video.bitrate, format: formatBitrate },
-    {
-      label: "video source",
-      value: video.source === "none" ? null : video.source,
-      source: video.source,
-    },
   ];
+  if (hasMediaInfo(data.background)) {
+    rows.push(
+      { label: "background name", value: background.name },
+      { label: "background path", value: background.path },
+      { label: "background hash", value: background.hash },
+      {
+        label: "background resolution",
+        value: background.resolution,
+        format: formatResolution,
+      },
+      {
+        label: "background file size",
+        value: background.fileSize,
+        format: formatFileSize,
+      },
+    );
+  } else {
+    rows.push({ label: "background", value: null });
+  }
+  if (hasMediaInfo(data.video)) {
+    rows.push(
+      { label: "video name", value: video.name },
+      { label: "video path", value: video.path },
+      { label: "video hash", value: video.hash },
+      {
+        label: "video file size",
+        value: video.fileSize,
+        format: formatFileSize,
+      },
+      {
+        label: "video resolution@framerate",
+        value: video.resolution,
+        format: (value) => formatVideoResolution(value, video.frameRate),
+      },
+      {
+        label: "video duration",
+        value: video.duration,
+        format: formatDuration,
+      },
+      { label: "video codec", value: video.codec },
+      { label: "video bitrate", value: video.bitrate, format: formatBitrate },
+      {
+        label: "video source",
+        value: video.source === "none" ? null : video.source,
+        source: video.source,
+      },
+    );
+  } else {
+    rows.push({ label: "video", value: null });
+  }
   if (encodedVideo) {
     rows.push(
       { label: "encoded name", value: encodedVideo.name },
@@ -217,6 +250,8 @@ function rowsFor(data: DebugWidgetData): DebugRow[] {
         format: (value) => formatVideoResolution(value, encodedVideo.frameRate),
       },
     );
+  } else {
+    rows.push({ label: "encoded", value: null });
   }
   return rows;
 }
