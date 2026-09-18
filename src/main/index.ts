@@ -631,6 +631,11 @@ function setupIPC(): void {
     const track = library.getTrack(id);
     return track ? getTrackDebugInfo(library, track) : null;
   });
+  ipcMain.handle("clipboard:write-text", async (event, value: unknown) => {
+    requireTrusted(event);
+    if (typeof value !== "string") throw new Error("Invalid clipboard text.");
+    clipboard.writeText(value);
+  });
   ipcMain.handle(
     "library:track-location",
     (event, id: unknown, input: unknown) => {

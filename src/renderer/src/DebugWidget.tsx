@@ -104,12 +104,44 @@ function formatResolution(value: unknown): string | null {
   return resolution;
 }
 
+function formatFrameRate(value: unknown): string | null {
+  let frameRate: number | null = null;
+
+  if (typeof value === "number") {
+    frameRate = Number.isFinite(value) ? value : null;
+  } else if (typeof value === "string") {
+    const text = value.trim();
+    if (!text) return null;
+
+    // Accept ffprobe's fraction format as well as the normalized number sent
+    // by the main process.
+    const [numeratorText, denominatorText] = text.split("/");
+    const numerator = Number(numeratorText);
+    const denominator =
+      denominatorText === undefined ? 1 : Number(denominatorText);
+    if (
+      Number.isFinite(numerator) &&
+      Number.isFinite(denominator) &&
+      denominator > 0
+    ) {
+      frameRate = numerator / denominator;
+    } else {
+      return text;
+    }
+  }
+
+  if (frameRate === null || !Number.isFinite(frameRate) || frameRate < 0)
+    return null;
+
+  return frameRate.toFixed(2).replace(/\.?(0+)$/, "");
+}
+
 function formatVideoResolution(
   value: unknown,
   framerate: unknown,
 ): string | null {
   const resolution = formatResolution(value);
-  const fps = textValue(framerate);
+  const fps = formatFrameRate(framerate);
   if (!resolution) return null;
   return fps ? `${resolution}@${fps}` : resolution;
 }
@@ -169,13 +201,42 @@ function rowsFor(data: DebugWidgetData): DebugRow[] {
   ];
 }
 
-async function copyText(value: string): Promise<void> {
+async function copyText(value: string): Promise<boolean> {
   try {
-    await navigator.clipboard?.writeText(value);
+    if (window.playerAPI?.copyText) {
+      await window.playerAPI.copyText(value);
+      return true;
+    }
+  } catch {
+    // Fall back to the browser clipboard APIs when native copying is unavailable.
+  }
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+      return true;
+    }
+  } catch {
+    // Fall back to the legacy copy command when the Clipboard API is
+    // unavailable or denied by the renderer's security context.
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  textarea.setSelectionRange(0, textarea.value.length);
+  let copied = false;
+  try {
+    copied = document.execCommand("copy");
   } catch {
     // Clipboard access can be unavailable in a browser preview or while the
     // Electron window is closing. The widget remains usable in either case.
   }
+  textarea.remove();
+  return copied;
 }
 
 export function DebugWidget({ data }: DebugWidgetProps) {
@@ -187,6 +248,8 @@ export function DebugWidget({ data }: DebugWidgetProps) {
       className="debug-widget"
       data-testid="debug-widget"
       aria-label="Debug metadata"
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
     >
       {rows.map((row) => {
         const displayValue = row.format
@@ -208,8 +271,11 @@ export function DebugWidget({ data }: DebugWidgetProps) {
               }
               title={copied ? "Copied" : `Copy ${row.label}`}
               aria-label={`Copy ${row.label}`}
-              onClick={() => {
-                void copyText(value).then(() => {
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.stopPropagation();
+                void copyText(value).then((copiedToClipboard) => {
+                  if (!copiedToClipboard) return;
                   setCopiedLabel(row.label);
                   window.setTimeout(() => {
                     setCopiedLabel((current) =>

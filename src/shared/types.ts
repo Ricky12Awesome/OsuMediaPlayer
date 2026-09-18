@@ -188,6 +188,7 @@ export interface PlayerAPI {
   queryLibrary: (query?: LibraryQuery) => Promise<LibraryPage>;
   getTrack: (id: string) => Promise<Track | null>;
   getTrackDebugInfo: (id: string) => Promise<TrackDebugInfo | null>;
+  copyText?: (value: string) => Promise<void>;
   getTrackLocation?: (
     id: string,
     query?: LibraryQuery,

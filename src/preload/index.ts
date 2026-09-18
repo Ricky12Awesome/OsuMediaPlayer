@@ -16,6 +16,7 @@ const api: PlayerAPI = {
   queryLibrary: (query) => ipcRenderer.invoke("library:query", query),
   getTrack: (id) => ipcRenderer.invoke("library:track", id),
   getTrackDebugInfo: (id) => ipcRenderer.invoke("library:track-debug-info", id),
+  copyText: (value) => ipcRenderer.invoke("clipboard:write-text", value),
   getTrackLocation: (id, query?: LibraryQuery) =>
     ipcRenderer.invoke("library:track-location", id, query),
   prepareVideo: (trackId, settings) =>
