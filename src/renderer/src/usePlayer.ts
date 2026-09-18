@@ -161,6 +161,7 @@ export function usePlayer(
   const [videoEncoder, setVideoEncoder] = useState<string | null>(null);
   const videoRequestVersion = useRef(0);
   const videoHls = useRef<{ destroy: () => void } | null>(null);
+  const lastVideoTrackId = useRef<string | null>(null);
   const activeTrack = useRef<Track | null>(initialTrack);
   const queue = useRef<{ query: LibraryQuery; index: number; total?: number }>({
     query: {},
@@ -786,58 +787,67 @@ export function usePlayer(
 
   useEffect(() => {
     let active = true;
-    videoRequestVersion.current += 1;
-    videoHls.current?.destroy();
-    videoHls.current = null;
-    const currentVideo = videoRef.current;
-    if (currentVideo) {
-      currentVideo.pause();
-      currentVideo.removeAttribute("src");
-      currentVideo.load();
-    }
     setVideoError(null);
+    const sameTrack = lastVideoTrackId.current === (track?.id ?? null);
+    lastVideoTrackId.current = track?.id ?? null;
+    const stopCurrentVideo = () => {
+      videoRequestVersion.current += 1;
+      videoHls.current?.destroy();
+      videoHls.current = null;
+      const currentVideo = videoRef.current;
+      if (currentVideo) {
+        currentVideo.pause();
+        currentVideo.removeAttribute("src");
+        currentVideo.load();
+      }
+      setVideoUrl(null);
+    };
     if (!playVideos || !track?.videoUrl) {
-      videoRef.current?.pause();
+      stopCurrentVideo();
       void api.cancelVideoEncoding().catch(() => {
         // Video cancellation is best-effort while the renderer is changing sources.
       });
-      setVideoUrl(null);
       setVideoStreaming(false);
       setVideoLoading(false);
       return;
     }
-    setVideoUrl(null);
-    setVideoLoading(true);
-    api
-      .prepareVideo(track.id, {
-        codec: videoEncodingCodec,
-        quality: videoEncodingQuality,
-        maxFps: videoMaxFps,
-        forceRemux: videoForceRemux,
-        cacheLimitGb: videoCacheLimitGb,
-      })
-      .then((prepared) => {
-        if (active && activeTrack.current?.id === track.id) {
-          setVideoUrl(prepared?.url ?? null);
-          setVideoStreaming(prepared?.streaming ?? false);
-          setVideoSourceRevision((revision) => revision + 1);
-          setVideoLoading(false);
-          if (!prepared)
-            setVideoError("The beatmap video could not be prepared.");
-        }
-      })
-      .catch((reason: unknown) => {
-        if (active && activeTrack.current?.id === track.id) {
-          setVideoLoading(false);
-          setVideoError(
-            reason instanceof Error
-              ? reason.message
-              : "The beatmap video could not be prepared.",
-          );
-        }
-      });
+    const prepare = () => {
+      if (!active) return;
+      stopCurrentVideo();
+      setVideoLoading(true);
+      api
+        .prepareVideo(track.id, {
+          codec: videoEncodingCodec,
+          quality: videoEncodingQuality,
+          maxFps: videoMaxFps,
+          forceRemux: videoForceRemux,
+          cacheLimitGb: videoCacheLimitGb,
+        })
+        .then((prepared) => {
+          if (active && activeTrack.current?.id === track.id) {
+            setVideoUrl(prepared?.url ?? null);
+            setVideoStreaming(prepared?.streaming ?? false);
+            setVideoSourceRevision((revision) => revision + 1);
+            setVideoLoading(false);
+            if (!prepared)
+              setVideoError("The beatmap video could not be prepared.");
+          }
+        })
+        .catch((reason: unknown) => {
+          if (active && activeTrack.current?.id === track.id) {
+            setVideoLoading(false);
+            setVideoError(
+              reason instanceof Error
+                ? reason.message
+                : "The beatmap video could not be prepared.",
+            );
+          }
+        });
+    };
+    const timer = window.setTimeout(prepare, sameTrack ? 150 : 0);
     return () => {
       active = false;
+      window.clearTimeout(timer);
     };
   }, [
     api,
@@ -845,7 +855,6 @@ export function usePlayer(
     track?.id,
     track?.videoUrl,
     videoEncodingQuality,
-    videoCacheLimitGb,
     videoEncodingCodec,
     videoForceRemux,
     videoMaxFps,

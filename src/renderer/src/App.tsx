@@ -378,7 +378,6 @@ export function App({
       : defaultSidePanelWidth;
   });
   const [sidePanelResizing, setSidePanelResizing] = useState(false);
-  const cacheLimitWheelAt = useRef(0);
   const settingsPanelOpen = sidePanelOpen && sidePanelTab === "settings";
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [settingsResetConfirmation, setSettingsResetConfirmation] =
@@ -1644,9 +1643,8 @@ export function App({
           </span>
           <input
             className="settings-number-input"
-            type="number"
-            min={-1}
-            step={1}
+            type="text"
+            inputMode="decimal"
             value={player.videoCacheLimitGb}
             aria-label="Video cache limit in gigabytes"
             onChange={(event) => {
@@ -1657,9 +1655,7 @@ export function App({
             onWheel={(event) => {
               if (document.activeElement !== event.currentTarget) return;
               event.preventDefault();
-              const now = performance.now();
-              if (now - cacheLimitWheelAt.current < 120) return;
-              cacheLimitWheelAt.current = now;
+              event.stopPropagation();
               const direction = event.deltaY < 0 ? 1 : -1;
               player.setVideoCacheLimitGb((value) =>
                 Math.max(-1, value + direction),
