@@ -1,10 +1,36 @@
+/* Transport visibility. */
+
+.app-shell:not(.is-fullscreen) .transport {
+  transition:
+    margin-bottom 0.24s,
+    transform 0.24s,
+    opacity 0.2s;
+}
+.app-shell:not(.is-fullscreen):not(.fullscreen-controls-visible):not(
+    .controls-always-visible
+  )
+  .transport {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(100%);
+  margin-bottom: calc(-1 * var(--transport-height));
+}
+.app-shell:not(.is-fullscreen):not(.fullscreen-controls-visible)
+  .transport:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+  margin-bottom: 0;
+}
+
 /* Fullscreen player overrides. */
 
 .is-fullscreen {
   --fullscreen-transport-height: 4.5rem;
 }
-.is-fullscreen:not(.fullscreen-controls-visible),
-.is-fullscreen:not(.fullscreen-controls-visible) * {
+.is-fullscreen:not(.fullscreen-controls-visible):not(.controls-always-visible),
+.is-fullscreen:not(.fullscreen-controls-visible):not(.controls-always-visible)
+  * {
   cursor: none !important;
 }
 .is-fullscreen .mobile-switch,
@@ -28,6 +54,9 @@
     padding-bottom 0.24s;
 }
 .is-fullscreen.fullscreen-controls-visible .library-panel {
+  padding-bottom: var(--fullscreen-transport-height);
+}
+.is-fullscreen.controls-always-visible .library-panel {
   padding-bottom: var(--fullscreen-transport-height);
 }
 .is-fullscreen .artwork-stage {
@@ -64,7 +93,8 @@
   transition: none;
   animation: 0.16s ease-out both caption-drag-lift;
 }
-.is-fullscreen:not(.fullscreen-controls-visible) .hero-caption {
+.is-fullscreen:not(.fullscreen-controls-visible):not(.controls-always-visible)
+  .hero-caption {
   --caption-bottom-edge: var(--caption-edge);
 }
 .is-fullscreen .hero-caption h2 {
@@ -90,15 +120,23 @@
   left: 0;
   right: 0;
 }
-.is-fullscreen:not(.fullscreen-controls-visible) .transport {
+.app-shell:not(.fullscreen-controls-visible):not(.controls-always-visible)
+  .transport {
   opacity: 0;
   pointer-events: none;
   transform: translateY(100%);
 }
-.is-fullscreen:not(.fullscreen-controls-visible) .transport:focus-within {
+.app-shell:not(.fullscreen-controls-visible):not(.controls-always-visible)
+  .transport:focus-within {
   opacity: 1;
   pointer-events: auto;
   transform: translateY(0);
+}
+.app-shell .transport {
+  transition:
+    margin-bottom 0.24s,
+    transform 0.24s,
+    opacity 0.2s;
 }
 .is-fullscreen .workspace {
   min-height: 0;
