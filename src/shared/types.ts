@@ -1,18 +1,21 @@
 export type RepeatMode = "off" | "all" | "one";
 
-export type SortKey =
-  | "title"
-  | "artist"
-  | "duration"
-  | "bpm"
-  | "added"
-  | "dateAdded"
-  | "dateSubmitted"
-  | "dateRanked"
-  | "lastPlayed"
-  | "stars"
-  | "collection"
-  | "tags";
+export const sortKeys = [
+  "title",
+  "artist",
+  "duration",
+  "bpm",
+  "added",
+  "dateAdded",
+  "dateSubmitted",
+  "dateRanked",
+  "lastPlayed",
+  "stars",
+  "collection",
+  "tags",
+] as const;
+
+export type SortKey = (typeof sortKeys)[number];
 
 export interface Track {
   id: string;

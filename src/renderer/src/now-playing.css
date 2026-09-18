@@ -181,21 +181,19 @@
   user-select: none;
   max-width: none;
   transition:
-    left 0.26s cubic-bezier(0.22, 1, 0.36, 1),
-    top 0.26s cubic-bezier(0.22, 1, 0.36, 1),
     transform 0.26s cubic-bezier(0.22, 1, 0.36, 1),
     opacity 0.18s;
   position: absolute;
 }
 .hero-caption.is-dragging {
-  left: var(--caption-drag-x);
-  top: var(--caption-drag-y);
+  left: 0;
+  top: 0;
   cursor: grabbing;
   opacity: 0.92;
-  will-change: left, top, transform;
+  will-change: transform;
   transition: none;
   animation: 0.16s ease-out both caption-drag-lift;
-  transform: none;
+  transform: translate3d(var(--caption-drag-x, 0), var(--caption-drag-y, 0), 0);
 }
 @keyframes caption-drag-lift {
   0% {

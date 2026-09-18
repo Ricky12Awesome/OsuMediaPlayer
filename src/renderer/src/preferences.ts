@@ -1,8 +1,9 @@
-import type {
-  SortKey,
-  VideoEncodingCodec,
-  VideoEncodingQuality,
-  VideoMaxFps,
+import {
+  sortKeys,
+  type SortKey,
+  type VideoEncodingCodec,
+  type VideoEncodingQuality,
+  type VideoMaxFps,
 } from "../../shared/types";
 
 /** Values persisted by the renderer. Keep this map in sync with the UI defaults. */
@@ -80,21 +81,6 @@ const positions = [
   "bottom-left",
   "left-center",
 ] as const;
-const sortKeys = [
-  "title",
-  "artist",
-  "duration",
-  "bpm",
-  "added",
-  "dateAdded",
-  "dateSubmitted",
-  "dateRanked",
-  "lastPlayed",
-  "stars",
-  "collection",
-  "tags",
-] as const;
-
 export const preferenceDefaults: Preferences = {
   lastPlayedTrack: null,
   libraryPath: undefined,
