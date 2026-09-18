@@ -18,7 +18,7 @@ try {
   assert.ok(await page.locator(".transport").count());
 
   await page.mouse.move(1, 1);
-  await page.waitForTimeout(3000);
+  await page.waitForTimeout(1500);
   const shell = page.locator(".app-shell");
   assert.equal(
     await shell.evaluate((element) =>
@@ -39,7 +39,7 @@ try {
     ),
     false,
   );
-  await page.waitForTimeout(3000);
+  await page.waitForTimeout(1500);
   assert.equal(
     await shell.evaluate((element) =>
       element.classList.contains("fullscreen-controls-visible"),

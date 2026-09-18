@@ -352,7 +352,7 @@ export function App({
     if (alwaysShowControls) return;
     hideControlsTimer.current = window.setTimeout(
       () => setControlsVisible(false),
-      2500,
+      1000,
     );
   }, [alwaysShowControls]);
 
