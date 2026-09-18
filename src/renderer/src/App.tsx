@@ -8,8 +8,6 @@ import {
   type KeyboardEvent,
   type PointerEvent,
 } from "react";
-import { createPortal } from "react-dom";
-import { AudioWaveform, RefreshCw, Settings2, Trash2, X } from "lucide-react";
 import type {
   CacheKind,
   CacheUsage,
@@ -19,16 +17,14 @@ import type {
   SortKey,
   Track,
   TrackContextMenuAction,
-  TrackContextMenuInfo,
 } from "../../shared/types";
-import { TrackContextMenu } from "./TrackContextMenu";
 import { extractArtworkTheme, type ArtworkTheme } from "./artwork-theme";
 import {
   cacheLastArtworkTheme,
   clearCachedLastArtworkTheme,
 } from "./artwork-theme-cache";
 import { type VirtualTrackListKeyboardControls } from "./VirtualTrackList";
-import { VisualizerControls, useVisualizerSettings } from "./AudioVisualizer";
+import { useVisualizerSettings } from "./AudioVisualizer";
 import { usePlayer } from "./usePlayer";
 import { parseVisualizer } from "./visualizer-settings";
 import { LibraryPanel, type LibraryTab } from "./LibraryPanel";
@@ -40,6 +36,9 @@ import {
 } from "./SettingsPanel";
 import { Transport } from "./Transport";
 import { useKeyboardShortcuts } from "./useKeyboardShortcuts";
+import { AppOverlays, type TrackContextMenuState } from "./AppOverlays";
+import { PlayerToolsPanel, type SidePanelTab } from "./PlayerToolsPanel";
+import { PanelResizers } from "./PanelResizers";
 import {
   readPreference,
   removePreference,
@@ -62,14 +61,6 @@ const positions = [
   "bottom-left",
   "left-center",
 ] as const;
-type SidePanelTab = "visualizer" | "settings";
-type TrackContextMenuState = {
-  track: Track;
-  x: number;
-  y: number;
-  info: TrackContextMenuInfo;
-};
-
 const sortOptions: Array<{ value: SortKey; label: string }> = [
   { value: "title", label: "Title" },
   { value: "artist", label: "Artist" },
@@ -1134,203 +1125,69 @@ export function App({
             beginCaptionDrag={beginCaptionDrag}
           />
 
-          <aside
-            ref={sidePanelRef}
-            id="side-settings-panel"
-            className={"side-panel " + (sidePanelOpen ? "is-open" : "")}
-            aria-label="Player tools"
-            aria-hidden={!sidePanelOpen}
-            inert={!sidePanelOpen || undefined}
-          >
-            <div className="side-panel-heading">
-              <div>
-                <span className="settings-label">
-                  {sidePanelTab === "visualizer" ? (
-                    <AudioWaveform size={16} />
-                  ) : (
-                    <Settings2 size={16} />
-                  )}{" "}
-                  {sidePanelTab === "visualizer"
-                    ? "AUDIO VISUALIZER"
-                    : "PLAYER SETTINGS"}
-                </span>
-                <h2>
-                  {sidePanelTab === "visualizer" ? "Visualizer" : "Settings"}
-                </h2>
-              </div>
-              <button
-                type="button"
-                className="icon-button"
-                aria-label="Close player tools"
-                onClick={() => setSidePanelOpen(false)}
-              >
-                <X size={19} />
-              </button>
-            </div>
-            <div
-              className="side-panel-tabs"
-              role="tablist"
-              aria-label="Player tools"
-            >
-              <button
-                type="button"
-                role="tab"
-                id="settings-tab"
-                className={sidePanelTab === "settings" ? "active" : ""}
-                aria-selected={sidePanelTab === "settings"}
-                aria-controls="side-panel-tab-panel"
-                tabIndex={sidePanelTab === "settings" ? 0 : -1}
-                onClick={() => setSidePanelTab("settings")}
-              >
-                <Settings2 size={15} /> Settings
-              </button>
-              <button
-                type="button"
-                role="tab"
-                id="visualizer-tab"
-                className={sidePanelTab === "visualizer" ? "active" : ""}
-                aria-selected={sidePanelTab === "visualizer"}
-                aria-controls="side-panel-tab-panel"
-                tabIndex={sidePanelTab === "visualizer" ? 0 : -1}
-                onClick={() => setSidePanelTab("visualizer")}
-              >
-                <AudioWaveform size={15} /> Visualizer
-              </button>
-            </div>
-            <div
-              className="side-panel-content"
-              id="side-panel-tab-panel"
-              role="tabpanel"
-              aria-labelledby={sidePanelTab + "-tab"}
-            >
-              {sidePanelTab === "visualizer" ? (
-                <VisualizerControls
-                  settings={visualizer}
-                  onChange={setVisualizer}
-                />
-              ) : (
-                <SettingsPanel
-                  summary={summary}
-                  importing={importing}
-                  player={player}
-                  chooseLibrary={chooseLibrary}
-                  refreshLibrary={async () => {
-                    setSidePanelOpen(false);
-                    await loadLibrary(summary?.installPath);
-                  }}
-                  libraryPosition={libraryPosition}
-                  setLibraryPosition={setLibraryPosition}
-                  transportLayout={transportLayout}
-                  setTransportLayout={setTransportLayout}
-                  artworkThemeEnabled={artworkThemeEnabled}
-                  setArtworkThemeEnabled={setArtworkThemeEnabled}
-                  showNowPlayingTitleArtist={showNowPlayingTitleArtist}
-                  setShowNowPlayingTitleArtist={setShowNowPlayingTitleArtist}
-                  showTitleUnicode={showTitleUnicode}
-                  setShowTitleUnicode={setShowTitleUnicode}
-                  showArtistUnicode={showArtistUnicode}
-                  setShowArtistUnicode={setShowArtistUnicode}
-                  visualizer={visualizer}
-                  setVisualizer={setVisualizer}
-                  clearingCache={clearingCache}
-                  cacheUsage={cacheUsage}
-                  cacheNotice={cacheNotice}
-                  requestCacheClear={requestCacheClear}
-                  requestSettingsReset={requestSettingsReset}
-                  cacheLimitWheelRemainder={cacheLimitWheelRemainder}
-                />
-              )}
-            </div>
-          </aside>
-
-          <div
-            className="side-panel-resizer"
-            role="separator"
-            aria-label="Resize player tools panel"
-            aria-hidden={!sidePanelOpen || !isDesktop}
-            aria-orientation="vertical"
-            aria-valuemin={minSidePanelWidth}
-            aria-valuemax={maxSidePanelWidth}
-            aria-valuenow={Math.round(sidePanelWidth)}
-            tabIndex={!sidePanelOpen || !isDesktop ? -1 : 0}
-            title="Drag to resize · double-click to reset"
-            onPointerDown={(event) => {
-              if (event.button !== 0 || !sidePanelOpen || !isDesktop) return;
-              event.preventDefault();
-              sidePanelResizeStart.current = {
-                x: event.clientX,
-                width:
-                  sidePanelRef.current?.getBoundingClientRect().width ??
-                  sidePanelWidth,
-              };
-              setSidePanelResizing(true);
-            }}
-            onDoubleClick={() =>
-              setSidePanelWidth(clampSidePanelWidth(defaultSidePanelWidth))
+          <PlayerToolsPanel
+            panelRef={sidePanelRef}
+            open={sidePanelOpen}
+            tab={sidePanelTab}
+            setTab={setSidePanelTab}
+            onClose={() => setSidePanelOpen(false)}
+            visualizer={visualizer}
+            setVisualizer={setVisualizer}
+            settingsContent={
+              <SettingsPanel
+                summary={summary}
+                importing={importing}
+                player={player}
+                chooseLibrary={chooseLibrary}
+                refreshLibrary={async () => {
+                  setSidePanelOpen(false);
+                  await loadLibrary(summary?.installPath);
+                }}
+                libraryPosition={libraryPosition}
+                setLibraryPosition={setLibraryPosition}
+                transportLayout={transportLayout}
+                setTransportLayout={setTransportLayout}
+                artworkThemeEnabled={artworkThemeEnabled}
+                setArtworkThemeEnabled={setArtworkThemeEnabled}
+                showNowPlayingTitleArtist={showNowPlayingTitleArtist}
+                setShowNowPlayingTitleArtist={setShowNowPlayingTitleArtist}
+                showTitleUnicode={showTitleUnicode}
+                setShowTitleUnicode={setShowTitleUnicode}
+                showArtistUnicode={showArtistUnicode}
+                setShowArtistUnicode={setShowArtistUnicode}
+                visualizer={visualizer}
+                setVisualizer={setVisualizer}
+                clearingCache={clearingCache}
+                cacheUsage={cacheUsage}
+                cacheNotice={cacheNotice}
+                requestCacheClear={requestCacheClear}
+                requestSettingsReset={requestSettingsReset}
+                cacheLimitWheelRemainder={cacheLimitWheelRemainder}
+              />
             }
-            onKeyDown={(event) => {
-              if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-                event.preventDefault();
-                const direction = event.key === "ArrowRight" ? 1 : -1;
-                const sign = libraryPosition === "right" ? 1 : -1;
-                setSidePanelWidth((value) =>
-                  clampSidePanelWidth(value + direction * sign * 16),
-                );
-              }
-            }}
-          >
-            <span aria-hidden="true" />
-          </div>
+          />
 
-          <div
-            className="library-resizer"
-            role="separator"
-            aria-label="Resize library sidebar"
-            aria-hidden={libraryHidden}
-            aria-orientation="vertical"
-            aria-valuemin={320}
-            aria-valuemax={720}
-            aria-valuenow={Math.round(libraryWidth)}
-            tabIndex={libraryHidden ? -1 : 0}
-            title="Drag to resize · double-click to reset"
-            onPointerDown={(event) => {
-              if (event.button !== 0 || libraryHidden) return;
-              event.preventDefault();
-              resizeStart.current = {
-                x: event.clientX,
-                width:
-                  libraryRef.current?.getBoundingClientRect().width ??
-                  libraryWidth,
-              };
-              setResizing(true);
-            }}
-            onDoubleClick={() => setLibraryWidth(clampLibraryWidth(430))}
-            onKeyDown={(event) => {
-              if (event.key === "ArrowLeft") {
-                event.preventDefault();
-                setLibraryWidth((value) =>
-                  clampLibraryWidth(
-                    value + (libraryPosition === "right" ? 16 : -16),
-                  ),
-                );
-              } else if (event.key === "ArrowRight") {
-                event.preventDefault();
-                setLibraryWidth((value) =>
-                  clampLibraryWidth(
-                    value + (libraryPosition === "right" ? -16 : 16),
-                  ),
-                );
-              } else if (event.key === "Home") {
-                event.preventDefault();
-                setLibraryWidth(320);
-              } else if (event.key === "End") {
-                event.preventDefault();
-                setLibraryWidth(clampLibraryWidth(720));
-              }
-            }}
-          >
-            <span />
-          </div>
+          <PanelResizers
+            libraryRef={libraryRef}
+            sidePanelRef={sidePanelRef}
+            resizeStart={resizeStart}
+            sidePanelResizeStart={sidePanelResizeStart}
+            libraryHidden={libraryHidden}
+            sidePanelOpen={sidePanelOpen}
+            isDesktop={isDesktop}
+            libraryPosition={libraryPosition}
+            libraryWidth={libraryWidth}
+            sidePanelWidth={sidePanelWidth}
+            minSidePanelWidth={minSidePanelWidth}
+            maxSidePanelWidth={maxSidePanelWidth}
+            setResizing={setResizing}
+            setSidePanelResizing={setSidePanelResizing}
+            setLibraryWidth={setLibraryWidth}
+            setSidePanelWidth={setSidePanelWidth}
+            clampLibraryWidth={clampLibraryWidth}
+            clampSidePanelWidth={clampSidePanelWidth}
+            defaultSidePanelWidth={defaultSidePanelWidth}
+          />
 
           <LibraryPanel
             api={api}
@@ -1383,37 +1240,6 @@ export function App({
         </main>
       </div>
 
-      {player.error && (
-        <div className="playback-error" role="alert">
-          <span>{player.error}</span>
-          <button
-            aria-label="Dismiss playback error"
-            onClick={player.clearError}
-          >
-            <X size={16} />
-          </button>
-        </div>
-      )}
-
-      {zoomIndicatorVisible && (
-        <div className="zoom-indicator" role="status" aria-live="polite">
-          Zoom {zoomPercent}%
-        </div>
-      )}
-
-      {trackContextMenu &&
-        createPortal(
-          <TrackContextMenu
-            track={trackContextMenu.track}
-            x={trackContextMenu.x}
-            y={trackContextMenu.y}
-            info={trackContextMenu.info}
-            onAction={performTrackContextMenuAction}
-            onClose={closeTrackContextMenu}
-          />,
-          document.body,
-        )}
-
       <Transport
         player={player}
         transportLayout={transportLayout}
@@ -1438,156 +1264,26 @@ export function App({
         onControlsActivity={controlsActivity}
       />
 
-      <dialog
-        ref={dialogRef}
-        className="settings-dialog"
-        onCancel={() => setShortcutsOpen(false)}
-        onClick={(event) => {
-          if (event.target === event.currentTarget) {
-            setShortcutsOpen(false);
-          }
-        }}
-      >
-        <div className="dialog-heading">
-          <div>
-            <h2>Keyboard Shortcuts</h2>
-          </div>
-          <button
-            className="icon-button"
-            aria-label="Close dialog"
-            onClick={() => setShortcutsOpen(false)}
-          >
-            <X size={20} />
-          </button>
-        </div>
-
-        {shortcutsOpen && (
-          <div className="shortcuts">
-            {[
-              ["Play / pause", "Space"],
-              ["Previous track", "A"],
-              ["Next track", "D"],
-              ["Toggle song list", "Ctrl / ⌘ S"],
-              ["Show / hide title / artist", "Tab"],
-              ["Random track", "F2"],
-              ["Previous random track", "Shift F2"],
-              ["Browse songs", "↑ / ↓"],
-              ["Play selected song", "Enter"],
-              ["Seek 5 seconds", "← / →"],
-              ["Search your library", "Ctrl / ⌘ F"],
-              ["Zoom in", "Ctrl / ⌘ ="],
-              ["Zoom out", "Ctrl / ⌘ -"],
-              ["Reset zoom", "Ctrl / ⌘ 0"],
-              ["Mute / unmute", "M"],
-              ["Keyboard shortcuts", "?"],
-              ["Fullscreen view", "F11"],
-            ].map(([label, key]) => (
-              <div key={label}>
-                <span>{label}</span>
-                <kbd>{key}</kbd>
-              </div>
-            ))}
-          </div>
-        )}
-      </dialog>
-      {cacheConfirmation && (
-        <div
-          className="cache-confirmation-layer"
-          onPointerDown={(event) => {
-            if (event.target === event.currentTarget) cancelCacheClear();
-          }}
-        >
-          <section
-            className="cache-confirmation"
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="cache-confirmation-title"
-            aria-describedby="cache-confirmation-description"
-          >
-            <div className="cache-confirmation-heading">
-              <span className="cache-confirmation-icon" aria-hidden="true">
-                <Trash2 size={19} />
-              </span>
-              <div>
-                <h2 id="cache-confirmation-title">
-                  Delete {cacheName(cacheConfirmation).toLowerCase()}?
-                </h2>
-                <p id="cache-confirmation-description">
-                  {cacheConfirmation === "index"
-                    ? "The library index will be rebuilt from your osu!lazer files the next time you refresh."
-                    : "Converted video files will be generated again when they are needed."}
-                </p>
-              </div>
-            </div>
-            <div className="cache-confirmation-actions">
-              <button
-                ref={cacheCancelButtonRef}
-                type="button"
-                className="secondary-button"
-                onClick={cancelCacheClear}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="danger-button"
-                onClick={() => void confirmCacheClear()}
-              >
-                <Trash2 size={15} /> Delete cache
-              </button>
-            </div>
-          </section>
-        </div>
-      )}
-      {settingsResetConfirmation && (
-        <div
-          className="cache-confirmation-layer"
-          onPointerDown={(event) => {
-            if (event.target === event.currentTarget) cancelSettingsReset();
-          }}
-        >
-          <section
-            className="cache-confirmation"
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="settings-reset-confirmation-title"
-            aria-describedby="settings-reset-confirmation-description"
-          >
-            <div className="cache-confirmation-heading">
-              <span className="cache-confirmation-icon" aria-hidden="true">
-                <RefreshCw size={19} />
-              </span>
-              <div>
-                <h2 id="settings-reset-confirmation-title">
-                  Reset settings to defaults?
-                </h2>
-                <p id="settings-reset-confirmation-description">
-                  Playback, layout, appearance, sorting, and visualizer
-                  preferences will be restored. Your library folder, favorites,
-                  and cached files will be kept.
-                </p>
-              </div>
-            </div>
-            <div className="cache-confirmation-actions">
-              <button
-                ref={settingsResetCancelButtonRef}
-                type="button"
-                className="secondary-button"
-                onClick={cancelSettingsReset}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="danger-button"
-                onClick={confirmSettingsReset}
-              >
-                <RefreshCw size={15} /> Reset settings
-              </button>
-            </div>
-          </section>
-        </div>
-      )}
+      <AppOverlays
+        playerError={player.error}
+        onClearPlayerError={player.clearError}
+        zoomIndicatorVisible={zoomIndicatorVisible}
+        zoomPercent={zoomPercent}
+        trackContextMenu={trackContextMenu}
+        onTrackContextMenuAction={performTrackContextMenuAction}
+        onCloseTrackContextMenu={closeTrackContextMenu}
+        shortcutsDialogRef={dialogRef}
+        shortcutsOpen={shortcutsOpen}
+        setShortcutsOpen={setShortcutsOpen}
+        cacheConfirmation={cacheConfirmation}
+        cancelCacheClear={cancelCacheClear}
+        confirmCacheClear={confirmCacheClear}
+        cacheCancelButtonRef={cacheCancelButtonRef}
+        settingsResetConfirmation={settingsResetConfirmation}
+        cancelSettingsReset={cancelSettingsReset}
+        confirmSettingsReset={confirmSettingsReset}
+        settingsResetCancelButtonRef={settingsResetCancelButtonRef}
+      />
     </div>
   );
 }
