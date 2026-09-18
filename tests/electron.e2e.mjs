@@ -22,6 +22,26 @@ try {
   const shell = page.locator(".app-shell");
   assert.equal(
     await shell.evaluate((element) =>
+      element.classList.contains("controls-always-visible"),
+    ),
+    true,
+  );
+  assert.equal(
+    await page
+      .locator(".transport")
+      .evaluate((element) => getComputedStyle(element).opacity),
+    "1",
+  );
+  await page.keyboard.press("Control+e");
+  assert.equal(
+    await shell.evaluate((element) =>
+      element.classList.contains("controls-always-visible"),
+    ),
+    false,
+  );
+  await page.waitForTimeout(3000);
+  assert.equal(
+    await shell.evaluate((element) =>
       element.classList.contains("fullscreen-controls-visible"),
     ),
     false,
@@ -31,20 +51,6 @@ try {
       .locator(".transport")
       .evaluate((element) => getComputedStyle(element).opacity),
     "0",
-  );
-  await page.keyboard.press("Control+e");
-  assert.equal(
-    await shell.evaluate((element) =>
-      element.classList.contains("controls-always-visible"),
-    ),
-    true,
-  );
-  await page.waitForTimeout(250);
-  assert.equal(
-    await page
-      .locator(".transport")
-      .evaluate((element) => getComputedStyle(element).opacity),
-    "1",
   );
 
   const panelToggle = page.getByRole("button", {

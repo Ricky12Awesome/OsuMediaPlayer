@@ -282,7 +282,7 @@ export function App({
   });
   const [fullscreen, setFullscreen] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
-  const [alwaysShowControls, setAlwaysShowControls] = useState(false);
+  const [alwaysShowControls, setAlwaysShowControls] = useState(true);
   const [sidePanelOpen, setSidePanelOpen] = useState(() =>
     readPreference("visualizerPanelOpen"),
   );
