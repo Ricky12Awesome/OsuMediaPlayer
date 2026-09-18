@@ -32,6 +32,7 @@ import {
   type ResolvedMediaFile,
 } from "./media";
 import { VideoTranscoder } from "./video/transcoder";
+import { resolveRendererUrl } from "./renderer-url";
 
 const isWaylandSession =
   process.platform === "linux" &&
@@ -71,7 +72,10 @@ let pendingPath: string | undefined;
 let importController: AbortController | null = null;
 let videoTranscoder: VideoTranscoder | null = null;
 let zoomStatusMenuItem: Electron.MenuItem | null = null;
-const rendererUrl = process.env.ELECTRON_RENDERER_URL;
+const rendererUrl = resolveRendererUrl(
+  process.env.ELECTRON_RENDERER_URL,
+  app.isPackaged,
+);
 const zoomStages = [
   25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400, 500,
 ] as const;
