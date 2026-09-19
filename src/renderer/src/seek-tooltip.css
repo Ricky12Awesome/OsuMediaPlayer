@@ -44,7 +44,7 @@
       to right,
       var(--pink) 0%,
       var(--pink) var(--range-progress),
-      var(--range-track) var(--range-progress),
-      var(--range-track) 100%
+      var(--range-song) var(--range-progress),
+      var(--range-song) 100%
     );
 }

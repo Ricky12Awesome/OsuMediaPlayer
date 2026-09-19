@@ -1,41 +1,41 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
-  LibraryQuery,
-  LibraryProgress,
+  SongListQuery,
+  SongListProgress,
   MediaAction,
   PlayerAPI,
-  TrackContextMenuAction,
+  SongContextMenuAction,
   VideoEncodingStatus,
 } from "../shared/types";
 
 const api: PlayerAPI = {
-  loadLibrary: (installPath, priorityTrackId) =>
-    ipcRenderer.invoke("library:load", installPath, priorityTrackId),
-  loadCachedLibrary: (installPath) =>
-    ipcRenderer.invoke("library:load-cached", installPath),
-  queryLibrary: (query) => ipcRenderer.invoke("library:query", query),
-  getTrack: (id) => ipcRenderer.invoke("library:track", id),
-  getTrackDebugInfo: (id, source) =>
-    ipcRenderer.invoke("library:track-debug-info", id, source),
+  loadSongList: (installPath, prioritySongId) =>
+    ipcRenderer.invoke("song-list:load", installPath, prioritySongId),
+  loadCachedSongList: (installPath) =>
+    ipcRenderer.invoke("song-list:load-cached", installPath),
+  querySongList: (query) => ipcRenderer.invoke("song-list:query", query),
+  getSong: (id) => ipcRenderer.invoke("song-list:song", id),
+  getSongDebugInfo: (id, source) =>
+    ipcRenderer.invoke("song-list:song-debug-info", id, source),
   copyText: (value) => ipcRenderer.invoke("clipboard:write-text", value),
-  getTrackLocation: (id, query?: LibraryQuery) =>
-    ipcRenderer.invoke("library:track-location", id, query),
-  prepareVideo: (trackId, settings) =>
-    ipcRenderer.invoke("video:prepare", trackId, settings),
+  getSongLocation: (id, query?: SongListQuery) =>
+    ipcRenderer.invoke("song-list:song-location", id, query),
+  prepareVideo: (songId, settings) =>
+    ipcRenderer.invoke("video:prepare", songId, settings),
   cancelVideoEncoding: () => ipcRenderer.invoke("video:cancel"),
   completeVideoStream: (hash) =>
     ipcRenderer.invoke("video:stream-complete", hash),
   getCacheUsage: () => ipcRenderer.invoke("cache:usage"),
   clearCache: (kind) => ipcRenderer.invoke("cache:clear", kind),
-  chooseLibrary: () => ipcRenderer.invoke("library:choose"),
-  onLibraryProgress: (listener) => {
+  chooseSongList: () => ipcRenderer.invoke("song-list:choose"),
+  onSongListProgress: (listener) => {
     const callback = (
       _event: Electron.IpcRendererEvent,
-      progress: LibraryProgress,
+      progress: SongListProgress,
     ) => listener(progress);
-    ipcRenderer.on("library:progress", callback);
+    ipcRenderer.on("song-list:progress", callback);
     return () => {
-      ipcRenderer.removeListener("library:progress", callback);
+      ipcRenderer.removeListener("song-list:progress", callback);
     };
   },
   onMediaAction: (listener) => {
@@ -116,10 +116,10 @@ const api: PlayerAPI = {
       ipcRenderer.removeListener("window:zoom", callback);
     };
   },
-  getTrackContextMenuInfo: (trackId) =>
-    ipcRenderer.invoke("track:context-info", trackId),
-  performTrackContextMenuAction: (trackId, action: TrackContextMenuAction) =>
-    ipcRenderer.invoke("track:context-action", trackId, action),
+  getSongContextMenuInfo: (songId) =>
+    ipcRenderer.invoke("song:context-info", songId),
+  performSongContextMenuAction: (songId, action: SongContextMenuAction) =>
+    ipcRenderer.invoke("song:context-action", songId, action),
   windowControl: (action) => {
     ipcRenderer.send("window:control", action);
   },

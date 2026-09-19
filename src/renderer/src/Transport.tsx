@@ -27,13 +27,13 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
-import type { Track } from "../../shared/types";
+import type { Song } from "../../shared/types";
 import type { PlayerState } from "./usePlayer";
-import { TrackArt } from "./TrackArt";
-import { displayTrackArtist, displayTrackTitle } from "./track-title";
+import { SongArt } from "./SongArt";
+import { displaySongArtist, displaySongTitle } from "./song-title";
 
 type TransportLayout = "controls-left" | "controls-centered";
-type LibraryPosition = "left" | "right";
+type SongListPosition = "left" | "right";
 
 export interface TransportProps {
   player: PlayerState;
@@ -41,10 +41,10 @@ export interface TransportProps {
   showTitleUnicode: boolean;
   showArtistUnicode: boolean;
   favorites: Set<string>;
-  onFavorite: (track: Track) => void;
+  onFavorite: (song: Song) => void;
   fullscreen: boolean;
   sidebarHidden: boolean;
-  libraryPosition: LibraryPosition;
+  songListPosition: SongListPosition;
   sidePanelOpen: boolean;
   onOpenShortcuts: () => void;
   onToggleSidePanel: () => void;
@@ -72,7 +72,7 @@ export function Transport({
   onFavorite,
   fullscreen,
   sidebarHidden,
-  libraryPosition,
+  songListPosition,
   sidePanelOpen,
   onOpenShortcuts,
   onToggleSidePanel,
@@ -98,11 +98,11 @@ export function Transport({
     [],
   );
 
-  const duration = player.duration || player.track?.duration || 0;
+  const duration = player.duration || player.song?.duration || 0;
   const displayedTime = scrubTime ?? player.currentTime;
 
   const beginScrubbing = (event: PointerEvent<HTMLInputElement>) => {
-    if (!player.track) return;
+    if (!player.song) return;
     scrubPointer.current = event.pointerId;
     const next = Number(event.currentTarget.value);
     scrubTimeRef.current = next;
@@ -141,7 +141,7 @@ export function Transport({
   };
 
   const updateSeekPreview = (event: PointerEvent<HTMLInputElement>) => {
-    if (!duration || !player.track) return;
+    if (!duration || !player.song) return;
     cancelSeekPreviewClear();
     const bounds = event.currentTarget.getBoundingClientRect();
     if (!bounds.width) return;
@@ -226,7 +226,7 @@ export function Transport({
           max={duration || 1}
           step="0.1"
           value={Math.min(displayedTime, duration || 1)}
-          disabled={!player.track}
+          disabled={!player.song}
           aria-label="Seek"
           aria-valuetext={
             formatDuration(displayedTime) + " of " + formatDuration(duration)
@@ -277,8 +277,8 @@ export function Transport({
         )}
         <button
           className="icon-button skip-button"
-          aria-label="Previous track"
-          disabled={!player.track}
+          aria-label="Previous song"
+          disabled={!player.song}
           onClick={() => void player.previous()}
         >
           <SkipBack size={20} fill="currentColor" />
@@ -286,7 +286,7 @@ export function Transport({
         <button
           className="play-button"
           aria-label={player.playing ? "Pause" : "Play"}
-          disabled={!player.track}
+          disabled={!player.song}
           onClick={player.toggle}
         >
           {player.loading ? (
@@ -299,8 +299,8 @@ export function Transport({
         </button>
         <button
           className="icon-button skip-button"
-          aria-label="Next track"
-          disabled={!player.track}
+          aria-label="Next song"
+          disabled={!player.song}
           onClick={() => void player.next()}
         >
           <SkipForward size={20} fill="currentColor" />
@@ -335,41 +335,39 @@ export function Transport({
         </button>
       </div>
 
-      <div className="transport-track">
-        <TrackArt
-          className="transport-track-art"
-          track={player.track}
+      <div className="transport-song">
+        <SongArt
+          className="transport-song-art"
+          song={player.song}
           playing={false}
         />
-        <div className="transport-track-text">
-          <strong title={displayTrackTitle(player.track, showTitleUnicode)}>
-            {displayTrackTitle(player.track, showTitleUnicode) ||
-              "Your soundtrack starts here"}
+        <div className="transport-song-text">
+          <strong title={displaySongTitle(player.song, showTitleUnicode)}>
+            {displaySongTitle(player.song, showTitleUnicode) ||
+              "Your song starts here"}
           </strong>
-          <span title={displayTrackArtist(player.track, showArtistUnicode)}>
-            {displayTrackArtist(player.track, showArtistUnicode) ||
+          <span title={displaySongArtist(player.song, showArtistUnicode)}>
+            {displaySongArtist(player.song, showArtistUnicode) ||
               "Pick a song and press play"}
           </span>
         </div>
         <button
           className={
             "icon-button transport-heart " +
-            (player.track && favorites.has(player.track.id)
-              ? "is-favorite"
-              : "")
+            (player.song && favorites.has(player.song.id) ? "is-favorite" : "")
           }
-          disabled={!player.track}
+          disabled={!player.song}
           aria-label={
-            player.track && favorites.has(player.track.id)
+            player.song && favorites.has(player.song.id)
               ? "Unfavorite song"
               : "Favorite song"
           }
-          onClick={() => player.track && onFavorite(player.track)}
+          onClick={() => player.song && onFavorite(player.song)}
         >
           <Heart
             size={17}
             fill={
-              player.track && favorites.has(player.track.id)
+              player.song && favorites.has(player.song.id)
                 ? "currentColor"
                 : "none"
             }
@@ -405,17 +403,17 @@ export function Transport({
             "icon-button sidebar-toggle " + (sidebarHidden ? "" : "active")
           }
           aria-label={
-            sidebarHidden ? "Show library sidebar" : "Hide library sidebar"
+            sidebarHidden ? "Show song list sidebar" : "Hide song list sidebar"
           }
           onClick={onToggleSidebar}
         >
           {sidebarHidden ? (
-            libraryPosition === "left" ? (
+            songListPosition === "left" ? (
               <PanelLeftOpen size={19} />
             ) : (
               <PanelRightOpen size={19} />
             )
-          ) : libraryPosition === "left" ? (
+          ) : songListPosition === "left" ? (
             <PanelLeftClose size={19} />
           ) : (
             <PanelRightClose size={19} />

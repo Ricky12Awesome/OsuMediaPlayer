@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   PlayerAPI,
-  Track,
+  Song,
   VideoSource,
   VideoEncodingCodec,
   VideoEncodingQuality,
@@ -24,8 +24,8 @@ export interface PlayerVideoState {
 
 interface UsePlayerVideoOptions {
   api: PlayerAPI;
-  track: Track | null;
-  activeTrack: { current: Track | null };
+  song: Song | null;
+  activeSong: { current: Song | null };
   playVideos: boolean;
   videoEncodingCodec: VideoEncodingCodec;
   videoEncodingQuality: VideoEncodingQuality;
@@ -39,8 +39,8 @@ interface UsePlayerVideoOptions {
 /** Owns source preparation, HLS attachment, and encoding status for the player video. */
 export function usePlayerVideo({
   api,
-  track,
-  activeTrack,
+  song,
+  activeSong,
   playVideos,
   videoEncodingCodec,
   videoEncodingQuality,
@@ -62,7 +62,7 @@ export function usePlayerVideo({
   const [videoEncoder, setVideoEncoder] = useState<string | null>(null);
   const videoRequestVersion = useRef(0);
   const videoHls = useRef<{ destroy: () => void } | null>(null);
-  const lastVideoTrackId = useRef<string | null>(null);
+  const lastVideoSongId = useRef<string | null>(null);
 
   const stopCurrentVideo = useCallback(() => {
     videoRequestVersion.current += 1;
@@ -102,20 +102,20 @@ export function usePlayerVideo({
       }
       if (
         status.finalized &&
-        activeTrack.current?.videoHash?.toLowerCase() === status.hash
+        activeSong.current?.videoHash?.toLowerCase() === status.hash
       ) {
         setVideoStreaming(false);
         setVideoSourceRevision((revision) => revision + 1);
       }
     });
-  }, [activeTrack, api]);
+  }, [activeSong, api]);
 
   useEffect(() => {
     let active = true;
     setVideoError(null);
-    const sameTrack = lastVideoTrackId.current === (track?.id ?? null);
-    lastVideoTrackId.current = track?.id ?? null;
-    if (!playVideos || !track?.videoUrl) {
+    const sameSong = lastVideoSongId.current === (song?.id ?? null);
+    lastVideoSongId.current = song?.id ?? null;
+    if (!playVideos || !song?.videoUrl) {
       stopCurrentVideo();
       void api.cancelVideoEncoding().catch(() => {
         // Video cancellation is best-effort while the renderer is changing sources.
@@ -129,7 +129,7 @@ export function usePlayerVideo({
       stopCurrentVideo();
       setVideoLoading(true);
       api
-        .prepareVideo(track.id, {
+        .prepareVideo(song.id, {
           codec: videoEncodingCodec,
           quality: videoEncodingQuality,
           maxFps: videoMaxFps,
@@ -137,7 +137,7 @@ export function usePlayerVideo({
           cacheLimitGb: videoCacheLimitGb,
         })
         .then((prepared) => {
-          if (active && activeTrack.current?.id === track.id) {
+          if (active && activeSong.current?.id === song.id) {
             setVideoUrl(prepared?.url ?? null);
             setVideoStreaming(prepared?.streaming ?? false);
             setVideoSourceRevision((revision) => revision + 1);
@@ -147,7 +147,7 @@ export function usePlayerVideo({
           }
         })
         .catch((reason: unknown) => {
-          if (active && activeTrack.current?.id === track.id) {
+          if (active && activeSong.current?.id === song.id) {
             setVideoLoading(false);
             setVideoError(
               reason instanceof Error
@@ -157,7 +157,7 @@ export function usePlayerVideo({
           }
         });
     };
-    const timer = window.setTimeout(prepare, sameTrack ? 150 : 0);
+    const timer = window.setTimeout(prepare, sameSong ? 150 : 0);
     return () => {
       active = false;
       window.clearTimeout(timer);
@@ -166,8 +166,8 @@ export function usePlayerVideo({
     api,
     playVideos,
     stopCurrentVideo,
-    track?.id,
-    track?.videoUrl,
+    song?.id,
+    song?.videoUrl,
     videoCacheLimitGb,
     videoEncodingQuality,
     videoEncodingCodec,
@@ -195,14 +195,14 @@ export function usePlayerVideo({
     try {
       const source = new URL(videoUrl);
       isManagedVideo =
-        source.protocol === "osu-media:" && source.host === "video-cache";
+        source.protocol === "omp:" && source.host === "video-cache";
     } catch {
       // Let the media element report a malformed direct URL normally.
     }
     const loadedMetadata = () => {
       sync();
-      if (!videoStreaming && isManagedVideo && track?.videoHash)
-        void api.completeVideoStream(track.videoHash);
+      if (!videoStreaming && isManagedVideo && song?.videoHash)
+        void api.completeVideoStream(song.videoHash);
     };
     const mediaError = () => {
       if (!disposed && requestVersion === videoRequestVersion.current)
@@ -266,8 +266,8 @@ export function usePlayerVideo({
     api,
     handleVideoError,
     syncVideo,
-    track?.videoHash,
-    track?.videoOffset,
+    song?.videoHash,
+    song?.videoOffset,
     videoSourceRevision,
     videoStreaming,
     videoUrl,
@@ -277,17 +277,17 @@ export function usePlayerVideo({
   return {
     videoUrl,
     videoSource:
-      !playVideos || !track?.videoUrl || !videoUrl
+      !playVideos || !song?.videoUrl || !videoUrl
         ? "none"
         : videoStreaming
           ? "HLS"
-          : videoUrl.startsWith("osu-media://video-cache/")
+          : videoUrl.startsWith("omp://video-cache/")
             ? "Cache"
             : "Original",
     videoLoading,
     videoEncoding:
-      Boolean(track?.videoHash) &&
-      encodingHash === track?.videoHash?.toLowerCase(),
+      Boolean(song?.videoHash) &&
+      encodingHash === song?.videoHash?.toLowerCase(),
     videoEncodingProgress,
     videoEncoder,
     videoError,

@@ -301,7 +301,7 @@ export function createArtworkTheme(
   const accentText = hsl(hue, clamp(accentSaturation - 12, 45, 76), 79);
   const surfaceHue = hue;
   const border = hsl(hue, surfaceSaturation + 10, 70, 0.13);
-  const rangeTrack = hsl(hue, surfaceSaturation + 8, 27);
+  const rangeSong = hsl(hue, surfaceSaturation + 8, 27);
 
   return {
     variables: {
@@ -313,7 +313,7 @@ export function createArtworkTheme(
       "--pink-pale": accentPale,
       "--pink-text": accentText,
       "--app-background": hsl(surfaceHue, surfaceSaturation, 7),
-      "--library-background": hsl(surfaceHue, surfaceSaturation, 10, 0.97),
+      "--song-list-background": hsl(surfaceHue, surfaceSaturation, 10, 0.97),
       "--transport-background": hsl(surfaceHue, surfaceSaturation, 11),
       "--panel": hsl(surfaceHue, surfaceSaturation, 10),
       "--panel-raised": hsl(surfaceHue, surfaceSaturation, 11),
@@ -328,7 +328,7 @@ export function createArtworkTheme(
         accentRgb,
         0.13,
       )}, ${rgb(accentRgb, 0.04)})`,
-      "--track-art-background": `linear-gradient(145deg, ${hsl(
+      "--song-art-background": `linear-gradient(145deg, ${hsl(
         hue,
         accentSaturation,
         35,
@@ -338,7 +338,7 @@ export function createArtworkTheme(
       "--placeholder-artist-background": hsl(surfaceHue, surfaceSaturation, 17),
       "--error-background": hsl(hue, Math.max(surfaceSaturation, 22), 18),
       "--border": border,
-      "--range-track": rangeTrack,
+      "--range-song": rangeSong,
       "--scrollbar": hsl(surfaceHue, surfaceSaturation + 8, 31),
       "--selection": hsl(hue, accentSaturation, 62, 0.4),
     },

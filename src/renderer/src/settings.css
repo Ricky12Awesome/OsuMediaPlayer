@@ -403,8 +403,8 @@
       to right,
       var(--pink) 0%,
       var(--pink) var(--slider-progress),
-      var(--range-track) var(--slider-progress),
-      var(--range-track) 100%
+      var(--range-song) var(--slider-progress),
+      var(--range-song) 100%
     )
     center / 100% 5px no-repeat;
 }

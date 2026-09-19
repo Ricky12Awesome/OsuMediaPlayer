@@ -3,17 +3,17 @@ import { createPortal } from "react-dom";
 import { RefreshCw, Trash2, X } from "lucide-react";
 import type {
   CacheKind,
-  Track,
-  TrackContextMenuAction,
-  TrackContextMenuInfo,
+  Song,
+  SongContextMenuAction,
+  SongContextMenuInfo,
 } from "../../shared/types";
-import { TrackContextMenu } from "./TrackContextMenu";
+import { SongContextMenu } from "./SongContextMenu";
 
-export type TrackContextMenuState = {
-  track: Track;
+export type SongContextMenuState = {
+  song: Song;
   x: number;
   y: number;
-  info: TrackContextMenuInfo;
+  info: SongContextMenuInfo;
 };
 
 interface AppOverlaysProps {
@@ -21,9 +21,9 @@ interface AppOverlaysProps {
   onClearPlayerError: () => void;
   zoomIndicatorVisible: boolean;
   zoomPercent: number;
-  trackContextMenu: TrackContextMenuState | null;
-  onTrackContextMenuAction: (action: TrackContextMenuAction) => void;
-  onCloseTrackContextMenu: () => void;
+  songContextMenu: SongContextMenuState | null;
+  onSongContextMenuAction: (action: SongContextMenuAction) => void;
+  onCloseSongContextMenu: () => void;
   shortcutsDialogRef: RefObject<HTMLDialogElement | null>;
   shortcutsOpen: boolean;
   setShortcutsOpen: Dispatch<SetStateAction<boolean>>;
@@ -46,9 +46,9 @@ export function AppOverlays({
   onClearPlayerError,
   zoomIndicatorVisible,
   zoomPercent,
-  trackContextMenu,
-  onTrackContextMenuAction,
-  onCloseTrackContextMenu,
+  songContextMenu,
+  onSongContextMenuAction,
+  onCloseSongContextMenu,
   shortcutsDialogRef,
   shortcutsOpen,
   setShortcutsOpen,
@@ -81,15 +81,15 @@ export function AppOverlays({
         </div>
       )}
 
-      {trackContextMenu &&
+      {songContextMenu &&
         createPortal(
-          <TrackContextMenu
-            track={trackContextMenu.track}
-            x={trackContextMenu.x}
-            y={trackContextMenu.y}
-            info={trackContextMenu.info}
-            onAction={onTrackContextMenuAction}
-            onClose={onCloseTrackContextMenu}
+          <SongContextMenu
+            song={songContextMenu.song}
+            x={songContextMenu.x}
+            y={songContextMenu.y}
+            info={songContextMenu.info}
+            onAction={onSongContextMenuAction}
+            onClose={onCloseSongContextMenu}
           />,
           document.body,
         )}
@@ -119,17 +119,17 @@ export function AppOverlays({
           <div className="shortcuts">
             {[
               ["Play / pause", "Space"],
-              ["Previous track", "A"],
-              ["Next track", "D"],
+              ["Previous song", "A"],
+              ["Next song", "D"],
               ["Toggle song list", "Ctrl / ⌘ S"],
               ["Always show bottom bar", "Ctrl / ⌘ E"],
               ["Show / hide title / artist", "Tab"],
-              ["Random track", "F2"],
-              ["Previous random track", "Shift F2"],
+              ["Random song", "F2"],
+              ["Previous random song", "Shift F2"],
               ["Browse songs", "↑ / ↓"],
               ["Play selected song", "Enter"],
               ["Seek 5 seconds", "← / →"],
-              ["Search your library", "Ctrl / ⌘ F"],
+              ["Search your song list", "Ctrl / ⌘ F"],
               ["Zoom in", "Ctrl / ⌘ ="],
               ["Zoom out", "Ctrl / ⌘ -"],
               ["Reset zoom", "Ctrl / ⌘ 0"],
@@ -170,7 +170,7 @@ export function AppOverlays({
                 </h2>
                 <p id="cache-confirmation-description">
                   {cacheConfirmation === "index"
-                    ? "The library index will be rebuilt from your osu!lazer files the next time you refresh."
+                    ? "The song list index will be rebuilt from your osu!lazer files the next time you refresh."
                     : "Converted video files will be generated again when they are needed."}
                 </p>
               </div>
@@ -220,8 +220,8 @@ export function AppOverlays({
                 </h2>
                 <p id="settings-reset-confirmation-description">
                   Playback, layout, appearance, sorting, and visualizer
-                  preferences will be restored. Your library folder, favorites,
-                  and cached files will be kept.
+                  preferences will be restored. Your song list folder,
+                  favorites, and cached files will be kept.
                 </p>
               </div>
             </div>

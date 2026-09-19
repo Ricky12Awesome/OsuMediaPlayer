@@ -30,7 +30,7 @@ test("queue navigation honors repeat and boundaries", () => {
   );
 });
 
-test("shuffle history walks backward before selecting a new track", () => {
+test("shuffle history walks backward before selecting a new song", () => {
   const result = navigateShuffleHistory({
     history: { entries: [0, 2], position: 1 },
     current: 2,

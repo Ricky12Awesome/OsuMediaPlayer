@@ -1,7 +1,7 @@
 import type { ArtworkTheme } from "./artwork-theme";
 
-const storageKey = "osu-music-last-artwork-theme";
-const legacyStorageKey = "osu-music-artwork-theme-cache";
+const storageKey = "omp-last-artwork-theme";
+const legacyStorageKey = "omp-artwork-theme-cache";
 
 function isTheme(value: unknown): value is ArtworkTheme {
   if (!value || typeof value !== "object" || !("variables" in value))

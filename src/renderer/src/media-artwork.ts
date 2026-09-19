@@ -11,7 +11,7 @@ export interface ResolvedMediaArtwork {
   type?: string;
 }
 
-const fallbackTrackArtworkSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 24 24" fill="none">
+const fallbackSongArtworkSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 24 24" fill="none">
   <defs>
     <linearGradient id="background" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
       <stop stop-color="#644b78" />
@@ -26,7 +26,7 @@ const fallbackTrackArtworkSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="
 </svg>`;
 
 export const fallbackMediaArtwork: ResolvedMediaArtwork = {
-  url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(fallbackTrackArtworkSvg)}`,
+  url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(fallbackSongArtworkSvg)}`,
   owned: false,
   type: "image/svg+xml",
 };
@@ -45,7 +45,7 @@ export function directMediaImageUrl(
 }
 
 /**
- * Resolves an osu-media artwork URL into a blob URL for MediaMetadata.
+ * Resolves an omp artwork URL into a blob URL for MediaMetadata.
  * Chromium accepts custom URLs in page elements, but MediaImage only accepts
  * http(s), data, and blob URLs.
  */
@@ -63,7 +63,7 @@ export async function resolveMediaArtwork(
   } catch {
     return undefined;
   }
-  if (parsed.protocol !== "osu-media:") return undefined;
+  if (parsed.protocol !== "omp:") return undefined;
 
   const response = await fetch(parsed.href, { signal });
   if (!response.ok) return undefined;

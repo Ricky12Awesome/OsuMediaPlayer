@@ -8,15 +8,15 @@ import {
 
 /** Values persisted by the renderer. Keep this map in sync with the UI defaults. */
 export interface Preferences {
-  lastPlayedTrack: string | null;
-  libraryPath: string | undefined;
+  lastPlayedSong: string | null;
+  songListPath: string | undefined;
   favorites: string[];
   sort: SortKey;
   sortDescending: boolean;
   showTitleUnicode: boolean;
   showArtistUnicode: boolean;
   sidebarHidden: boolean;
-  libraryPosition: "left" | "right";
+  songListPosition: "left" | "right";
   transportLayout: "controls-left" | "controls-centered";
   showNowPlayingTitleArtist: boolean;
   debugMode: boolean;
@@ -30,7 +30,7 @@ export interface Preferences {
     | "bottom-center"
     | "bottom-left"
     | "left-center";
-  libraryWidth: number;
+  songListWidth: number;
   visualizerPanelOpen: boolean;
   sidePanelWidth: number;
   playback: {
@@ -51,24 +51,24 @@ type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 type PreferenceKey = keyof Preferences;
 
 const keys: Record<PreferenceKey, string> = {
-  lastPlayedTrack: "osu-music-last-played-track",
-  libraryPath: "osu-music-library-path",
-  favorites: "osu-music-favorites",
-  sort: "osu-music-sort",
-  sortDescending: "osu-music-sort-descending",
-  showTitleUnicode: "osu-music-show-title-unicode",
-  showArtistUnicode: "osu-music-show-artist-unicode",
-  sidebarHidden: "osu-music-sidebar-hidden",
-  libraryPosition: "osu-music-library-position",
-  transportLayout: "osu-music-transport-layout",
-  showNowPlayingTitleArtist: "osu-music-show-now-playing-title-artist",
-  debugMode: "osu-music-debug-mode",
-  artworkTheme: "osu-music-artwork-theme",
-  nowPlayingPosition: "osu-music-now-playing-position",
-  libraryWidth: "osu-music-library-width",
-  visualizerPanelOpen: "osu-music-visualizer-panel-open",
-  sidePanelWidth: "osu-music-side-panel-width",
-  playback: "osu-music-player:settings",
+  lastPlayedSong: "omp-last-played-song",
+  songListPath: "omp-song-list-path",
+  favorites: "omp-favorites",
+  sort: "omp-sort",
+  sortDescending: "omp-sort-descending",
+  showTitleUnicode: "omp-show-title-unicode",
+  showArtistUnicode: "omp-show-artist-unicode",
+  sidebarHidden: "omp-sidebar-hidden",
+  songListPosition: "omp-song-list-position",
+  transportLayout: "omp-transport-layout",
+  showNowPlayingTitleArtist: "omp-show-now-playing-title-artist",
+  debugMode: "omp-debug-mode",
+  artworkTheme: "omp-artwork-theme",
+  nowPlayingPosition: "omp-now-playing-position",
+  songListWidth: "omp-song-list-width",
+  visualizerPanelOpen: "omp-visualizer-panel-open",
+  sidePanelWidth: "omp-side-panel-width",
+  playback: "omp-player:settings",
 };
 
 const positions = [
@@ -82,21 +82,21 @@ const positions = [
   "left-center",
 ] as const;
 export const preferenceDefaults: Preferences = {
-  lastPlayedTrack: null,
-  libraryPath: undefined,
+  lastPlayedSong: null,
+  songListPath: undefined,
   favorites: [],
   sort: "title",
   sortDescending: false,
   showTitleUnicode: false,
   showArtistUnicode: false,
   sidebarHidden: false,
-  libraryPosition: "right",
+  songListPosition: "right",
   transportLayout: "controls-centered",
   showNowPlayingTitleArtist: true,
   debugMode: false,
   artworkTheme: true,
   nowPlayingPosition: "top-left",
-  libraryWidth: 430,
+  songListWidth: 430,
   visualizerPanelOpen: false,
   sidePanelWidth: 320,
   playback: {
@@ -139,9 +139,9 @@ function parseValue<K extends PreferenceKey>(
 ): Preferences[K] {
   const fallback = preferenceDefaults[key];
   switch (key) {
-    case "lastPlayedTrack":
+    case "lastPlayedSong":
       return (typeof value === "string" ? value : null) as Preferences[K];
-    case "libraryPath":
+    case "songListPath":
       return parseString(
         value,
         fallback as string | undefined,
@@ -165,7 +165,7 @@ function parseValue<K extends PreferenceKey>(
     case "artworkTheme":
     case "visualizerPanelOpen":
       return parseBoolean(value, fallback as boolean) as Preferences[K];
-    case "libraryPosition":
+    case "songListPosition":
       return (
         value === "left" || value === "right" ? value : fallback
       ) as Preferences[K];
@@ -181,7 +181,7 @@ function parseValue<K extends PreferenceKey>(
           ? value
           : fallback
       ) as Preferences[K];
-    case "libraryWidth":
+    case "songListWidth":
       return Math.min(
         720,
         Math.max(320, parseNumber(value, fallback as number)),

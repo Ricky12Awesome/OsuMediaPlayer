@@ -16,9 +16,9 @@ import {
   Music2,
   SearchX,
 } from "lucide-react";
-import type { LibraryQuery, PlayerAPI, Track } from "../../shared/types";
-import { TrackArt } from "./TrackArt";
-import { displayTrackArtist, displayTrackTitle } from "./track-title";
+import type { SongListQuery, PlayerAPI, Song } from "../../shared/types";
+import { SongArt } from "./SongArt";
+import { displaySongArtist, displaySongTitle } from "./song-title";
 
 const pageSize = 64;
 const pageCacheLimit = 8;
@@ -31,51 +31,51 @@ function formatDuration(value: number): string {
   return Math.floor(seconds / 60) + ":" + String(seconds % 60).padStart(2, "0");
 }
 
-type LibraryCache = {
-  query: LibraryQuery;
-  pages: Map<number, Track[]>;
-  stalePages: Map<number, Track[]>;
+type SongListCache = {
+  query: SongListQuery;
+  pages: Map<number, Song[]>;
+  stalePages: Map<number, Song[]>;
   previousTotal: number | null;
-  requests: Map<number, Promise<Track[] | null>>;
+  requests: Map<number, Promise<Song[] | null>>;
   errors: Map<number, string>;
   total: number | null;
   active: boolean;
   firstReported: boolean;
 };
 
-export interface VirtualTrackListProps {
+export interface VirtualSongListProps {
   api: PlayerAPI;
-  query: LibraryQuery;
+  query: SongListQuery;
   revision: number;
-  currentTrackId?: string;
-  followCurrentTrackIndex?: number;
-  libraryReady: boolean;
+  currentSongId?: string;
+  followCurrentSongIndex?: number;
+  songListReady: boolean;
   playing: boolean;
   showTitleUnicode: boolean;
   showArtistUnicode: boolean;
   favorites: Set<string>;
-  onPlay: (track: Track, index: number) => void;
-  onFavorite: (track: Track) => void;
-  onContextMenu: (track: Track, x: number, y: number) => void;
+  onPlay: (song: Song, index: number) => void;
+  onFavorite: (song: Song) => void;
+  onContextMenu: (song: Song, x: number, y: number) => void;
   onTotal: (total: number) => void;
-  onFirstTrack?: (track: Track) => void;
+  onFirstSong?: (song: Song) => void;
   keyboardControlsRef?: {
-    current: VirtualTrackListKeyboardControls | null;
+    current: VirtualSongListKeyboardControls | null;
   };
 }
 
-export interface VirtualTrackListKeyboardControls {
+export interface VirtualSongListKeyboardControls {
   moveAndPlay: (direction: -1 | 1) => void;
   playSelected: () => void;
 }
 
-export function VirtualTrackList({
+export function VirtualSongList({
   api,
   query,
   revision,
-  currentTrackId,
-  followCurrentTrackIndex,
-  libraryReady,
+  currentSongId,
+  followCurrentSongIndex,
+  songListReady,
   playing,
   showTitleUnicode,
   showArtistUnicode,
@@ -84,9 +84,9 @@ export function VirtualTrackList({
   onFavorite,
   onContextMenu,
   onTotal,
-  onFirstTrack,
+  onFirstSong,
   keyboardControlsRef,
-}: VirtualTrackListProps) {
+}: VirtualSongListProps) {
   const listRef = useRef<HTMLDivElement>(null);
   const latest = useRef({
     query,
@@ -94,7 +94,7 @@ export function VirtualTrackList({
     onFavorite,
     onContextMenu,
     onTotal,
-    onFirstTrack,
+    onFirstSong,
   });
   const queryKey = useMemo(
     () =>
@@ -111,15 +111,15 @@ export function VirtualTrackList({
   );
   const previousCache = useRef<{
     queryKey: string;
-    cache: LibraryCache;
+    cache: SongListCache;
   } | null>(null);
-  const cache = useMemo<LibraryCache>(() => {
+  const cache = useMemo<SongListCache>(() => {
     const previous =
       previousCache.current?.queryKey === queryKey
         ? previousCache.current.cache
         : null;
     return {
-      query: JSON.parse(queryKey) as LibraryQuery,
+      query: JSON.parse(queryKey) as SongListQuery,
       pages: new Map(),
       // Keep visible songs on screen while a streamed revision refreshes the pages.
       stalePages: new Map(
@@ -139,7 +139,7 @@ export function VirtualTrackList({
   const [, rerender] = useReducer((value: number) => value + 1, 0);
   const activeRequests = useRef(0);
   const pendingActivation = useRef<{
-    cache: LibraryCache;
+    cache: SongListCache;
     index: number;
   } | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
@@ -158,7 +158,7 @@ export function VirtualTrackList({
       onFavorite,
       onContextMenu,
       onTotal,
-      onFirstTrack,
+      onFirstSong,
     };
   });
 
@@ -191,7 +191,7 @@ export function VirtualTrackList({
   }, []);
 
   const loadPage = useCallback(
-    (page: number, retry = false): Promise<Track[] | null> => {
+    (page: number, retry = false): Promise<Song[] | null> => {
       if (!cache.active || activeCache.current !== cache || page < 0)
         return Promise.resolve(null);
 
@@ -216,7 +216,7 @@ export function VirtualTrackList({
       activeRequests.current += 1;
       const nextRequest = Promise.resolve()
         .then(() =>
-          api.queryLibrary({
+          api.querySongList({
             ...cache.query,
             offset: page * pageSize,
             limit: pageSize,
@@ -242,7 +242,7 @@ export function VirtualTrackList({
           latest.current.onTotal(result.total);
           if (page === 0 && result.items[0] && !cache.firstReported) {
             cache.firstReported = true;
-            latest.current.onFirstTrack?.(result.items[0]);
+            latest.current.onFirstSong?.(result.items[0]);
           }
           if (selectedIndex.current >= result.total && result.total > 0) {
             selectedIndex.current = result.total - 1;
@@ -256,7 +256,7 @@ export function VirtualTrackList({
               page,
               reason instanceof Error
                 ? reason.message
-                : "Unable to load tracks.",
+                : "Unable to load songs.",
             );
           }
           return null;
@@ -298,10 +298,10 @@ export function VirtualTrackList({
     const pending = pendingActivation.current;
     if (pending?.cache === cache && pending.index === selectedIndex.current) {
       const page = Math.floor(pending.index / pageSize);
-      const track = cache.pages.get(page)?.[pending.index % pageSize];
-      if (track) {
+      const song = cache.pages.get(page)?.[pending.index % pageSize];
+      if (song) {
         pendingActivation.current = null;
-        latest.current.onPlay(track, pending.index);
+        latest.current.onPlay(song, pending.index);
       } else if (cache.errors.has(page)) {
         pendingActivation.current = null;
       } else {
@@ -346,24 +346,24 @@ export function VirtualTrackList({
   );
 
   useEffect(() => {
-    if (followCurrentTrackIndex !== undefined)
-      select(followCurrentTrackIndex, true);
-  }, [followCurrentTrackIndex, select]);
+    if (followCurrentSongIndex !== undefined)
+      select(followCurrentSongIndex, true);
+  }, [followCurrentSongIndex, select]);
 
   // Streamed batches can insert songs ahead of the current one. Resolve its
   // location from the latest index so selection stays on the playing/saved
-  // song while the rest of the library continues loading.
+  // song while the rest of the song list continues loading.
   useEffect(() => {
     if (
-      !libraryReady ||
+      !songListReady ||
       total === null ||
-      !currentTrackId ||
-      !api.getTrackLocation
+      !currentSongId ||
+      !api.getSongLocation
     )
       return;
     let cancelled = false;
     void api
-      .getTrackLocation(currentTrackId, query)
+      .getSongLocation(currentSongId, query)
       .then((location) => {
         if (!cancelled && location) select(location.index, true);
       })
@@ -373,9 +373,9 @@ export function VirtualTrackList({
     return () => {
       cancelled = true;
     };
-  }, [api, cache, currentTrackId, libraryReady, query, select, total]);
+  }, [api, cache, currentSongId, songListReady, query, select, total]);
 
-  const getTrack = (index: number) => {
+  const getSong = (index: number) => {
     const page = Math.floor(index / pageSize);
     return (cache.pages.get(page) ?? cache.stalePages.get(page))?.[
       index % pageSize
@@ -392,10 +392,10 @@ export function VirtualTrackList({
       )
         return;
       const page = Math.floor(index / pageSize);
-      const track = getTrack(index);
-      if (track) {
+      const song = getSong(index);
+      if (song) {
         pendingActivation.current = null;
-        latest.current.onPlay(track, index);
+        latest.current.onPlay(song, index);
       } else {
         pendingActivation.current = { cache, index };
         void loadPage(page, true);
@@ -496,30 +496,30 @@ export function VirtualTrackList({
 
   const rows = [];
   for (let index = visibleFirst; index < visibleLast; index += 1) {
-    const track = getTrack(index);
-    const current = Boolean(track && track.id === currentTrackId);
+    const song = getSong(index);
+    const current = Boolean(song && song.id === currentSongId);
     const error = cache.errors.get(Math.floor(index / pageSize));
-    const title = displayTrackTitle(track, showTitleUnicode);
-    const artist = displayTrackArtist(track, showArtistUnicode);
+    const title = displaySongTitle(song, showTitleUnicode);
+    const artist = displaySongArtist(song, showArtistUnicode);
     rows.push(
       <div
-        id={`${listId}-track-${index}`}
-        key={track?.id ?? `loading-${index}`}
+        id={`${listId}-song-${index}`}
+        key={song?.id ?? `loading-${index}`}
         className={
-          "track-row" +
+          "song-row" +
           (current ? " is-current" : "") +
           (selected === index ? " is-selected" : "") +
-          (track ? "" : " row-placeholder")
+          (song ? "" : " row-placeholder")
         }
         role="option"
         aria-selected={selected === index}
         aria-posinset={index + 1}
         aria-setsize={total ?? undefined}
-        aria-disabled={!track || undefined}
+        aria-disabled={!song || undefined}
         aria-label={
-          track
-            ? title + ", " + artist + (current ? ", current track" : "")
-            : "Loading track " + (index + 1)
+          song
+            ? title + ", " + artist + (current ? ", current song" : "")
+            : "Loading song " + (index + 1)
         }
         style={{
           position: "absolute",
@@ -529,74 +529,73 @@ export function VirtualTrackList({
           right: 0,
         }}
         onClick={() => {
-          if (!track) return;
+          if (!song) return;
           select(index);
           listRef.current?.focus({ preventScroll: true });
           choose(index);
         }}
         onContextMenu={(event) => {
-          if (!track) return;
+          if (!song) return;
           event.preventDefault();
           event.stopPropagation();
           select(index);
           listRef.current?.focus({ preventScroll: true });
-          latest.current.onContextMenu(track, event.clientX, event.clientY);
+          latest.current.onContextMenu(song, event.clientX, event.clientY);
         }}
       >
-        {track ? (
+        {song ? (
           <>
-            <span className="track-number" aria-hidden="true">
+            <span className="song-number" aria-hidden="true">
               {String(index + 1).padStart(2, "0")}
             </span>
-            <TrackArt track={track} playing={current && playing} />
-            <div className="track-details">
-              <div className="track-title" title={title}>
+            <SongArt song={song} playing={current && playing} />
+            <div className="song-details">
+              <div className="song-title" title={title}>
                 {title}
               </div>
-              <div className="track-artist" title={artist}>
+              <div className="song-artist" title={artist}>
                 {artist}
               </div>
             </div>
-            <span className="track-duration">
-              {formatDuration(track.duration)}
+            <span className="song-duration">
+              {formatDuration(song.duration)}
             </span>
             <button
               type="button"
               className={
-                "track-favorite" +
-                (favorites.has(track.id) ? " is-favorite" : "")
+                "song-favorite" + (favorites.has(song.id) ? " is-favorite" : "")
               }
               aria-label={
-                (favorites.has(track.id) ? "Remove " : "Add ") +
+                (favorites.has(song.id) ? "Remove " : "Add ") +
                 title +
-                (favorites.has(track.id) ? " from favorites" : " to favorites")
+                (favorites.has(song.id) ? " from favorites" : " to favorites")
               }
-              aria-pressed={favorites.has(track.id)}
+              aria-pressed={favorites.has(song.id)}
               title={
-                favorites.has(track.id) ? "Remove favorite" : "Add favorite"
+                favorites.has(song.id) ? "Remove favorite" : "Add favorite"
               }
               onClick={(event) => {
                 event.stopPropagation();
-                latest.current.onFavorite(track);
+                latest.current.onFavorite(song);
               }}
             >
               <Heart
                 size={17}
-                fill={favorites.has(track.id) ? "currentColor" : "none"}
+                fill={favorites.has(song.id) ? "currentColor" : "none"}
               />
             </button>
           </>
         ) : (
           <>
-            <span className="track-number" aria-hidden="true">
+            <span className="song-number" aria-hidden="true">
               {String(index + 1).padStart(2, "0")}
             </span>
-            <span className="track-art art-fallback" aria-hidden="true">
+            <span className="song-art art-fallback" aria-hidden="true">
               <Music2 size={22} />
             </span>
-            <div className="track-details">
-              <div className="track-title">
-                {error ? "Unable to load track" : "Loading…"}
+            <div className="song-details">
+              <div className="song-title">
+                {error ? "Unable to load song" : "Loading…"}
               </div>
             </div>
             {error && (
@@ -619,15 +618,15 @@ export function VirtualTrackList({
   const firstError = total === null ? cache.errors.get(0) : undefined;
   return (
     <div
-      className="track-list"
+      className="song-list"
       ref={listRef}
       role="listbox"
-      aria-label="Music library"
+      aria-label="Song list"
       tabIndex={-1}
       aria-busy={total === null && !firstError}
       aria-activedescendant={
         selected >= visibleFirst && selected < visibleLast
-          ? `${listId}-track-${selected}`
+          ? `${listId}-song-${selected}`
           : undefined
       }
       onKeyDown={onKeyDown}
@@ -655,7 +654,7 @@ export function VirtualTrackList({
       ) : total === 0 ? (
         <div className="list-state" role="status">
           <SearchX size={30} />
-          <strong>No tracks found</strong>
+          <strong>No songs found</strong>
           <p>Try another search or filter.</p>
         </div>
       ) : (

@@ -13,19 +13,22 @@ import {
 import { readFile, stat } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import type {
-  LibrarySummary,
+  SongListSummary,
   MediaAction,
-  Track,
-  TrackDebugInfo,
-  TrackDebugMediaInfo,
-  TrackContextMenuAction,
-  TrackContextMenuInfo,
+  Song,
+  SongDebugInfo,
+  SongDebugMediaInfo,
+  SongContextMenuAction,
+  SongContextMenuInfo,
   VideoSource,
 } from "../shared/types";
-import { LibraryIndex } from "./library/index";
+import { SongListIndex } from "./song-list/index";
 import { directorySize } from "./cache";
-import { clearLibraryCache } from "./library/cache";
-import { loadLibraryInWorker, waitForLibraryWorkers } from "./library/loader";
+import { clearSongListCache } from "./song-list/cache";
+import {
+  loadSongListInWorker,
+  waitForSongListWorkers,
+} from "./song-list/loader";
 import {
   mimeForFilename,
   resolveMediaFile,
@@ -36,7 +39,7 @@ import { VideoTranscoder } from "./video/transcoder";
 import { ffprobeFor, runProcess } from "./video/process";
 import { resolveRendererUrl } from "./renderer-url";
 import {
-  parseLibraryQuery,
+  parseSongListQuery,
   parseVideoEncodingSettings,
 } from "./ipc-validation";
 
@@ -57,7 +60,7 @@ if (isWaylandSession)
 
 protocol.registerSchemesAsPrivileged([
   {
-    scheme: "osu-media",
+    scheme: "omp",
     privileges: {
       standard: true,
       secure: true,
@@ -71,8 +74,8 @@ protocol.registerSchemesAsPrivileged([
 let window: BrowserWindow | null = null;
 let rendererReady = false;
 let windowReadyToShow = false;
-let library: LibraryIndex | null = null;
-let pendingLoad: Promise<LibraryIndex> | null = null;
+let songList: SongListIndex | null = null;
+let pendingLoad: Promise<SongListIndex> | null = null;
 let pendingIndexCacheClear: Promise<void> | null = null;
 let pendingPath: string | undefined;
 let importController: AbortController | null = null;
@@ -86,10 +89,10 @@ const zoomStages = [
   25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400, 500,
 ] as const;
 
-function replaceLibrary(next: LibraryIndex): void {
-  if (library && library !== next && !library.sharesRealm(next))
-    library.close();
-  library = next;
+function replaceSongList(next: SongListIndex): void {
+  if (songList && songList !== next && !songList.sharesRealm(next))
+    songList.close();
+  songList = next;
 }
 
 function currentZoomPercent(): number {
@@ -159,9 +162,9 @@ function isAbortError(error: unknown): boolean {
   );
 }
 
-function cancelledLibrarySummary(installPath?: string): LibrarySummary {
+function cancelledSongListSummary(installPath?: string): SongListSummary {
   return {
-    trackCount: 0,
+    songCount: 0,
     beatmapCount: 0,
     collectionCount: 0,
     collections: [],
@@ -181,7 +184,7 @@ function createWindow(): void {
     minHeight: 580,
     backgroundColor: "#17131f",
     frame: false,
-    title: "osu! music",
+    title: "OsuMediaPlayer",
     show: false,
     webPreferences: {
       preload: join(__dirname, "preload.cjs"),
@@ -216,9 +219,9 @@ function createWindow(): void {
   else void window.loadFile(join(__dirname, "../dist/index.html"));
 }
 
-type TrackAssetKind = "audio" | "background" | "video";
+type SongAssetKind = "audio" | "background" | "video";
 
-const trackContextMenuActions = new Set<TrackContextMenuAction>([
+const songContextMenuActions = new Set<SongContextMenuAction>([
   "copy-title",
   "copy-title-unicode",
   "copy-artist",
@@ -237,30 +240,27 @@ const trackContextMenuActions = new Set<TrackContextMenuAction>([
   "open-video",
 ]);
 
-function isTrackContextMenuAction(
+function isSongContextMenuAction(
   value: unknown,
-): value is TrackContextMenuAction {
+): value is SongContextMenuAction {
   return (
     typeof value === "string" &&
-    trackContextMenuActions.has(value as TrackContextMenuAction)
+    songContextMenuActions.has(value as SongContextMenuAction)
   );
 }
 
-function assetHashForTrack(
-  track: Track,
-  kind: TrackAssetKind,
-): string | undefined {
-  if (kind === "audio") return track.audioHash;
-  if (kind === "background") return track.backgroundHash;
-  return track.videoHash;
+function assetHashForSong(song: Song, kind: SongAssetKind): string | undefined {
+  if (kind === "audio") return song.audioHash;
+  if (kind === "background") return song.backgroundHash;
+  return song.videoHash;
 }
 
-async function resolveTrackAsset(
-  index: LibraryIndex,
-  track: Track,
-  kind: TrackAssetKind,
+async function resolveSongAsset(
+  index: SongListIndex,
+  song: Song,
+  kind: SongAssetKind,
 ): Promise<ResolvedMediaFile | null> {
-  const hash = assetHashForTrack(track, kind);
+  const hash = assetHashForSong(song, kind);
   if (!hash) return null;
   try {
     return await resolveMediaFile(index, hash);
@@ -286,20 +286,20 @@ function openAsset(asset: ResolvedMediaFile | null): void {
   });
 }
 
-async function getTrackContextMenuInfo(
-  index: LibraryIndex,
-  track: Track,
-): Promise<TrackContextMenuInfo> {
+async function getSongContextMenuInfo(
+  index: SongListIndex,
+  song: Song,
+): Promise<SongContextMenuInfo> {
   const [audio, background, video] = await Promise.all([
-    resolveTrackAsset(index, track, "audio"),
-    resolveTrackAsset(index, track, "background"),
-    resolveTrackAsset(index, track, "video"),
+    resolveSongAsset(index, song, "audio"),
+    resolveSongAsset(index, song, "background"),
+    resolveSongAsset(index, song, "video"),
   ]);
   return {
     audio: Boolean(audio),
     background: Boolean(background),
     video: Boolean(video),
-    listing: track.onlineId !== undefined,
+    listing: song.onlineId !== undefined,
   };
 }
 
@@ -316,7 +316,7 @@ async function probeDebugMedia(
   kind: DebugMediaKind,
 ): Promise<
   Pick<
-    TrackDebugMediaInfo,
+    SongDebugMediaInfo,
     "duration" | "resolution" | "frameRate" | "codec" | "bitrate"
   >
 > {
@@ -401,17 +401,17 @@ async function probeDebugMedia(
   }
 }
 
-async function getTrackDebugInfo(
-  index: LibraryIndex,
-  track: Track,
+async function getSongDebugInfo(
+  index: SongListIndex,
+  song: Song,
   videoSource: VideoSource = "none",
-): Promise<TrackDebugInfo> {
+): Promise<SongDebugInfo> {
   const resolve = async (
     kind: DebugMediaKind,
     hash: string | undefined,
-  ): Promise<TrackDebugMediaInfo | null> => {
+  ): Promise<SongDebugMediaInfo | null> => {
     if (!hash) return null;
-    const resolved = await resolveTrackAsset(index, track, kind);
+    const resolved = await resolveSongAsset(index, song, kind);
     if (!resolved) return null;
     const probe = await probeDebugMedia(resolved.filename, kind);
     return {
@@ -423,18 +423,18 @@ async function getTrackDebugInfo(
     };
   };
   const [audio, background, originalVideo] = await Promise.all([
-    resolve("audio", track.audioHash),
-    resolve("background", track.backgroundHash),
-    resolve("video", track.videoHash),
+    resolve("audio", song.audioHash),
+    resolve("background", song.backgroundHash),
+    resolve("video", song.videoHash),
   ]);
-  let encodedVideo: TrackDebugMediaInfo | null = null;
+  let encodedVideo: SongDebugMediaInfo | null = null;
   if (
-    track.videoHash &&
+    song.videoHash &&
     (videoSource === "Cache" || videoSource === "HLS") &&
     videoTranscoder
   ) {
     const encodedPath = await videoTranscoder.playbackFilename(
-      track.videoHash,
+      song.videoHash,
       videoSource,
     );
     if (encodedPath) {
@@ -445,13 +445,13 @@ async function getTrackDebugInfo(
         ]);
         const codec =
           probe.codec ??
-          (await videoTranscoder.playbackCodec(track.videoHash, videoSource)) ??
+          (await videoTranscoder.playbackCodec(song.videoHash, videoSource)) ??
           originalVideo?.codec ??
           null;
         encodedVideo = {
           name: debugAssetName(encodedPath),
           path: encodedPath,
-          hash: track.videoHash,
+          hash: song.videoHash,
           fileSize: file.size,
           ...probe,
           codec,
@@ -465,30 +465,30 @@ async function getTrackDebugInfo(
 }
 
 function copyTextForAction(
-  track: Track,
-  action: TrackContextMenuAction,
+  song: Song,
+  action: SongContextMenuAction,
 ): string | undefined {
   switch (action) {
     case "copy-title":
-      return track.title;
+      return song.title;
     case "copy-title-unicode":
-      return track.titleUnicode;
+      return song.titleUnicode;
     case "copy-artist":
-      return track.artist;
+      return song.artist;
     case "copy-artist-unicode":
-      return track.artistUnicode;
+      return song.artistUnicode;
     case "copy-online-id":
-      return track.onlineId === undefined ? undefined : String(track.onlineId);
+      return song.onlineId === undefined ? undefined : String(song.onlineId);
     case "copy-md5":
-      return track.md5Hash;
+      return song.md5Hash;
     default:
       return undefined;
   }
 }
 
 function assetKindForAction(
-  action: TrackContextMenuAction,
-): TrackAssetKind | undefined {
+  action: SongContextMenuAction,
+): SongAssetKind | undefined {
   if (action.includes("audio")) return "audio";
   if (action.includes("background")) return "background";
   if (action.includes("video")) return "video";
@@ -502,7 +502,7 @@ function setupIPC(): void {
     if (windowReadyToShow) window?.show();
   });
   ipcMain.handle(
-    "library:load-cached",
+    "song-list:load-cached",
     async (event, requestedPath: unknown) => {
       requireTrusted(event);
       if (quitting || pendingLoad) return null;
@@ -513,18 +513,18 @@ function setupIPC(): void {
         return null;
       const installPath = requestedPath as string | undefined;
       try {
-        const loaded = await loadLibraryInWorker(
+        const loaded = await loadSongListInWorker(
           installPath,
           undefined,
           undefined,
           (index) => {
-            library = index;
+            songList = index;
           },
-          join(app.getPath("userData"), "library-cache"),
+          join(app.getPath("userData"), "song-list-cache"),
           undefined,
           true,
         );
-        replaceLibrary(loaded);
+        replaceSongList(loaded);
         return loaded.summary;
       } catch {
         // A miss is expected here. The renderer will begin the normal streamed
@@ -534,8 +534,8 @@ function setupIPC(): void {
     },
   );
   ipcMain.handle(
-    "library:load",
-    async (event, requestedPath: unknown, priorityTrackId: unknown) => {
+    "song-list:load",
+    async (event, requestedPath: unknown, prioritySongId: unknown) => {
       requireTrusted(event);
       if (quitting) throw new Error("The player is closing.");
       if (pendingIndexCacheClear) await pendingIndexCacheClear;
@@ -546,10 +546,10 @@ function setupIPC(): void {
         throw new Error("Choose an absolute osu!lazer directory path.");
       const installPath = requestedPath as string | undefined;
       if (
-        priorityTrackId !== undefined &&
-        (typeof priorityTrackId !== "string" || priorityTrackId.length > 256)
+        prioritySongId !== undefined &&
+        (typeof prioritySongId !== "string" || prioritySongId.length > 256)
       )
-        throw new Error("Invalid saved track ID.");
+        throw new Error("Invalid saved song ID.");
       if (pendingLoad) {
         if (pendingPath === installPath) {
           try {
@@ -558,58 +558,58 @@ function setupIPC(): void {
             // A duplicate request shares the original import promise. Handle its
             // expected shutdown cancellation the same way as the original call.
             if (quitting && isAbortError(error))
-              return library?.summary ?? cancelledLibrarySummary(installPath);
+              return songList?.summary ?? cancelledSongListSummary(installPath);
             throw error;
           }
         }
         throw new Error(
-          "A library import is already running. Wait for it to finish, then choose another folder.",
+          "A song list import is already running. Wait for it to finish, then choose another folder.",
         );
       }
       importController = new AbortController();
       pendingPath = installPath;
-      const previousLibrary = library;
-      pendingLoad = loadLibraryInWorker(
+      const previousSongList = songList;
+      pendingLoad = loadSongListInWorker(
         installPath,
         (progress) => {
           if (window && !window.isDestroyed())
-            window.webContents.send("library:progress", progress);
+            window.webContents.send("song-list:progress", progress);
         },
         importController!.signal,
         (index) => {
-          // Keep the previous library available for rollback if streaming fails.
+          // Keep the previous song list available for rollback if streaming fails.
           // If loading is cancelled, the callback can then restore it.
-          library = index;
+          songList = index;
           if (window && !window.isDestroyed())
-            window.webContents.send("library:progress", {
+            window.webContents.send("song-list:progress", {
               phase: "reading",
               records: index.summary.beatmapCount,
               summary: index.summary,
             });
         },
-        join(app.getPath("userData"), "library-cache"),
-        priorityTrackId as string | undefined,
+        join(app.getPath("userData"), "song-list-cache"),
+        prioritySongId as string | undefined,
       );
       try {
         const loaded = await pendingLoad;
         if (
-          previousLibrary &&
-          previousLibrary !== loaded &&
-          !previousLibrary.sharesRealm(loaded)
+          previousSongList &&
+          previousSongList !== loaded &&
+          !previousSongList.sharesRealm(loaded)
         )
-          previousLibrary.close();
-        replaceLibrary(loaded);
+          previousSongList.close();
+        replaceSongList(loaded);
         return loaded.summary;
       } catch (error) {
-        // Restore the previous library if the new import fails or is cancelled.
-        if (previousLibrary) library = previousLibrary;
-        else library = null;
+        // Restore the previous song list if the new import fails or is cancelled.
+        if (previousSongList) songList = previousSongList;
+        else songList = null;
         // Closing the app intentionally aborts the pending IPC request. Returning
         // a harmless summary prevents Electron from reporting that expected
         // cancellation as an unhandled handler error.
         if (quitting && isAbortError(error))
           return (
-            previousLibrary?.summary ?? cancelledLibrarySummary(installPath)
+            previousSongList?.summary ?? cancelledSongListSummary(installPath)
           );
         throw error;
       } finally {
@@ -622,7 +622,7 @@ function setupIPC(): void {
   ipcMain.handle("cache:usage", async (event) => {
     requireTrusted(event);
     const [index, video] = await Promise.all([
-      directorySize(join(app.getPath("userData"), "library-cache")),
+      directorySize(join(app.getPath("userData"), "song-list-cache")),
       directorySize(join(app.getPath("userData"), "video-cache")),
     ]);
     return { index, video };
@@ -638,12 +638,12 @@ function setupIPC(): void {
     }
     if (pendingLoad)
       throw new Error(
-        "Wait for the current library import to finish before clearing the cache.",
+        "Wait for the current song list import to finish before clearing the cache.",
       );
     if (pendingIndexCacheClear) return pendingIndexCacheClear;
 
-    const clear = clearLibraryCache(
-      join(app.getPath("userData"), "library-cache"),
+    const clear = clearSongListCache(
+      join(app.getPath("userData"), "song-list-cache"),
     );
     pendingIndexCacheClear = clear;
     try {
@@ -652,26 +652,26 @@ function setupIPC(): void {
       if (pendingIndexCacheClear === clear) pendingIndexCacheClear = null;
     }
   });
-  ipcMain.handle("library:query", (event, input: unknown) => {
+  ipcMain.handle("song-list:query", (event, input: unknown) => {
     requireTrusted(event);
-    if (!library) throw new Error("The library has not been loaded yet.");
-    return library.query(parseLibraryQuery(input));
+    if (!songList) throw new Error("The song list has not been loaded yet.");
+    return songList.query(parseSongListQuery(input));
   });
-  ipcMain.handle("library:track", (event, id: unknown) => {
+  ipcMain.handle("song-list:song", (event, id: unknown) => {
     requireTrusted(event);
-    return typeof id === "string" ? (library?.getTrack(id) ?? null) : null;
+    return typeof id === "string" ? (songList?.getSong(id) ?? null) : null;
   });
   ipcMain.handle(
-    "library:track-debug-info",
+    "song-list:song-debug-info",
     async (event, id: unknown, source: unknown) => {
       requireTrusted(event);
-      if (typeof id !== "string" || !library) return null;
-      const track = library.getTrack(id);
+      if (typeof id !== "string" || !songList) return null;
+      const song = songList.getSong(id);
       const videoSource: VideoSource =
         source === "Original" || source === "Cache" || source === "HLS"
           ? source
           : "none";
-      return track ? getTrackDebugInfo(library, track, videoSource) : null;
+      return song ? getSongDebugInfo(songList, song, videoSource) : null;
     },
   );
   ipcMain.handle("clipboard:write-text", async (event, value: unknown) => {
@@ -680,22 +680,22 @@ function setupIPC(): void {
     clipboard.writeText(value);
   });
   ipcMain.handle(
-    "library:track-location",
+    "song-list:song-location",
     (event, id: unknown, input: unknown) => {
       requireTrusted(event);
-      if (typeof id !== "string" || !library) return null;
-      return library.getTrackLocation(id, parseLibraryQuery(input, true));
+      if (typeof id !== "string" || !songList) return null;
+      return songList.getSongLocation(id, parseSongListQuery(input, true));
     },
   );
   ipcMain.handle(
     "video:prepare",
-    async (event, trackId: unknown, settings: unknown) => {
+    async (event, songId: unknown, settings: unknown) => {
       requireTrusted(event);
-      if (typeof trackId !== "string") throw new Error("Invalid track ID.");
+      if (typeof songId !== "string") throw new Error("Invalid song ID.");
       return (
         (await videoTranscoder?.prepare(
-          library,
-          trackId,
+          songList,
+          songId,
           parseVideoEncodingSettings(settings),
         )) ?? null
       );
@@ -722,51 +722,51 @@ function setupIPC(): void {
     requireTrusted(event);
     return currentZoomPercent();
   });
-  ipcMain.handle("library:choose", async (event) => {
+  ipcMain.handle("song-list:choose", async (event) => {
     requireTrusted(event);
     const result = await dialog.showOpenDialog(window!, {
       title: "Choose your osu!lazer directory",
       message: "Choose the directory containing client.realm and files.",
       properties: ["openDirectory"],
-      defaultPath: library?.summary.installPath,
+      defaultPath: songList?.summary.installPath,
     });
     return result.canceled ? null : (result.filePaths[0] ?? null);
   });
-  ipcMain.handle("track:context-info", async (event, id: unknown) => {
+  ipcMain.handle("song:context-info", async (event, id: unknown) => {
     requireTrusted(event);
-    if (typeof id !== "string" || !library) return null;
-    const track = library.getTrack(id);
-    return track ? getTrackContextMenuInfo(library, track) : null;
+    if (typeof id !== "string" || !songList) return null;
+    const song = songList.getSong(id);
+    return song ? getSongContextMenuInfo(songList, song) : null;
   });
   ipcMain.handle(
-    "track:context-action",
+    "song:context-action",
     async (event, id: unknown, action: unknown) => {
       requireTrusted(event);
       if (
         typeof id !== "string" ||
-        !library ||
-        !isTrackContextMenuAction(action)
+        !songList ||
+        !isSongContextMenuAction(action)
       )
         return;
-      const track = library.getTrack(id);
-      if (!track) return;
+      const song = songList.getSong(id);
+      if (!song) return;
 
       if (action === "open-listing") {
-        if (track.onlineId === undefined) return;
+        if (song.onlineId === undefined) return;
         await shell.openExternal(
-          `https://osu.ppy.sh/beatmapsets/${track.onlineId}`,
+          `https://osu.ppy.sh/beatmapsets/${song.onlineId}`,
         );
         return;
       }
 
       const kind = assetKindForAction(action);
       if (!kind) {
-        const value = copyTextForAction(track, action);
+        const value = copyTextForAction(song, action);
         if (value !== undefined) await clipboard.writeText(value);
         return;
       }
 
-      const asset = await resolveTrackAsset(library, track, kind);
+      const asset = await resolveSongAsset(songList, song, kind);
       if (!asset) return;
       if (action.endsWith("-path")) {
         await clipboard.writeText(asset.filename);
@@ -806,14 +806,14 @@ void app.whenReady().then(() => {
         window.webContents.send("video:encoding", status);
     },
   );
-  protocol.handle("osu-media", (request) => {
+  protocol.handle("omp", (request) => {
     try {
       if (new URL(request.url).host === "video-cache")
         return videoTranscoder!.serve(request);
     } catch {
       /* The normal media handler will return a bad-request response. */
     }
-    return serveMedia(request, library);
+    return serveMedia(request, songList);
   });
   setupIPC();
   createWindow();
@@ -823,8 +823,8 @@ void app.whenReady().then(() => {
       label: "Playback",
       submenu: [
         { label: "Play / Pause", click: () => sendMediaAction("toggle") },
-        { label: "Next track", click: () => sendMediaAction("next") },
-        { label: "Previous track", click: () => sendMediaAction("previous") },
+        { label: "Next song", click: () => sendMediaAction("next") },
+        { label: "Previous song", click: () => sendMediaAction("previous") },
       ],
     },
     { role: "editMenu" },
@@ -876,9 +876,9 @@ app.on("before-quit", (event) => {
   quitting = true;
   importController?.abort();
   videoTranscoder?.dispose();
-  void waitForLibraryWorkers().then(() => {
-    library?.close();
-    library = null;
+  void waitForSongListWorkers().then(() => {
+    songList?.close();
+    songList = null;
     quitReady = true;
     app.quit();
   });

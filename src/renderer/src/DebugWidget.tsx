@@ -4,9 +4,9 @@ export type DebugVideoSource = "none" | "Original" | "Cache" | "HLS";
 
 /** Metadata shown by the now-playing debug widget.
  *
- * The library only has a subset of these values available on Track today.
+ * The song list only has a subset of these values available on Song today.
  * Keeping media metadata separate lets the main process add file and probe
- * details without making the normal track list payload larger.
+ * details without making the normal song list payload larger.
  */
 export interface DebugMediaInfo {
   name?: string | null;

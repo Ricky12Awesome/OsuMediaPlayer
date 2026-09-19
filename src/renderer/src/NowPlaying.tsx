@@ -1,10 +1,10 @@
 import type { PointerEvent, RefObject } from "react";
 import { LoaderCircle, Sparkles } from "lucide-react";
-import type { TrackDebugInfo } from "../../shared/types";
+import type { SongDebugInfo } from "../../shared/types";
 import type { PlayerState } from "./usePlayer";
 import { AudioVisualizer } from "./AudioVisualizer";
 import type { VisualizerSettings } from "./visualizer-settings";
-import { displayTrackArtist, displayTrackTitle } from "./track-title";
+import { displaySongArtist, displaySongTitle } from "./song-title";
 import { DebugWidget, type DebugWidgetData } from "./DebugWidget";
 
 export const captionPositions = [
@@ -25,7 +25,7 @@ export interface NowPlayingProps {
   visualizer: VisualizerSettings;
   showNowPlayingTitleArtist: boolean;
   debugMode: boolean;
-  debugInfo?: TrackDebugInfo | null;
+  debugInfo?: SongDebugInfo | null;
   showTitleUnicode: boolean;
   showArtistUnicode: boolean;
   captionPosition: CaptionPosition;
@@ -49,30 +49,30 @@ export function NowPlaying({
   captionRef,
   beginCaptionDrag,
 }: NowPlayingProps) {
-  const debugData = player.track
+  const debugData = player.song
     ? {
-        onlineId: player.track.onlineId,
-        md5Hash: player.track.md5Hash,
-        title: player.track.title,
-        titleUnicode: player.track.titleUnicode,
-        artist: player.track.artist,
-        artistUnicode: player.track.artistUnicode,
-        tags: player.track.tags,
+        onlineId: player.song.onlineId,
+        md5Hash: player.song.md5Hash,
+        title: player.song.title,
+        titleUnicode: player.song.titleUnicode,
+        artist: player.song.artist,
+        artistUnicode: player.song.artistUnicode,
+        tags: player.song.tags,
         ...debugInfo,
         audio: {
-          hash: player.track.audioHash,
+          hash: player.song.audioHash,
           ...(debugInfo?.audio ?? {}),
           duration:
             debugInfo?.audio?.duration ??
             player.duration ??
-            player.track.duration,
+            player.song.duration,
         },
         background: {
-          hash: player.track.backgroundHash,
+          hash: player.song.backgroundHash,
           ...(debugInfo?.background ?? {}),
         },
         video: {
-          hash: player.track.videoHash,
+          hash: player.song.videoHash,
           ...(debugInfo?.video ?? {}),
           source: player.videoSource,
         },
@@ -85,15 +85,15 @@ export function NowPlaying({
         ref={captionRef}
         className={
           "artwork-stage " +
-          (player.track?.artworkUrl ? "has-artwork " : "") +
-          (player.playVideos && player.track?.videoUrl ? "has-video " : "") +
+          (player.song?.artworkUrl ? "has-artwork " : "") +
+          (player.playVideos && player.song?.videoUrl ? "has-video " : "") +
           (videoActive ? "video-is-active" : "")
         }
       >
-        {player.track?.artworkUrl && (
+        {player.song?.artworkUrl && (
           <img
             className="hero-background"
-            src={player.track.artworkUrl}
+            src={player.song.artworkUrl}
             alt=""
             draggable={false}
             onError={(event) => {
@@ -130,7 +130,7 @@ export function NowPlaying({
           playing={player.playing}
           settings={visualizer}
         />
-        {debugMode && player.track && <DebugWidget data={debugData} />}
+        {debugMode && player.song && <DebugWidget data={debugData} />}
         {showNowPlayingTitleArtist && (
           <div
             className={
@@ -141,16 +141,16 @@ export function NowPlaying({
             aria-label="Now playing information. Drag to move it to an edge."
             onPointerDown={beginCaptionDrag}
           >
-            <h2 title={displayTrackTitle(player.track, showTitleUnicode)}>
-              {displayTrackTitle(player.track, showTitleUnicode) ||
+            <h2 title={displaySongTitle(player.song, showTitleUnicode)}>
+              {displaySongTitle(player.song, showTitleUnicode) ||
                 "A little more rhythm."}
             </h2>
-            <p title={displayTrackArtist(player.track, showArtistUnicode)}>
-              {displayTrackArtist(player.track, showArtistUnicode) ||
-                "Your osu! library. A whole new way to listen."}
+            <p title={displaySongArtist(player.song, showArtistUnicode)}>
+              {displaySongArtist(player.song, showArtistUnicode) ||
+                "Your osu! song list. A whole new way to listen."}
             </p>
-            {player.track?.source && (
-              <span className="hero-source">{player.track.source}</span>
+            {player.song?.source && (
+              <span className="hero-source">{player.song.source}</span>
             )}
           </div>
         )}

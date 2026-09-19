@@ -1,51 +1,51 @@
 import { assetUrl, isAssetHash, type MediaAsset } from "../media";
 import {
   sortKeys,
-  type LibrarySummary,
+  type SongListSummary,
   type SortKey,
-  type Track,
+  type Song,
 } from "../../shared/types";
 import type {
-  LibraryCollection,
-  LibraryCollectionFingerprint,
-  LibrarySnapshot,
+  SongListCollection,
+  SongListCollectionFingerprint,
+  SongListSnapshot,
 } from "./types";
-import type { LibraryCacheSummary } from "./cache-types";
-import { collator, normalize, trackSearch } from "./utils";
+import type { SongListCacheSummary } from "./cache-types";
+import { collator, normalize, songSearch } from "./utils";
 
 const sortKeyList: readonly SortKey[] = sortKeys;
 const sortKeyCodes = new Map(sortKeyList.map((key, index) => [key, index]));
 const sortKeysByCode = new Map(sortKeyList.map((key, index) => [index, key]));
 const facetCollator = collator;
-const trackReferenceBytes = 40;
+const songReferenceBytes = 40;
 const md5Bytes = 16;
 const sha256Bytes = 32;
 const binaryVersion = 3;
-const tracksMagic = Buffer.from("OMTR");
+const songsMagic = Buffer.from("OMTR");
 const collectionsMagic = Buffer.from("OMCL");
 const ordersMagic = Buffer.from("OMOR");
-const trackFlagTitleUnicode = 1 << 0;
-const trackFlagArtistUnicode = 1 << 1;
-const trackFlagMd5Hash = 1 << 2;
-const trackFlagBackground = 1 << 3;
-const trackFlagVideo = 1 << 4;
-const trackFlagVideoOffset = 1 << 5;
-const trackKnownFlags =
-  trackFlagTitleUnicode |
-  trackFlagArtistUnicode |
-  trackFlagMd5Hash |
-  trackFlagBackground |
-  trackFlagVideo |
-  trackFlagVideoOffset;
+const songFlagTitleUnicode = 1 << 0;
+const songFlagArtistUnicode = 1 << 1;
+const songFlagMd5Hash = 1 << 2;
+const songFlagBackground = 1 << 3;
+const songFlagVideo = 1 << 4;
+const songFlagVideoOffset = 1 << 5;
+const songKnownFlags =
+  songFlagTitleUnicode |
+  songFlagArtistUnicode |
+  songFlagMd5Hash |
+  songFlagBackground |
+  songFlagVideo |
+  songFlagVideoOffset;
 
-interface DecodedTrack {
-  track: Track;
+interface DecodedSong {
+  song: Song;
   beatmapHashes: Set<string>;
   assets: MediaAsset[];
 }
 
-interface DecodedTracks {
-  tracks: DecodedTrack[];
+interface DecodedSongs {
+  songs: DecodedSong[];
   assets: Map<string, MediaAsset>;
   ids: Set<string>;
 }
@@ -191,31 +191,31 @@ function assetForHash(
     : null;
 }
 
-export function serializeTracks(snapshot: LibrarySnapshot): Buffer | null {
-  const chunks: Buffer[] = [binaryHeader(tracksMagic, snapshot.indexed.length)];
+export function serializeSongs(snapshot: SongListSnapshot): Buffer | null {
+  const chunks: Buffer[] = [binaryHeader(songsMagic, snapshot.indexed.length)];
   const seen = new Set<string>();
   try {
     for (const item of snapshot.indexed) {
-      const track = item.track;
-      const identity = parseTrackId(track.id);
-      const audio = assetForHash(snapshot.assets, track.audioHash);
-      const dateAddedAt = track.dateAddedAt ?? 0;
-      const dateSubmittedAt = track.dateSubmittedAt ?? 0;
-      const dateRankedAt = track.dateRankedAt ?? 0;
-      const lastPlayedAt = track.lastPlayedAt ?? 0;
+      const song = item.song;
+      const identity = parseSongId(song.id);
+      const audio = assetForHash(snapshot.assets, song.audioHash);
+      const dateAddedAt = song.dateAddedAt ?? 0;
+      const dateSubmittedAt = song.dateSubmittedAt ?? 0;
+      const dateRankedAt = song.dateRankedAt ?? 0;
+      const lastPlayedAt = song.lastPlayedAt ?? 0;
       if (
         !identity ||
         !audio ||
         audio.hash !== identity.hash.toLowerCase() ||
-        seen.has(track.id) ||
-        !Number.isFinite(track.duration) ||
-        !Number.isFinite(track.bpm) ||
-        !Number.isFinite(track.stars) ||
-        !Number.isSafeInteger(track.difficultyCount) ||
-        track.difficultyCount < 0 ||
-        track.difficultyCount > 0xffffffff ||
-        !Number.isSafeInteger(track.addedAt) ||
-        track.addedAt < 0 ||
+        seen.has(song.id) ||
+        !Number.isFinite(song.duration) ||
+        !Number.isFinite(song.bpm) ||
+        !Number.isFinite(song.stars) ||
+        !Number.isSafeInteger(song.difficultyCount) ||
+        song.difficultyCount < 0 ||
+        song.difficultyCount > 0xffffffff ||
+        !Number.isSafeInteger(song.addedAt) ||
+        song.addedAt < 0 ||
         !Number.isSafeInteger(dateAddedAt) ||
         dateAddedAt < 0 ||
         !Number.isSafeInteger(dateSubmittedAt) ||
@@ -226,48 +226,43 @@ export function serializeTracks(snapshot: LibrarySnapshot): Buffer | null {
         lastPlayedAt < 0
       )
         return null;
-      seen.add(track.id);
-      const background = assetForHash(snapshot.assets, track.backgroundHash);
-      if (track.backgroundHash && !background) return null;
-      const video = assetForHash(snapshot.assets, track.videoHash);
-      if (track.videoHash && !video) return null;
-      const md5Hash = track.md5Hash
-        ? hashBuffer(track.md5Hash, md5Bytes)
-        : null;
-      if (track.md5Hash && !md5Hash) return null;
+      seen.add(song.id);
+      const background = assetForHash(snapshot.assets, song.backgroundHash);
+      if (song.backgroundHash && !background) return null;
+      const video = assetForHash(snapshot.assets, song.videoHash);
+      if (song.videoHash && !video) return null;
+      const md5Hash = song.md5Hash ? hashBuffer(song.md5Hash, md5Bytes) : null;
+      if (song.md5Hash && !md5Hash) return null;
       const beatmapHashes = [...item.beatmapHashes].map((hash) =>
         hashBuffer(hash, md5Bytes),
       );
       if (beatmapHashes.some((hash) => !hash)) return null;
-      if (
-        track.videoOffset !== undefined &&
-        !Number.isFinite(track.videoOffset)
-      )
+      if (song.videoOffset !== undefined && !Number.isFinite(song.videoOffset))
         return null;
       let flags = 0;
-      if (track.titleUnicode !== undefined) flags |= trackFlagTitleUnicode;
-      if (track.artistUnicode !== undefined) flags |= trackFlagArtistUnicode;
-      if (md5Hash) flags |= trackFlagMd5Hash;
-      if (background) flags |= trackFlagBackground;
-      if (video) flags |= trackFlagVideo;
-      if (track.videoOffset !== undefined) flags |= trackFlagVideoOffset;
+      if (song.titleUnicode !== undefined) flags |= songFlagTitleUnicode;
+      if (song.artistUnicode !== undefined) flags |= songFlagArtistUnicode;
+      if (md5Hash) flags |= songFlagMd5Hash;
+      if (background) flags |= songFlagBackground;
+      if (video) flags |= songFlagVideo;
+      if (song.videoOffset !== undefined) flags |= songFlagVideoOffset;
 
       const record = new BinaryWriter();
       record.writeBigInt64(identity.onlineId);
       record.writeBytes(hashBuffer(identity.hash, sha256Bytes)!);
       record.writeUint16(flags);
-      record.writeString(track.title);
-      if (track.titleUnicode !== undefined)
-        record.writeString(track.titleUnicode);
-      record.writeString(track.artist);
-      if (track.artistUnicode !== undefined)
-        record.writeString(track.artistUnicode);
-      record.writeString(track.source);
-      record.writeFloat64(track.duration);
-      record.writeFloat64(track.bpm);
-      record.writeFloat64(track.stars);
-      record.writeUint32(track.difficultyCount);
-      record.writeBigUint64(BigInt(track.addedAt));
+      record.writeString(song.title);
+      if (song.titleUnicode !== undefined)
+        record.writeString(song.titleUnicode);
+      record.writeString(song.artist);
+      if (song.artistUnicode !== undefined)
+        record.writeString(song.artistUnicode);
+      record.writeString(song.source);
+      record.writeFloat64(song.duration);
+      record.writeFloat64(song.bpm);
+      record.writeFloat64(song.stars);
+      record.writeUint32(song.difficultyCount);
+      record.writeBigUint64(BigInt(song.addedAt));
       record.writeBigUint64(BigInt(dateAddedAt));
       record.writeBigUint64(BigInt(dateSubmittedAt));
       record.writeBigUint64(BigInt(dateRankedAt));
@@ -282,10 +277,9 @@ export function serializeTracks(snapshot: LibrarySnapshot): Buffer | null {
         record.writeString(video.filename);
         record.writeBytes(hashBuffer(video.hash, sha256Bytes)!);
       }
-      if (track.videoOffset !== undefined)
-        record.writeFloat64(track.videoOffset);
-      record.writeUint32(track.tags.length);
-      for (const tag of track.tags) record.writeString(tag);
+      if (song.videoOffset !== undefined) record.writeFloat64(song.videoOffset);
+      record.writeUint32(song.tags.length);
+      for (const tag of song.tags) record.writeString(tag);
       record.writeUint32(beatmapHashes.length);
       for (const hash of beatmapHashes) record.writeBytes(hash!);
       const bytes = record.toBuffer();
@@ -308,11 +302,11 @@ function binaryHeader(magic: Buffer, recordCount: number): Buffer {
   return header;
 }
 
-function parseTrackId(
-  trackId: string,
+function parseSongId(
+  songId: string,
 ): { onlineId: bigint; hash: string } | null {
-  const hash = trackId.slice(-64);
-  const identity = trackId.slice(0, -65);
+  const hash = songId.slice(-64);
+  const identity = songId.slice(0, -65);
   if (!isAssetHash(hash) || !/^-?\d+$/.test(identity)) return null;
   try {
     const onlineId = BigInt(identity);
@@ -323,26 +317,26 @@ function parseTrackId(
   }
 }
 
-function encodeTrackReference(trackId: string): Buffer | null {
-  const parsed = parseTrackId(trackId);
+function encodeSongReference(songId: string): Buffer | null {
+  const parsed = parseSongId(songId);
   if (!parsed) return null;
-  const reference = Buffer.alloc(trackReferenceBytes);
+  const reference = Buffer.alloc(songReferenceBytes);
   dataView(reference).setBigInt64(0, parsed.onlineId, true);
   Buffer.from(parsed.hash, "hex").copy(reference, 8);
   return reference;
 }
 
-function decodeTrackReference(data: Buffer, offset: number): string | null {
-  if (offset < 0 || offset + trackReferenceBytes > data.length) return null;
+function decodeSongReference(data: Buffer, offset: number): string | null {
+  if (offset < 0 || offset + songReferenceBytes > data.length) return null;
   const view = dataView(data);
   const onlineId = view.getBigInt64(offset, true).toString();
   const hash = data
-    .subarray(offset + 8, offset + trackReferenceBytes)
+    .subarray(offset + 8, offset + songReferenceBytes)
     .toString("hex");
   return `${onlineId}-${hash}`;
 }
 
-function deserializeTrackRecord(data: Buffer): DecodedTrack | null {
+function deserializeSongRecord(data: Buffer): DecodedSong | null {
   const reader = new BinaryReader(data);
   const onlineId = reader.readBigInt64();
   const audioHash = reader.readBytes(sha256Bytes)?.toString("hex");
@@ -351,15 +345,15 @@ function deserializeTrackRecord(data: Buffer): DecodedTrack | null {
     onlineId === null ||
     !audioHash ||
     flags === null ||
-    flags & ~trackKnownFlags
+    flags & ~songKnownFlags
   )
     return null;
   const title = reader.readString();
   const titleUnicode =
-    flags & trackFlagTitleUnicode ? reader.readString() : undefined;
+    flags & songFlagTitleUnicode ? reader.readString() : undefined;
   const artist = reader.readString();
   const artistUnicode =
-    flags & trackFlagArtistUnicode ? reader.readString() : undefined;
+    flags & songFlagArtistUnicode ? reader.readString() : undefined;
   const source = reader.readString();
   const duration = reader.readFloat64();
   const bpm = reader.readFloat64();
@@ -371,15 +365,15 @@ function deserializeTrackRecord(data: Buffer): DecodedTrack | null {
   const dateRankedAt = reader.readBigUint64();
   const lastPlayedAt = reader.readBigUint64();
   const md5Hash =
-    flags & trackFlagMd5Hash
+    flags & songFlagMd5Hash
       ? reader.readBytes(md5Bytes)?.toString("hex")
       : undefined;
   const audioFilename = reader.readString();
   if (
     title === null ||
-    (flags & trackFlagTitleUnicode && titleUnicode === null) ||
+    (flags & songFlagTitleUnicode && titleUnicode === null) ||
     artist === null ||
-    (flags & trackFlagArtistUnicode && artistUnicode === null) ||
+    (flags & songFlagArtistUnicode && artistUnicode === null) ||
     source === null ||
     duration === null ||
     !Number.isFinite(duration) ||
@@ -398,27 +392,27 @@ function deserializeTrackRecord(data: Buffer): DecodedTrack | null {
     dateRankedAt > BigInt(Number.MAX_SAFE_INTEGER) ||
     lastPlayedAt === null ||
     lastPlayedAt > BigInt(Number.MAX_SAFE_INTEGER) ||
-    (flags & trackFlagMd5Hash && !md5Hash) ||
+    (flags & songFlagMd5Hash && !md5Hash) ||
     audioFilename === null
   )
     return null;
 
   let background: MediaAsset | undefined;
-  if (flags & trackFlagBackground) {
+  if (flags & songFlagBackground) {
     const filename = reader.readString();
     const hash = reader.readBytes(sha256Bytes)?.toString("hex");
     if (filename === null || !hash) return null;
     background = { hash, filename };
   }
   let video: MediaAsset | undefined;
-  if (flags & trackFlagVideo) {
+  if (flags & songFlagVideo) {
     const filename = reader.readString();
     const hash = reader.readBytes(sha256Bytes)?.toString("hex");
     if (filename === null || !hash) return null;
     video = { hash, filename };
   }
   let videoOffset: number | undefined;
-  if (flags & trackFlagVideoOffset) {
+  if (flags & songFlagVideoOffset) {
     videoOffset = reader.readFloat64() ?? undefined;
     if (videoOffset === undefined || !Number.isFinite(videoOffset)) return null;
   }
@@ -441,7 +435,7 @@ function deserializeTrackRecord(data: Buffer): DecodedTrack | null {
   if (reader.remaining !== 0) return null;
 
   const audio: MediaAsset = { hash: audioHash, filename: audioFilename };
-  const track: Track = {
+  const song: Song = {
     id: `${onlineId.toString()}-${audioHash}`,
     title,
     titleUnicode: titleUnicode ?? undefined,
@@ -470,7 +464,7 @@ function deserializeTrackRecord(data: Buffer): DecodedTrack | null {
     lastPlayedAt: Number(lastPlayedAt),
   };
   return {
-    track,
+    song,
     beatmapHashes: new Set(beatmapHashes),
     assets: [
       audio,
@@ -480,24 +474,24 @@ function deserializeTrackRecord(data: Buffer): DecodedTrack | null {
   };
 }
 
-export function deserializeTracks(data: Buffer): DecodedTracks | null {
-  const header = parseBinaryHeader(data, tracksMagic);
+export function deserializeSongs(data: Buffer): DecodedSongs | null {
+  const header = parseBinaryHeader(data, songsMagic);
   if (!header) return null;
   const reader = new BinaryReader(data.subarray(header.offset));
-  const tracks: DecodedTrack[] = [];
+  const songs: DecodedSong[] = [];
   const assets = new Map<string, MediaAsset>();
   const ids = new Set<string>();
   for (let index = 0; index < header.count; index++) {
     const length = reader.readUint32();
     if (length === null) return null;
     const record = reader.readBytes(length);
-    const decoded = record ? deserializeTrackRecord(record) : null;
-    if (!decoded || ids.has(decoded.track.id)) return null;
-    ids.add(decoded.track.id);
-    tracks.push(decoded);
+    const decoded = record ? deserializeSongRecord(record) : null;
+    if (!decoded || ids.has(decoded.song.id)) return null;
+    ids.add(decoded.song.id);
+    songs.push(decoded);
     for (const asset of decoded.assets) assets.set(asset.hash, asset);
   }
-  return reader.remaining === 0 ? { tracks, assets, ids } : null;
+  return reader.remaining === 0 ? { songs, assets, ids } : null;
 }
 
 function encodeCollectionId(id: string): Buffer | null {
@@ -518,7 +512,7 @@ function decodeCollectionId(data: Buffer, offset: number): string | null {
 }
 
 export function serializeCollections(
-  collections: readonly LibraryCollection[],
+  collections: readonly SongListCollection[],
 ): Buffer | null {
   const chunks: Buffer[] = [binaryHeader(collectionsMagic, collections.length)];
   const seen = new Set<string>();
@@ -533,13 +527,13 @@ export function serializeCollections(
     )
       return null;
     seen.add(collection.id);
-    if (collection.trackIds.length > 0xffffffff) return null;
+    if (collection.songIds.length > 0xffffffff) return null;
     const header = Buffer.alloc(2 + 4);
     header.writeUInt16LE(name.length, 0);
-    header.writeUInt32LE(collection.trackIds.length, 2);
+    header.writeUInt32LE(collection.songIds.length, 2);
     chunks.push(id, header, name);
-    for (const trackId of collection.trackIds) {
-      const reference = encodeTrackReference(trackId);
+    for (const songId of collection.songIds) {
+      const reference = encodeSongReference(songId);
       if (!reference) return null;
       chunks.push(reference);
     }
@@ -552,16 +546,16 @@ export function serializeOrders(
 ): Buffer | null {
   const canonical = [...orders].filter(([key]) => key.endsWith(":ascending"));
   const chunks: Buffer[] = [binaryHeader(ordersMagic, canonical.length)];
-  for (const [key, tracks] of canonical) {
+  for (const [key, songs] of canonical) {
     const sortby = key.slice(0, -":ascending".length) as SortKey;
     const code = sortKeyCodes.get(sortby);
-    if (code === undefined || tracks.length > 0xffffffff) return null;
+    if (code === undefined || songs.length > 0xffffffff) return null;
     const header = Buffer.alloc(1 + 4);
     header.writeUInt8(code, 0);
-    header.writeUInt32LE(tracks.length, 1);
+    header.writeUInt32LE(songs.length, 1);
     chunks.push(header);
-    for (const trackId of tracks) {
-      const reference = encodeTrackReference(trackId);
+    for (const songId of songs) {
+      const reference = encodeSongReference(songId);
       if (!reference) return null;
       chunks.push(reference);
     }
@@ -569,12 +563,12 @@ export function serializeOrders(
   return Buffer.concat(chunks);
 }
 
-export function serializeTagCounts(snapshot: LibrarySnapshot): string | null {
+export function serializeTagCounts(snapshot: SongListSnapshot): string | null {
   const tags: Record<string, number> = Object.create(null);
 
   try {
     for (const item of snapshot.indexed) {
-      for (const tag of item.track.tags) tags[tag] = (tags[tag] ?? 0) + 1;
+      for (const tag of item.song.tags) tags[tag] = (tags[tag] ?? 0) + 1;
     }
     return JSON.stringify(tags);
   } catch {
@@ -583,17 +577,17 @@ export function serializeTagCounts(snapshot: LibrarySnapshot): string | null {
 }
 
 export function serializeCollectionCounts(
-  snapshot: LibrarySnapshot,
+  snapshot: SongListSnapshot,
 ): string | null {
   const collections: Record<string, number> = Object.create(null);
-  const trackIds = new Set(snapshot.indexed.map(({ track }) => track.id));
+  const songIds = new Set(snapshot.indexed.map(({ song }) => song.id));
 
   try {
     for (const collection of snapshot.collections) {
       if (collections[collection.id] !== undefined) return null;
       let count = 0;
-      for (const trackId of new Set(collection.trackIds)) {
-        if (!trackIds.has(trackId)) return null;
+      for (const songId of new Set(collection.songIds)) {
+        if (!songIds.has(songId)) return null;
         count++;
       }
       collections[collection.id] = count;
@@ -616,12 +610,12 @@ function parseBinaryHeader(
 
 export function deserializeCollections(
   data: Buffer,
-  collectionFingerprint: LibraryCollectionFingerprint,
-  trackIds: ReadonlySet<string>,
-): LibraryCollection[] | null {
+  collectionFingerprint: SongListCollectionFingerprint,
+  songIds: ReadonlySet<string>,
+): SongListCollection[] | null {
   const header = parseBinaryHeader(data, collectionsMagic);
   if (!header) return null;
-  const result: LibraryCollection[] = [];
+  const result: SongListCollection[] = [];
   let offset = header.offset;
   const seen = new Set<string>();
   const view = dataView(data);
@@ -632,7 +626,7 @@ export function deserializeCollections(
     offset += 16;
     if (offset + 6 > data.length) return null;
     const nameLength = view.getUint16(offset, true);
-    const trackCount = view.getUint32(offset + 2, true);
+    const songCount = view.getUint32(offset + 2, true);
     offset += 6;
     const nameBytes = nameLength;
     if (nameBytes % 2 !== 0) return null;
@@ -641,21 +635,21 @@ export function deserializeCollections(
     offset += nameBytes;
     const lastModified = collectionFingerprint[id];
     if (!isFiniteNumber(lastModified)) return null;
-    const tracks: string[] = [];
-    for (let trackIndex = 0; trackIndex < trackCount; trackIndex++) {
-      const trackId = decodeTrackReference(data, offset);
-      if (!trackId || !trackIds.has(trackId)) return null;
-      tracks.push(trackId);
-      offset += trackReferenceBytes;
+    const songs: string[] = [];
+    for (let songIndex = 0; songIndex < songCount; songIndex++) {
+      const songId = decodeSongReference(data, offset);
+      if (!songId || !songIds.has(songId)) return null;
+      songs.push(songId);
+      offset += songReferenceBytes;
     }
-    result.push({ id, name, lastModified, trackIds: tracks });
+    result.push({ id, name, lastModified, songIds: songs });
   }
   return offset === data.length ? result : null;
 }
 
 export function deserializeOrders(
   data: Buffer,
-  trackIds: ReadonlySet<string>,
+  songIds: ReadonlySet<string>,
 ): Map<string, readonly string[]> | null {
   const header = parseBinaryHeader(data, ordersMagic);
   if (!header) return null;
@@ -666,31 +660,31 @@ export function deserializeOrders(
     if (offset + 5 > data.length) return null;
     const code = view.getUint8(offset);
     const sortby = sortKeysByCode.get(code);
-    const trackCount = view.getUint32(offset + 1, true);
+    const songCount = view.getUint32(offset + 1, true);
     offset += 5;
     if (!sortby || result.has(`${sortby}:ascending`)) return null;
-    const tracks: string[] = [];
-    for (let trackIndex = 0; trackIndex < trackCount; trackIndex++) {
-      const trackId = decodeTrackReference(data, offset);
-      if (!trackId || !trackIds.has(trackId)) return null;
-      tracks.push(trackId);
-      offset += trackReferenceBytes;
+    const songs: string[] = [];
+    for (let songIndex = 0; songIndex < songCount; songIndex++) {
+      const songId = decodeSongReference(data, offset);
+      if (!songId || !songIds.has(songId)) return null;
+      songs.push(songId);
+      offset += songReferenceBytes;
     }
-    result.set(`${sortby}:ascending`, tracks);
+    result.set(`${sortby}:ascending`, songs);
   }
   return offset === data.length ? result : null;
 }
 
 export function deserializeSnapshot(
-  tracksValue: DecodedTracks | null,
-  collectionsValue: LibraryCollection[] | null,
+  songsValue: DecodedSongs | null,
+  collectionsValue: SongListCollection[] | null,
   ordersValue: Map<string, readonly string[]> | null,
-  summary: LibraryCacheSummary,
+  summary: SongListCacheSummary,
   tagCounts: Record<string, number> | null,
   collectionCountsById: Record<string, number> | null,
-): LibrarySnapshot | null {
+): SongListSnapshot | null {
   if (
-    !tracksValue ||
+    !songsValue ||
     !collectionsValue ||
     !ordersValue ||
     !tagCounts ||
@@ -722,38 +716,38 @@ export function deserializeSnapshot(
     .map(([name, count]) => ({ name, count }))
     .sort((a, b) => b.count - a.count || facetCollator.compare(a.name, b.name));
   if (summary.collectionCount !== collectionFacets.length) return null;
-  const fullSummary: LibrarySummary = {
+  const fullSummary: SongListSummary = {
     ...summary,
     collections: collectionFacets,
     tags: tagFacets,
   };
-  const collectionNamesByTrack = new Map<string, string[]>();
+  const collectionNamesBySong = new Map<string, string[]>();
   for (const collection of collections) {
-    for (const id of collection.trackIds) {
-      const names = collectionNamesByTrack.get(id) ?? [];
+    for (const id of collection.songIds) {
+      const names = collectionNamesBySong.get(id) ?? [];
       names.push(collection.name);
-      collectionNamesByTrack.set(id, names);
+      collectionNamesBySong.set(id, names);
     }
   }
 
-  const indexed: LibrarySnapshot["indexed"] = [];
-  for (const decoded of tracksValue.tracks) {
-    const track = decoded.track;
-    const collectionsForTrack = [
-      ...new Set(collectionNamesByTrack.get(track.id) ?? []),
+  const indexed: SongListSnapshot["indexed"] = [];
+  for (const decoded of songsValue.songs) {
+    const song = decoded.song;
+    const collectionsForSong = [
+      ...new Set(collectionNamesBySong.get(song.id) ?? []),
     ];
-    track.collections = collectionsForTrack;
+    song.collections = collectionsForSong;
     indexed.push({
-      track,
-      search: trackSearch(track),
-      tags: new Set(track.tags.map(normalize)),
-      collections: new Set(collectionsForTrack.map(normalize)),
+      song,
+      search: songSearch(song),
+      tags: new Set(song.tags.map(normalize)),
+      collections: new Set(collectionsForSong.map(normalize)),
       beatmapHashes: decoded.beatmapHashes,
     });
   }
-  if (fullSummary.trackCount !== indexed.length) return null;
+  if (fullSummary.songCount !== indexed.length) return null;
   return {
-    assets: tracksValue.assets,
+    assets: songsValue.assets,
     summary: fullSummary,
     indexed,
     orders: ordersValue,

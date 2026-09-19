@@ -1,5 +1,5 @@
 import type {
-  LibraryQuery,
+  SongListQuery,
   SortKey,
   VideoEncodingSettings,
 } from "../shared/types";
@@ -12,15 +12,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-/** Validate and detach a library query received across the IPC boundary. */
-export function parseLibraryQuery(
+/** Validate and detach a song list query received across the IPC boundary. */
+export function parseSongListQuery(
   value: unknown,
   optional = false,
-): LibraryQuery | undefined {
+): SongListQuery | undefined {
   if (value === undefined && optional) return undefined;
-  if (!isRecord(value)) throw new Error("Invalid library query.");
+  if (!isRecord(value)) throw new Error("Invalid song list query.");
 
-  const query: LibraryQuery = {};
+  const query: SongListQuery = {};
   if (typeof value.search === "string")
     query.search = value.search.slice(0, 1000);
   if (typeof value.collection === "string") query.collection = value.collection;

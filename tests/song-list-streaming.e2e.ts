@@ -89,14 +89,14 @@ try {
       await page.addInitScript(
         ({ installPath, closeAt }) => {
           localStorage.setItem(
-            "osu-music-library-path",
+            "omp-song-list-path",
             JSON.stringify(installPath),
           );
           const state = window as typeof window & { streamedCounts: number[] };
           state.streamedCounts = [];
-          window.playerAPI!.onLibraryProgress((progress) => {
+          window.playerAPI!.onSongListProgress((progress) => {
             if ("summary" in progress)
-              state.streamedCounts.push(progress.summary.trackCount);
+              state.streamedCounts.push(progress.summary.songCount);
             if (
               (closeAt === "early" && progress.records > 0) ||
               (closeAt === "reading" && "summary" in progress) ||
@@ -108,7 +108,7 @@ try {
           // Exercise the shared-promise path: React can issue a second load
           // before the first one has completed during a very early close.
           if (closeAt === "early")
-            void window.playerAPI!.loadLibrary(installPath).catch(() => {});
+            void window.playerAPI!.loadSongList(installPath).catch(() => {});
         },
         { installPath: directory, closeAt },
       );
@@ -119,14 +119,14 @@ try {
         join(process.cwd(), "dist/index.html"),
       );
       if (closeAt === "complete") {
-        await page.waitForSelector(".track-row:not(.row-placeholder)");
+        await page.waitForSelector(".song-row:not(.row-placeholder)");
         assert.equal(await page.getByText("Finding your rhythm").count(), 0);
         await page.waitForFunction(
           (count) =>
             document
-              .querySelector(".library-footer")
+              .querySelector(".song-list-footer")
               ?.textContent?.includes(
-                `${count.toLocaleString()} songs in your library`,
+                `${count.toLocaleString()} songs in your song list`,
               ),
           songCount,
         );
@@ -155,9 +155,9 @@ try {
       assert.doesNotMatch(stderr, /FATAL ERROR|Fatal error|SIGABRT/);
       assert.doesNotMatch(
         stderr,
-        /Error occurred in handler for 'library:load'/,
+        /Error occurred in handler for 'song-list:load'/,
       );
-      console.log(`Library streaming / close during ${closeAt}: passed`);
+      console.log(`Song list streaming / close during ${closeAt}: passed`);
     } finally {
       if (child.exitCode === null && child.signalCode === null)
         await app.close();

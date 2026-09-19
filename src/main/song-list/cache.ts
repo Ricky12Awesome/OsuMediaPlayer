@@ -8,71 +8,73 @@ import {
   unlink,
   writeFile,
 } from "node:fs/promises";
-import type { LibrarySummary } from "../../shared/types";
+import type { SongListSummary } from "../../shared/types";
 import type {
-  LibraryCollection,
-  LibraryCollectionFingerprint,
-  LibraryFingerprint,
-  LibrarySnapshot,
-  LibraryCancellation,
+  SongListCollection,
+  SongListCollectionFingerprint,
+  SongListFingerprint,
+  SongListSnapshot,
+  SongListCancellation,
 } from "./types";
 import {
-  libraryCacheVersion,
-  type LibraryCacheData,
-  type LibraryCacheManifest,
-  type LibraryCachePaths,
-  type LibraryCacheSummary,
-  type LibraryRealmMetadata,
+  songListCacheVersion,
+  type SongListCacheData,
+  type SongListCacheManifest,
+  type SongListCachePaths,
+  type SongListCacheSummary,
+  type SongListRealmMetadata,
 } from "./cache-types";
 import {
   deserializeCollections,
   deserializeOrders,
   deserializeSnapshot,
-  deserializeTracks,
+  deserializeSongs,
   serializeCollectionCounts,
   serializeCollections,
   serializeOrders,
   serializeTagCounts,
-  serializeTracks,
+  serializeSongs,
 } from "./cache-format";
 
-export { libraryCacheVersion } from "./cache-types";
+export { songListCacheVersion } from "./cache-types";
 export type {
-  LibraryCacheData,
-  LibraryCacheManifest,
-  LibraryCachePaths,
-  LibraryCacheSummary,
-  LibraryRealmMetadata,
+  SongListCacheData,
+  SongListCacheManifest,
+  SongListCachePaths,
+  SongListCacheSummary,
+  SongListRealmMetadata,
 } from "./cache-types";
 
-export function libraryCachePath(
+export function songListCachePath(
   cacheDirectory: string,
   installPath: string,
 ): string {
   const identity = createHash("sha256").update(installPath).digest("hex");
-  return join(cacheDirectory, `library-${identity}`);
+  return join(cacheDirectory, `song-list-${identity}`);
 }
 
-export function libraryCachePaths(directory: string): LibraryCachePaths {
+export function songListCachePaths(directory: string): SongListCachePaths {
   return {
     directory,
     manifest: join(directory, "manifest.json"),
     collectionManifest: join(directory, "manifest.collections.json"),
     tags: join(directory, "tags.json"),
     collections: join(directory, "collections.json"),
-    tracks: join(directory, "tracks.bin"),
-    collectionTracks: join(directory, "collections.bin"),
+    songs: join(directory, "songs.bin"),
+    collectionSongs: join(directory, "collections.bin"),
     orders: join(directory, "orders.bin"),
   };
 }
 
-export async function clearLibraryCache(cacheDirectory: string): Promise<void> {
+export async function clearSongListCache(
+  cacheDirectory: string,
+): Promise<void> {
   await rm(cacheDirectory, { recursive: true, force: true });
 }
 
-export function libraryFingerprintsEqual(
-  left: LibraryFingerprint,
-  right: LibraryFingerprint,
+export function songListFingerprintsEqual(
+  left: SongListFingerprint,
+  right: SongListFingerprint,
 ): boolean {
   return (
     left.beatmapSetCount === right.beatmapSetCount &&
@@ -85,8 +87,8 @@ export function libraryFingerprintsEqual(
 }
 
 export function collectionFingerprintsEqual(
-  left: LibraryCollectionFingerprint,
-  right: LibraryCollectionFingerprint,
+  left: SongListCollectionFingerprint,
+  right: SongListCollectionFingerprint,
 ): boolean {
   const leftIds = Object.keys(left);
   const rightIds = Object.keys(right);
@@ -103,10 +105,10 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
-function isCacheSummary(value: unknown): value is LibraryCacheSummary {
+function isCacheSummary(value: unknown): value is SongListCacheSummary {
   if (!isRecord(value)) return false;
   return (
-    isFiniteNumber(value.trackCount) &&
+    isFiniteNumber(value.songCount) &&
     isFiniteNumber(value.beatmapCount) &&
     isFiniteNumber(value.collectionCount) &&
     typeof value.installPath === "string" &&
@@ -128,7 +130,7 @@ function parseCountMap(value: unknown): Record<string, number> | null {
   return isCountMap(value) ? value : null;
 }
 
-function isFingerprint(value: unknown): value is LibraryFingerprint {
+function isFingerprint(value: unknown): value is SongListFingerprint {
   return (
     isRecord(value) &&
     isFiniteNumber(value.beatmapSetCount) &&
@@ -142,7 +144,7 @@ function isFingerprint(value: unknown): value is LibraryFingerprint {
 
 function isCollectionFingerprint(
   value: unknown,
-): value is LibraryCollectionFingerprint {
+): value is SongListCollectionFingerprint {
   return (
     isRecord(value) &&
     !Array.isArray(value) &&
@@ -150,7 +152,7 @@ function isCollectionFingerprint(
   );
 }
 
-function isRealmMetadata(value: unknown): value is LibraryRealmMetadata {
+function isRealmMetadata(value: unknown): value is SongListRealmMetadata {
   return (
     isRecord(value) &&
     isFiniteNumber(value.mtimeMs) &&
@@ -158,50 +160,50 @@ function isRealmMetadata(value: unknown): value is LibraryRealmMetadata {
   );
 }
 
-function parseManifest(value: unknown): LibraryCacheManifest | null {
+function parseManifest(value: unknown): SongListCacheManifest | null {
   if (
     !isRecord(value) ||
-    value.version !== libraryCacheVersion ||
+    value.version !== songListCacheVersion ||
     !isFingerprint(value.fingerprint) ||
     !isCacheSummary(value.summary) ||
     !isRealmMetadata(value.realm)
   )
     return null;
-  return value as unknown as LibraryCacheManifest;
+  return value as unknown as SongListCacheManifest;
 }
 
 function collectionFingerprint(
-  collections: readonly LibraryCollection[],
-): LibraryCollectionFingerprint {
+  collections: readonly SongListCollection[],
+): SongListCollectionFingerprint {
   return Object.fromEntries(
     collections.map((collection) => [collection.id, collection.lastModified]),
   );
 }
 
-export async function readLibraryCache(
+export async function readSongListCache(
   directory: string,
-  fingerprint?: LibraryFingerprint,
-  signal?: LibraryCancellation,
-  knownManifest?: LibraryCacheManifest,
-): Promise<LibraryCacheData | null> {
+  fingerprint?: SongListFingerprint,
+  signal?: SongListCancellation,
+  knownManifest?: SongListCacheManifest,
+): Promise<SongListCacheData | null> {
   signal?.throwIfAborted();
-  const paths = libraryCachePaths(directory);
+  const paths = songListCachePaths(directory);
   try {
     const [
       manifestContents,
       collectionFingerprintContents,
       tagCountsContents,
       collectionCountsContents,
-      tracksContents,
-      collectionTracksContents,
+      songsContents,
+      collectionSongsContents,
       ordersContents,
     ] = await Promise.all([
       knownManifest ? Promise.resolve("") : readFile(paths.manifest, "utf8"),
       readFile(paths.collectionManifest, "utf8"),
       readFile(paths.tags, "utf8"),
       readFile(paths.collections, "utf8"),
-      readFile(paths.tracks),
-      readFile(paths.collectionTracks),
+      readFile(paths.songs),
+      readFile(paths.collectionSongs),
       readFile(paths.orders),
     ]);
     signal?.throwIfAborted();
@@ -210,7 +212,7 @@ export async function readLibraryCache(
     if (
       !manifest ||
       (fingerprint &&
-        !libraryFingerprintsEqual(manifest.fingerprint, fingerprint))
+        !songListFingerprintsEqual(manifest.fingerprint, fingerprint))
     )
       return null;
     const cachedCollectionFingerprint = parseCountMap(
@@ -221,16 +223,16 @@ export async function readLibraryCache(
     const collectionCounts = parseCountMap(
       JSON.parse(collectionCountsContents),
     );
-    const tracksValue = deserializeTracks(tracksContents);
-    const trackIds = tracksValue?.ids ?? new Set<string>();
+    const songsValue = deserializeSongs(songsContents);
+    const songIds = songsValue?.ids ?? new Set<string>();
     const collectionsValue = deserializeCollections(
-      collectionTracksContents,
+      collectionSongsContents,
       cachedCollectionFingerprint,
-      trackIds,
+      songIds,
     );
-    const ordersValue = deserializeOrders(ordersContents, trackIds);
+    const ordersValue = deserializeOrders(ordersContents, songIds);
     const snapshot = deserializeSnapshot(
-      tracksValue,
+      songsValue,
       collectionsValue,
       ordersValue,
       manifest.summary,
@@ -257,14 +259,14 @@ export async function readLibraryCache(
   }
 }
 
-export async function readLibraryCacheManifest(
+export async function readSongListCacheManifest(
   directory: string,
-  signal?: LibraryCancellation,
-): Promise<LibraryCacheManifest | null> {
+  signal?: SongListCancellation,
+): Promise<SongListCacheManifest | null> {
   signal?.throwIfAborted();
   try {
     const contents = await readFile(
-      libraryCachePaths(directory).manifest,
+      songListCachePaths(directory).manifest,
       "utf8",
     );
     signal?.throwIfAborted();
@@ -275,31 +277,31 @@ export async function readLibraryCacheManifest(
   }
 }
 
-export function libraryRealmMetadataEqual(
-  left: LibraryRealmMetadata,
-  right: LibraryRealmMetadata,
+export function songListRealmMetadataEqual(
+  left: SongListRealmMetadata,
+  right: SongListRealmMetadata,
 ): boolean {
   return left.mtimeMs === right.mtimeMs && left.size === right.size;
 }
 
-export async function writeLibraryCache(
+export async function writeSongListCache(
   directory: string,
-  fingerprint: LibraryFingerprint,
-  collectionFingerprint: LibraryCollectionFingerprint,
-  realm: LibraryRealmMetadata,
-  snapshot: LibrarySnapshot,
-  signal?: LibraryCancellation,
+  fingerprint: SongListFingerprint,
+  collectionFingerprint: SongListCollectionFingerprint,
+  realm: SongListRealmMetadata,
+  snapshot: SongListSnapshot,
+  signal?: SongListCancellation,
 ): Promise<void> {
   signal?.throwIfAborted();
   await mkdir(dirname(directory), { recursive: true });
   const temporary = `${directory}.${process.pid}.${Date.now()}.tmp`;
-  const paths = libraryCachePaths(temporary);
+  const paths = songListCachePaths(temporary);
   try {
-    const manifest: LibraryCacheManifest = {
-      version: libraryCacheVersion,
+    const manifest: SongListCacheManifest = {
+      version: songListCacheVersion,
       fingerprint,
       summary: {
-        trackCount: snapshot.summary.trackCount,
+        songCount: snapshot.summary.songCount,
         beatmapCount: snapshot.summary.beatmapCount,
         collectionCount: snapshot.summary.collectionCount,
         installPath: snapshot.summary.installPath,
@@ -307,19 +309,19 @@ export async function writeLibraryCache(
       },
       realm,
     };
-    const tracks = serializeTracks(snapshot);
-    const collectionTracks = serializeCollections(snapshot.collections);
+    const songs = serializeSongs(snapshot);
+    const collectionSongs = serializeCollections(snapshot.collections);
     const orders = serializeOrders(snapshot.orders);
     const tags = serializeTagCounts(snapshot);
     const collections = serializeCollectionCounts(snapshot);
     if (
-      !tracks ||
-      !collectionTracks ||
+      !songs ||
+      !collectionSongs ||
       !orders ||
       tags === null ||
       collections === null
     )
-      throw new Error("Could not encode the library cache binary files.");
+      throw new Error("Could not encode the song list cache binary files.");
     await mkdir(temporary, { recursive: true });
     signal?.throwIfAborted();
     await Promise.all([
@@ -331,8 +333,8 @@ export async function writeLibraryCache(
       ),
       writeFile(paths.tags, tags, "utf8"),
       writeFile(paths.collections, collections, "utf8"),
-      writeFile(paths.tracks, tracks),
-      writeFile(paths.collectionTracks, collectionTracks),
+      writeFile(paths.songs, songs),
+      writeFile(paths.collectionSongs, collectionSongs),
       writeFile(paths.orders, orders),
     ]);
     signal?.throwIfAborted();

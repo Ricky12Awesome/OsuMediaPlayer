@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  parseLibraryQuery,
+  parseSongListQuery,
   parseVideoEncodingSettings,
 } from "../src/main/ipc-validation";
 
-test("library IPC queries are validated and detached", () => {
+test("song list IPC queries are validated and detached", () => {
   const input = {
     search: "a".repeat(1100),
     collection: "Favorites",
@@ -17,7 +17,7 @@ test("library IPC queries are validated and detached", () => {
     limit: 80,
   };
 
-  const parsed = parseLibraryQuery(input);
+  const parsed = parseSongListQuery(input);
   assert.deepEqual(parsed, {
     search: "a".repeat(1000),
     collection: "Favorites",
@@ -32,12 +32,12 @@ test("library IPC queries are validated and detached", () => {
   assert.notEqual(parsed?.favoriteIds, input.favoriteIds);
 });
 
-test("library IPC queries reject non-record payloads and omit invalid fields", () => {
-  assert.throws(() => parseLibraryQuery(null), /invalid library query/i);
-  assert.throws(() => parseLibraryQuery([]), /invalid library query/i);
-  assert.equal(parseLibraryQuery(undefined, true), undefined);
+test("song list IPC queries reject non-record payloads and omit invalid fields", () => {
+  assert.throws(() => parseSongListQuery(null), /invalid song list query/i);
+  assert.throws(() => parseSongListQuery([]), /invalid song list query/i);
+  assert.equal(parseSongListQuery(undefined, true), undefined);
   assert.deepEqual(
-    parseLibraryQuery({
+    parseSongListQuery({
       search: false,
       sort: "unknown",
       offset: Number.POSITIVE_INFINITY,

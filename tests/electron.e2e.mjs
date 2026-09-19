@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { _electron as electron } from "playwright";
 
 // Keep the packaged-app smoke and shared-control geometry checks independent
-// of a user's osu!lazer library.
+// of a user's osu!lazer song list.
 const electronEnv = { ...process.env, ELECTRON_RENDERER_URL: "" };
 delete electronEnv.ELECTRON_RUN_AS_NODE;
 
@@ -14,7 +14,7 @@ const app = await electron.launch({
 try {
   const page = await app.firstWindow();
   await page.waitForSelector(".app-shell");
-  assert.equal(await page.title(), "osu! music");
+  assert.equal(await page.title(), "OsuMediaPlayer");
   assert.ok(await page.locator(".transport").count());
 
   await page.mouse.move(1, 1);

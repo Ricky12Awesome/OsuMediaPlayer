@@ -11,7 +11,7 @@ import {
   readCachedLastArtworkTheme,
 } from "./artwork-theme-cache";
 
-const lastPlayedTrackKey = "osu-music-last-played-track";
+const lastPlayedSongKey = "omp-last-played-song";
 
 async function loadArtworkTheme(url: string): Promise<ArtworkTheme | null> {
   const image = new Image();
@@ -26,39 +26,41 @@ async function loadArtworkTheme(url: string): Promise<ArtworkTheme | null> {
 }
 
 async function bootstrap() {
-  let initialLibrary = null;
-  let initialTrack = null;
+  let initialSongList = null;
+  let initialSong = null;
   let initialArtworkTheme = null;
   try {
-    const installPath = localStorage.getItem("osu-music-library-path");
-    const savedId = localStorage.getItem(lastPlayedTrackKey);
+    const installPath = localStorage.getItem("omp-song-list-path");
+    const savedId = localStorage.getItem(lastPlayedSongKey);
     const parsedPath = installPath
       ? (JSON.parse(installPath) as unknown)
       : undefined;
     const parsedId = savedId ? (JSON.parse(savedId) as unknown) : undefined;
-    if (typeof parsedPath === "string" && window.playerAPI?.loadCachedLibrary) {
-      initialLibrary = await window.playerAPI.loadCachedLibrary(parsedPath);
-      if (initialLibrary && typeof parsedId === "string")
-        initialTrack = await window.playerAPI.getTrack(parsedId);
-      if (initialTrack?.artworkUrl) {
+    if (
+      typeof parsedPath === "string" &&
+      window.playerAPI?.loadCachedSongList
+    ) {
+      initialSongList = await window.playerAPI.loadCachedSongList(parsedPath);
+      if (initialSongList && typeof parsedId === "string")
+        initialSong = await window.playerAPI.getSong(parsedId);
+      if (initialSong?.artworkUrl) {
         const theme =
           readCachedLastArtworkTheme() ??
-          (await loadArtworkTheme(initialTrack.artworkUrl));
+          (await loadArtworkTheme(initialSong.artworkUrl));
         if (theme) cacheLastArtworkTheme(theme);
-        if (theme)
-          initialArtworkTheme = { url: initialTrack.artworkUrl, theme };
+        if (theme) initialArtworkTheme = { url: initialSong.artworkUrl, theme };
       }
     }
   } catch {
     // Storage and cache failures fall through to the regular startup flow.
-    initialLibrary = null;
-    initialTrack = null;
+    initialSongList = null;
+    initialSong = null;
   }
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
       <App
-        initialLibrary={initialLibrary}
-        initialTrack={initialTrack}
+        initialSongList={initialSongList}
+        initialSong={initialSong}
         initialArtworkTheme={initialArtworkTheme}
       />
     </StrictMode>,

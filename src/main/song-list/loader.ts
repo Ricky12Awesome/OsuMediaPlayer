@@ -1,38 +1,38 @@
 import { join } from "node:path";
 import { fork } from "node:child_process";
-import { LibraryIndex, type LibrarySnapshot } from "./index";
-import type { LibraryProgress } from "../../shared/types";
+import { SongListIndex, type SongListSnapshot } from "./index";
+import type { SongListProgress } from "../../shared/types";
 
 type WorkerMessage =
-  | { type: "progress"; progress: LibraryProgress }
-  | { type: "batch" | "complete"; snapshot: LibrarySnapshot }
+  | { type: "progress"; progress: SongListProgress }
+  | { type: "batch" | "complete"; snapshot: SongListSnapshot }
   | { type: "error"; message: string };
 
 const workers = new Set<Promise<void>>();
 
 /** Keep Electron alive until every Realm owner has closed its database and exited. */
-export async function waitForLibraryWorkers(): Promise<void> {
+export async function waitForSongListWorkers(): Promise<void> {
   await Promise.all(workers);
 }
 
-export function loadLibraryInWorker(
+export function loadSongListInWorker(
   installPath?: string,
-  onProgress?: (progress: LibraryProgress) => void,
+  onProgress?: (progress: SongListProgress) => void,
   signal?: AbortSignal,
-  onSnapshot?: (index: LibraryIndex) => void,
+  onSnapshot?: (index: SongListIndex) => void,
   cacheDirectory?: string,
-  priorityTrackId?: string,
+  prioritySongId?: string,
   cacheOnly = false,
-): Promise<LibraryIndex> {
+): Promise<SongListIndex> {
   return new Promise((resolve, reject) => {
     signal?.throwIfAborted();
     const worker = fork(
-      join(__dirname, "library-worker.cjs"),
+      join(__dirname, "song-list-worker.cjs"),
       [
         JSON.stringify({
           installPath,
           cacheDirectory,
-          priorityTrackId,
+          prioritySongId,
           cacheOnly,
         }),
       ],
@@ -55,8 +55,8 @@ export function loadLibraryInWorker(
     workers.add(exited);
     let failed = false;
     let failure: unknown;
-    let completed: LibraryIndex | undefined;
-    let streaming: LibraryIndex | undefined;
+    let completed: SongListIndex | undefined;
+    let streaming: SongListIndex | undefined;
     const cancel = (error: unknown) => {
       if (failed) return;
       failed = true;
@@ -64,7 +64,7 @@ export function loadLibraryInWorker(
       if (worker.connected) worker.send("cancel", () => {});
     };
     const abort = () =>
-      cancel(signal?.reason ?? new Error("Library import cancelled."));
+      cancel(signal?.reason ?? new Error("Song list import cancelled."));
     signal?.addEventListener("abort", abort, { once: true });
     worker.on("message", (message: WorkerMessage) => {
       if (failed) return;
@@ -72,12 +72,12 @@ export function loadLibraryInWorker(
         if (message.type === "progress") onProgress?.(message.progress);
         else if (message.type === "error") cancel(new Error(message.message));
         else if (message.type === "complete") {
-          completed = LibraryIndex.fromSnapshot(message.snapshot);
+          completed = SongListIndex.fromSnapshot(message.snapshot);
           onSnapshot?.(completed);
         } else {
-          streaming ??= new LibraryIndex([], new Map(), {
+          streaming ??= new SongListIndex([], new Map(), {
             ...message.snapshot.summary,
-            trackCount: 0,
+            songCount: 0,
             collections: [],
             tags: [],
           });
@@ -98,7 +98,7 @@ export function loadLibraryInWorker(
       else
         reject(
           new Error(
-            `Library worker exited before loading completed (code ${code}).${diagnostics ? "\n" + diagnostics : ""}`,
+            `Song list worker exited before loading completed (code ${code}).${diagnostics ? "\n" + diagnostics : ""}`,
           ),
         );
     });

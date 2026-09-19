@@ -7,7 +7,7 @@ export interface MediaAsset {
   hash: string;
   filename: string;
 }
-export interface AssetLibrary {
+export interface AssetSongList {
   summary: { installPath: string };
   assets: ReadonlyMap<string, MediaAsset>;
 }
@@ -23,7 +23,7 @@ export interface ResolvedMediaFile {
 export const isAssetHash = (hash: string): boolean =>
   /^[a-f\d]{64}$/i.test(hash);
 export const assetUrl = (hash: string): string =>
-  `osu-media://asset/${hash.toLowerCase()}`;
+  `omp://asset/${hash.toLowerCase()}`;
 
 export function hashedFilePath(installPath: string, hash: string): string {
   if (!isAssetHash(hash)) throw new Error("Invalid asset hash");
@@ -100,15 +100,15 @@ export function parseRange(header: string, size: number): ByteRange | null {
 
 /** Resolves an allowlisted asset hash without trusting any path from a URL. */
 export async function resolveMediaFile(
-  library: AssetLibrary | null,
+  songList: AssetSongList | null,
   hash: string,
 ): Promise<ResolvedMediaFile | null> {
-  if (!library || !isAssetHash(hash)) return null;
-  const asset = library.assets.get(hash.toLowerCase());
+  if (!songList || !isAssetHash(hash)) return null;
+  const asset = songList.assets.get(hash.toLowerCase());
   if (!asset) return null;
-  const root = await realpath(join(library.summary.installPath, "files"));
+  const root = await realpath(join(songList.summary.installPath, "files"));
   for (const candidate of hashedFileCandidates(
-    library.summary.installPath,
+    songList.summary.installPath,
     hash,
   )) {
     try {
@@ -169,7 +169,7 @@ export function streamMediaFile(
 /** Only indexed media hashes can be served. No names from a URL become filesystem paths. */
 export async function serveMedia(
   request: Request,
-  library: AssetLibrary | null,
+  songList: AssetSongList | null,
 ): Promise<Response> {
   if (request.method !== "GET" && request.method !== "HEAD")
     return new Response(null, { status: 405, headers: { Allow: "GET, HEAD" } });
@@ -181,7 +181,7 @@ export async function serveMedia(
   }
   const hash = url.pathname.slice(1);
   if (
-    url.protocol !== "osu-media:" ||
+    url.protocol !== "omp:" ||
     url.host !== "asset" ||
     url.username ||
     url.password ||
@@ -190,7 +190,7 @@ export async function serveMedia(
   )
     return new Response(null, { status: 400 });
   try {
-    const resolved = await resolveMediaFile(library, hash);
+    const resolved = await resolveMediaFile(songList, hash);
     if (!resolved) return new Response(null, { status: 404 });
     return streamMediaFile(
       request,

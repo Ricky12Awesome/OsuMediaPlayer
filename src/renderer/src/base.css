@@ -24,16 +24,16 @@
   --panel-hover: #27202f;
   --panel-selected: #2b2235;
   --panel-current: linear-gradient(100deg, #ff66aa1b, #ff66aa0a);
-  --track-art-background: linear-gradient(145deg, #644b78, #31283a);
+  --song-art-background: linear-gradient(145deg, #644b78, #31283a);
   --placeholder-art-background: #28202f;
   --placeholder-title-background: #302536;
   --placeholder-artist-background: #2b2231;
   --border: #ffffff0d;
   --app-background: #15131c;
   --now-playing-background: #19141f;
-  --library-background: #1d1925f7;
+  --song-list-background: #1d1925f7;
   --transport-background: #211b29;
-  --range-track: #44364d;
+  --range-song: #44364d;
   --scrollbar: #49414f;
   --selection: #f6a6;
   --artwork-background:

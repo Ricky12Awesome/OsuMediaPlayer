@@ -18,26 +18,26 @@ import {
   Text,
 } from "lucide-react";
 import type {
-  Track,
-  TrackContextMenuAction,
-  TrackContextMenuInfo,
+  Song,
+  SongContextMenuAction,
+  SongContextMenuInfo,
 } from "../../shared/types";
 
-interface TrackContextMenuProps {
-  track: Track;
+interface SongContextMenuProps {
+  song: Song;
   x: number;
   y: number;
-  info: TrackContextMenuInfo;
-  onAction: (action: TrackContextMenuAction) => void;
+  info: SongContextMenuInfo;
+  onAction: (action: SongContextMenuAction) => void;
   onClose: () => void;
 }
 
 type MenuItemProps = {
   label: string;
-  action: TrackContextMenuAction;
+  action: SongContextMenuAction;
   disabled?: boolean;
   icon?: ReactNode;
-  onAction: (action: TrackContextMenuAction) => void;
+  onAction: (action: SongContextMenuAction) => void;
 };
 
 function MenuItem({
@@ -50,14 +50,14 @@ function MenuItem({
   return (
     <button
       type="button"
-      className="control-option track-context-item"
+      className="control-option song-context-item"
       role="menuitem"
       disabled={disabled}
       aria-disabled={disabled}
       title={disabled ? "Unavailable" : undefined}
       onClick={() => onAction(action)}
     >
-      <span className="track-context-item-icon" aria-hidden="true">
+      <span className="song-context-item-icon" aria-hidden="true">
         {icon}
       </span>
       <span className="control-option-label">{label}</span>
@@ -65,14 +65,14 @@ function MenuItem({
   );
 }
 
-export function TrackContextMenu({
-  track,
+export function SongContextMenu({
+  song,
   x,
   y,
   info,
   onAction,
   onClose,
-}: TrackContextMenuProps) {
+}: SongContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const copyButtonRef = useRef<HTMLButtonElement>(null);
   const [openSubmenu, setOpenSubmenu] = useState<"copy" | "open" | null>(null);
@@ -115,7 +115,7 @@ export function TrackContextMenu({
   const openLeft = position.x > window.innerWidth - 460;
   const openUp = position.y > window.innerHeight - 430;
   const submenuClass =
-    "control-popover track-context-submenu" +
+    "control-popover song-context-submenu" +
     (openLeft ? " opens-left" : "") +
     (openUp ? " opens-up" : "");
 
@@ -138,7 +138,7 @@ export function TrackContextMenu({
 
   return (
     <div
-      className="track-context-layer"
+      className="song-context-layer"
       onPointerDown={(event) => {
         if (event.target === event.currentTarget) {
           event.preventDefault();
@@ -149,16 +149,16 @@ export function TrackContextMenu({
     >
       <div
         ref={menuRef}
-        className="control-popover track-context-menu"
+        className="control-popover song-context-menu"
         role="menu"
-        aria-label={`Actions for ${track.title}`}
+        aria-label={`Actions for ${song.title}`}
         style={{ left: position.x, top: position.y }}
       >
-        <div className="track-context-menu-group">
+        <div className="song-context-menu-group">
           <button
             ref={copyButtonRef}
             type="button"
-            className="control-option track-context-item track-context-parent"
+            className="control-option song-context-item song-context-parent"
             role="menuitem"
             aria-haspopup="menu"
             aria-expanded={openSubmenu === "copy"}
@@ -166,11 +166,11 @@ export function TrackContextMenu({
             onKeyDown={(event) => onParentKeyDown(event, "copy")}
             onPointerEnter={() => setOpenSubmenu("copy")}
           >
-            <span className="track-context-item-icon" aria-hidden="true">
+            <span className="song-context-item-icon" aria-hidden="true">
               <Copy size={15} />
             </span>
             <span className="control-option-label">Copy</span>
-            <ChevronRight className="track-context-chevron" size={14} />
+            <ChevronRight className="song-context-chevron" size={14} />
           </button>
           {openSubmenu === "copy" && (
             <div className={submenuClass} role="menu">
@@ -183,7 +183,7 @@ export function TrackContextMenu({
               <MenuItem
                 label="Title Unicode"
                 action="copy-title-unicode"
-                disabled={!track.titleUnicode}
+                disabled={!song.titleUnicode}
                 icon={<Text size={14} />}
                 onAction={onAction}
               />
@@ -196,11 +196,11 @@ export function TrackContextMenu({
               <MenuItem
                 label="Artist Unicode"
                 action="copy-artist-unicode"
-                disabled={!track.artistUnicode}
+                disabled={!song.artistUnicode}
                 icon={<Text size={14} />}
                 onAction={onAction}
               />
-              <div className="track-context-separator" />
+              <div className="song-context-separator" />
               <MenuItem
                 label="Audio"
                 action="copy-audio"
@@ -243,7 +243,7 @@ export function TrackContextMenu({
                 icon={<Link2 size={14} />}
                 onAction={onAction}
               />
-              <div className="track-context-separator" />
+              <div className="song-context-separator" />
               <MenuItem
                 label="Online Id"
                 action="copy-online-id"
@@ -254,17 +254,17 @@ export function TrackContextMenu({
               <MenuItem
                 label="MD5 Hash"
                 action="copy-md5"
-                disabled={!track.md5Hash}
+                disabled={!song.md5Hash}
                 icon={<Hash size={14} />}
                 onAction={onAction}
               />
             </div>
           )}
         </div>
-        <div className="track-context-menu-group">
+        <div className="song-context-menu-group">
           <button
             type="button"
-            className="control-option track-context-item track-context-parent"
+            className="control-option song-context-item song-context-parent"
             role="menuitem"
             aria-haspopup="menu"
             aria-expanded={openSubmenu === "open"}
@@ -272,11 +272,11 @@ export function TrackContextMenu({
             onKeyDown={(event) => onParentKeyDown(event, "open")}
             onPointerEnter={() => setOpenSubmenu("open")}
           >
-            <span className="track-context-item-icon" aria-hidden="true">
+            <span className="song-context-item-icon" aria-hidden="true">
               <ExternalLink size={15} />
             </span>
             <span className="control-option-label">Open</span>
-            <ChevronRight className="track-context-chevron" size={14} />
+            <ChevronRight className="song-context-chevron" size={14} />
           </button>
           {openSubmenu === "open" && (
             <div className={submenuClass} role="menu">

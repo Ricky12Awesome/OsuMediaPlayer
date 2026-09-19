@@ -6,10 +6,10 @@ import {
   type RefObject,
 } from "react";
 import type {
-  LibraryQuery,
+  SongListQuery,
   PlayerAPI,
   RepeatMode,
-  Track,
+  Song,
   VideoEncodingCodec,
   VideoEncodingQuality,
   VideoMaxFps,
@@ -28,7 +28,7 @@ import {
   resolveMediaArtwork,
   type ResolvedMediaArtwork,
 } from "./media-artwork";
-import { displayTrackArtist, displayTrackTitle } from "./track-title";
+import { displaySongArtist, displaySongTitle } from "./song-title";
 import { usePlayerVideo } from "./usePlayerVideo";
 import { readPreference, writePreference } from "./preferences";
 
@@ -39,13 +39,13 @@ function readSettings() {
 function playbackError(error: unknown): string {
   if (error instanceof DOMException && error.name === "NotAllowedError")
     return "Press play to allow audio playback.";
-  return "This track could not be played. Its audio file may be missing or unsupported. Try another track.";
+  return "This song could not be played. Its audio file may be missing or unsupported. Try another song.";
 }
 
 export interface PlayerState {
-  track: Track | null;
+  song: Song | null;
   queueIndex: number | null;
-  queueQuery: LibraryQuery;
+  queueQuery: SongListQuery;
   playing: boolean;
   currentTime: number;
   duration: number;
@@ -77,8 +77,8 @@ export interface PlayerState {
   error: string | null;
   clearError: () => void;
   loading: boolean;
-  playTrack: (track: Track, query?: LibraryQuery, index?: number) => void;
-  cueTrack: (track: Track, query?: LibraryQuery, index?: number) => void;
+  playSong: (song: Song, query?: SongListQuery, index?: number) => void;
+  cueSong: (song: Song, query?: SongListQuery, index?: number) => void;
   reset: () => void;
   toggle: () => void;
   seek: (time: number) => void;
@@ -100,7 +100,7 @@ export interface PlayerState {
 
 export function usePlayer(
   api: PlayerAPI,
-  initialTrack: Track | null = null,
+  initialSong: Song | null = null,
   showTitleUnicode = false,
   showArtistUnicode = false,
 ): PlayerState {
@@ -118,11 +118,11 @@ export function usePlayer(
   const audioRef = useRef(audio);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [settings] = useState(readSettings);
-  const [track, setTrack] = useState<Track | null>(initialTrack);
+  const [song, setSong] = useState<Song | null>(initialSong);
   const [queueIndex, setQueueIndex] = useState<number | null>(
-    initialTrack ? 0 : null,
+    initialSong ? 0 : null,
   );
-  const [queueQuery, setQueueQuery] = useState<LibraryQuery>({});
+  const [queueQuery, setQueueQuery] = useState<SongListQuery>({});
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -146,11 +146,13 @@ export function usePlayer(
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const activeTrack = useRef<Track | null>(initialTrack);
-  const queue = useRef<{ query: LibraryQuery; index: number; total?: number }>({
-    query: {},
-    index: 0,
-  });
+  const activeSong = useRef<Song | null>(initialSong);
+  const queue = useRef<{ query: SongListQuery; index: number; total?: number }>(
+    {
+      query: {},
+      index: 0,
+    },
+  );
   const history = useRef<number[]>([]);
   const historyPosition = useRef(-1);
   const generation = useRef(0);
@@ -164,7 +166,7 @@ export function usePlayer(
   const syncVideo = useCallback(
     (autoPlay = !audio.paused) => {
       const video = videoRef.current;
-      const current = activeTrack.current;
+      const current = activeSong.current;
       if (!playVideosRef.current) {
         video?.pause();
         return;
@@ -209,8 +211,8 @@ export function usePlayer(
     handleVideoError,
   } = usePlayerVideo({
     api,
-    track,
-    activeTrack,
+    song,
+    activeSong,
     playVideos,
     videoEncodingCodec,
     videoEncodingQuality,
@@ -223,7 +225,7 @@ export function usePlayer(
 
   const reset = useCallback(() => {
     generation.current++;
-    activeTrack.current = null;
+    activeSong.current = null;
     queue.current = { query: {}, index: 0 };
     history.current = [];
     historyPosition.current = -1;
@@ -231,7 +233,7 @@ export function usePlayer(
     videoRef.current?.pause();
     audio.removeAttribute("src");
     audio.load();
-    setTrack(null);
+    setSong(null);
     setQueueIndex(null);
     setQueueQuery({});
     setPlaying(false);
@@ -282,10 +284,10 @@ export function usePlayer(
     [audio, syncVideo],
   );
 
-  const loadTrack = useCallback(
+  const loadSong = useCallback(
     (
-      nextTrack: Track,
-      query: LibraryQuery = {},
+      nextSong: Song,
+      query: SongListQuery = {},
       index = 0,
       autoPlay = true,
       fromShuffle = false,
@@ -298,42 +300,42 @@ export function usePlayer(
         history.current = [nextIndex];
         historyPosition.current = 0;
       }
-      activeTrack.current = nextTrack;
+      activeSong.current = nextSong;
       audio.pause();
       videoRef.current?.pause();
       setLoading(false);
-      setTrack(nextTrack);
+      setSong(nextSong);
       setQueueIndex(nextIndex);
       setQueueQuery(copiedQuery);
       setCurrentTime(0);
-      setDuration(nextTrack.duration);
+      setDuration(nextSong.duration);
       setPlaying(false);
       setError(null);
       resetVideo();
-      audio.src = nextTrack.audioUrl;
+      audio.src = nextSong.audioUrl;
       audio.load();
       if (autoPlay) void resumeGeneration(id);
     },
     [audio, resetVideo, resumeGeneration],
   );
 
-  const playTrack = useCallback(
-    (nextTrack: Track, query: LibraryQuery = {}, index = 0) =>
-      loadTrack(nextTrack, query, index, true),
-    [loadTrack],
+  const playSong = useCallback(
+    (nextSong: Song, query: SongListQuery = {}, index = 0) =>
+      loadSong(nextSong, query, index, true),
+    [loadSong],
   );
-  const cueTrack = useCallback(
-    (nextTrack: Track, query: LibraryQuery = {}, index = 0) =>
-      loadTrack(nextTrack, query, index, false),
-    [loadTrack],
+  const cueSong = useCallback(
+    (nextSong: Song, query: SongListQuery = {}, index = 0) =>
+      loadSong(nextSong, query, index, false),
+    [loadSong],
   );
 
   const seek = useCallback(
     (time: number) => {
-      if (!activeTrack.current || !Number.isFinite(time)) return;
+      if (!activeSong.current || !Number.isFinite(time)) return;
       const max = Number.isFinite(audio.duration)
         ? audio.duration
-        : activeTrack.current.duration;
+        : activeSong.current.duration;
       const next = Math.max(0, Math.min(time, max || 0));
       try {
         audio.currentTime = next;
@@ -347,7 +349,7 @@ export function usePlayer(
   );
 
   const resume = useCallback(() => {
-    if (!activeTrack.current) return;
+    if (!activeSong.current) return;
     const id = ++generation.current;
     setError(null);
     if (audio.ended) seek(0);
@@ -373,7 +375,7 @@ export function usePlayer(
 
   const navigate = useCallback(
     async (direction: 1 | -1, ended = false) => {
-      if (!activeTrack.current) return;
+      if (!activeSong.current) return;
       const id = ++generation.current;
       if (direction === -1 && audio.currentTime > 3) {
         setLoading(false);
@@ -392,7 +394,7 @@ export function usePlayer(
       try {
         let total = currentQueue.total;
         if (total === undefined) {
-          const page = await api.queryLibrary({
+          const page = await api.querySongList({
             ...currentQueue.query,
             offset: currentQueue.index,
             limit: 1,
@@ -430,23 +432,23 @@ export function usePlayer(
         }
         const page =
           selected === null
-            ? await api.queryLibrary({
+            ? await api.querySongList({
                 ...currentQueue.query,
                 offset: nextIndex,
                 limit: 1,
               })
-            : await api.queryLibrary({
+            : await api.querySongList({
                 ...currentQueue.query,
                 offset: nextIndex,
                 limit: 1,
               });
         if (id !== generation.current || !mounted.current) return;
-        const nextTrack = page.items[0];
-        if (!nextTrack) {
+        const nextSong = page.items[0];
+        if (!nextSong) {
           currentQueue.total = page.total;
           setLoading(false);
           setError(
-            "This queue changed. Select a track from the library to continue.",
+            "This queue changed. Select a song from the song list to continue.",
           );
           return;
         }
@@ -454,8 +456,8 @@ export function usePlayer(
           history.current = selected.history.entries;
           historyPosition.current = selected.history.position;
         }
-        loadTrack(
-          nextTrack,
+        loadSong(
+          nextSong,
           currentQueue.query,
           nextIndex,
           true,
@@ -466,11 +468,11 @@ export function usePlayer(
         if (id !== generation.current || !mounted.current) return;
         setLoading(false);
         setError(
-          "Could not load the next track. Please select a track or try again.",
+          "Could not load the next song. Please select a song or try again.",
         );
       }
     },
-    [api, audio, loadTrack, resume, seek],
+    [api, audio, loadSong, resume, seek],
   );
 
   const next = useCallback(() => navigate(1), [navigate]);
@@ -478,7 +480,7 @@ export function usePlayer(
 
   const jumpRandom = useCallback(
     async (direction: 1 | -1) => {
-      if (!activeTrack.current) return;
+      if (!activeSong.current) return;
       const id = ++generation.current;
       const currentQueue = queue.current;
       setLoading(true);
@@ -486,7 +488,7 @@ export function usePlayer(
       try {
         let total = currentQueue.total;
         if (total === undefined) {
-          const page = await api.queryLibrary({
+          const page = await api.querySongList({
             ...currentQueue.query,
             offset: currentQueue.index,
             limit: 1,
@@ -510,35 +512,35 @@ export function usePlayer(
           return;
         }
 
-        const page = await api.queryLibrary({
+        const page = await api.querySongList({
           ...currentQueue.query,
           offset: selected.index,
           limit: 1,
         });
         if (id !== generation.current || !mounted.current) return;
-        const nextTrack = page.items[0];
-        if (!nextTrack) {
+        const nextSong = page.items[0];
+        if (!nextSong) {
           currentQueue.total = page.total;
           setLoading(false);
           setError(
-            "This queue changed. Select a track from the library to continue.",
+            "This queue changed. Select a song from the song list to continue.",
           );
           return;
         }
 
         history.current = selected.history.entries;
         historyPosition.current = selected.history.position;
-        loadTrack(nextTrack, currentQueue.query, selected.index, true, true);
+        loadSong(nextSong, currentQueue.query, selected.index, true, true);
         queue.current.total = page.total;
       } catch {
         if (id !== generation.current || !mounted.current) return;
         setLoading(false);
         setError(
-          "Could not load a random track. Please select a track or try again.",
+          "Could not load a random song. Please select a song or try again.",
         );
       }
     },
-    [api, loadTrack],
+    [api, loadSong],
   );
 
   const setVolume = useCallback((nextVolume: number) => {
@@ -622,7 +624,7 @@ export function usePlayer(
       setDuration(
         Number.isFinite(audio.duration) && audio.duration > 0
           ? audio.duration
-          : (activeTrack.current?.duration ?? 0),
+          : (activeSong.current?.duration ?? 0),
       );
       setLoading(false);
     };
@@ -661,7 +663,7 @@ export function usePlayer(
       [
         "error",
         () => {
-          if (activeTrack.current) {
+          if (activeSong.current) {
             setPlaying(false);
             setLoading(false);
             setError(playbackError(audio.error));
@@ -672,11 +674,11 @@ export function usePlayer(
     for (const [name, listener] of events)
       audio.addEventListener(name, listener);
     // The cleanup below clears the source during React Strict Mode's mount
-    // replay. Load the bootstrap track after listeners are attached so that
-    // the second setup restores it and cannot leave the visible track without
+    // replay. Load the bootstrap song after listeners are attached so that
+    // the second setup restores it and cannot leave the visible song without
     // a media source.
-    if (initialTrack) {
-      audio.src = initialTrack.audioUrl;
+    if (initialSong) {
+      audio.src = initialSong.audioUrl;
       audio.load();
     }
     const removeMediaListener = api.onMediaAction?.((action) => {
@@ -756,12 +758,12 @@ export function usePlayer(
         }
       });
     };
-  }, [api, audio, initialTrack, syncVideo]);
+  }, [api, audio, initialSong, syncVideo]);
 
   useEffect(() => {
     const mediaSession = navigator.mediaSession;
     if (!mediaSession) return;
-    if (!track) {
+    if (!song) {
       mediaSession.metadata = null;
       mediaSession.playbackState = "none";
       try {
@@ -778,9 +780,9 @@ export function usePlayer(
     const setMetadata = (artwork?: ResolvedMediaArtwork) => {
       if (cancelled) return;
       mediaSession.metadata = new MediaMetadata({
-        title: displayTrackTitle(track, showTitleUnicode),
-        artist: displayTrackArtist(track, showArtistUnicode),
-        album: track.source || "osu! music",
+        title: displaySongTitle(song, showTitleUnicode),
+        artist: displaySongArtist(song, showArtistUnicode),
+        album: song.source || "OsuMediaPlayer",
         artwork: artwork
           ? [
               {
@@ -792,9 +794,9 @@ export function usePlayer(
           : [],
       });
     };
-    const artworkUrl = track.backgroundHash ? track.artworkUrl : undefined;
+    const artworkUrl = song.backgroundHash ? song.artworkUrl : undefined;
 
-    // Keep track metadata even when there is no background, but never provide
+    // Keep song metadata even when there is no background, but never provide
     // an actual background candidate in that case.
     setMetadata(fallbackMediaArtwork);
     if (!artworkUrl) return;
@@ -818,12 +820,12 @@ export function usePlayer(
       controller.abort();
       if (ownedArtworkUrl) URL.revokeObjectURL(ownedArtworkUrl);
     };
-  }, [showArtistUnicode, showTitleUnicode, track]);
+  }, [showArtistUnicode, showTitleUnicode, song]);
 
   useEffect(() => {
     if (
       !navigator.mediaSession ||
-      !track ||
+      !song ||
       !duration ||
       !Number.isFinite(duration)
     )
@@ -838,10 +840,10 @@ export function usePlayer(
     } catch {
       // Ignore invalid transient media states.
     }
-  }, [currentTime, duration, playing, track]);
+  }, [currentTime, duration, playing, song]);
 
   return {
-    track,
+    song,
     queueIndex,
     queueQuery,
     playing,
@@ -871,8 +873,8 @@ export function usePlayer(
     error,
     clearError: () => setError(null),
     loading,
-    playTrack,
-    cueTrack,
+    playSong,
+    cueSong,
     reset,
     toggle,
     seek,

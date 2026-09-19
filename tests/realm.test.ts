@@ -7,9 +7,9 @@ import test, { after } from "node:test";
 import Realm from "realm";
 import { Schema } from "../src/shared/client-model";
 import {
-  loadLibraryFromRealm,
-  sortedLibraryBeatmaps,
-} from "../src/main/library/index";
+  loadSongListFromRealm,
+  sortedSongListBeatmaps,
+} from "../src/main/song-list/index";
 import {
   defaultLazerInstallPath,
   resolveLazerInstallPath,
@@ -125,27 +125,27 @@ test("imports linked Realm records read-only, including collections and dates", 
         .update(await readFile(path))
         .digest("hex");
     const before = await checksum();
-    const index = await loadLibraryFromRealm(directory);
-    assert.equal(index.summary.trackCount, 1);
+    const index = await loadSongListFromRealm(directory);
+    assert.equal(index.summary.songCount, 1);
     assert.equal(index.summary.beatmapCount, 1);
-    const track = index.query().items[0];
-    assert.equal(track.title, "Song");
-    assert.equal(track.duration, 120);
-    assert.equal(track.addedAt, date.getTime());
-    assert.equal(track.dateAddedAt, date.getTime());
-    assert.equal(track.dateSubmittedAt, submitted.getTime());
-    assert.equal(track.dateRankedAt, ranked.getTime());
-    assert.equal(track.lastPlayedAt, date.getTime());
-    assert.equal(track.audioHash, audioHash);
-    assert.deepEqual(track.collections, ["Favorites"]);
-    assert.deepEqual(track.tags, ["dance", "favorite"]);
+    const song = index.query().items[0];
+    assert.equal(song.title, "Song");
+    assert.equal(song.duration, 120);
+    assert.equal(song.addedAt, date.getTime());
+    assert.equal(song.dateAddedAt, date.getTime());
+    assert.equal(song.dateSubmittedAt, submitted.getTime());
+    assert.equal(song.dateRankedAt, ranked.getTime());
+    assert.equal(song.lastPlayedAt, date.getTime());
+    assert.equal(song.audioHash, audioHash);
+    assert.deepEqual(song.collections, ["Favorites"]);
+    assert.deepEqual(song.tags, ["dance", "favorite"]);
     assert.equal(await checksum(), before);
     await assert.rejects(
-      loadLibraryFromRealm(directory, undefined, AbortSignal.abort()),
+      loadSongListFromRealm(directory, undefined, AbortSignal.abort()),
     );
     const controller = new AbortController();
     await assert.rejects(
-      loadLibraryFromRealm(
+      loadSongListFromRealm(
         directory,
         () => controller.abort(),
         controller.signal,
@@ -153,7 +153,7 @@ test("imports linked Realm records read-only, including collections and dates", 
       { name: "AbortError" },
     );
     // Cancellation releases Realm too, allowing a subsequent import.
-    assert.equal((await loadLibraryFromRealm(directory)).summary.trackCount, 1);
+    assert.equal((await loadSongListFromRealm(directory)).summary.songCount, 1);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -162,7 +162,7 @@ test("imports linked Realm records read-only, including collections and dates", 
 test("missing database is never created", async () => {
   const directory = await mkdtemp(join(tmpdir(), "osu-missing-"));
   try {
-    await assert.rejects(loadLibraryFromRealm(directory));
+    await assert.rejects(loadSongListFromRealm(directory));
     await assert.rejects(readFile(join(directory, "client.realm")), {
       code: "ENOENT",
     });
@@ -209,7 +209,7 @@ test("Realm sorts linked Unicode titles ascending before loading", async () => {
     const realm = new Realm({ path, readOnly: true, schemaVersion: 52 });
     try {
       assert.deepEqual(
-        Array.from(sortedLibraryBeatmaps(realm), (map) => map.Metadata?.Title),
+        Array.from(sortedSongListBeatmaps(realm), (map) => map.Metadata?.Title),
         ["-+", "Alpha", "Zulu"],
       );
     } finally {

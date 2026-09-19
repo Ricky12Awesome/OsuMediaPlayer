@@ -2,12 +2,12 @@
 
 ## Project goal
 
-OsuMediaPlayer is an Electron and React app for playing music from osu!lazer. Favor clear behavior and a codebase that can be understood quickly. Start with the fewest moving parts that solve the actual problem. Keep existing complexity only when it is required by something concrete, such as Realm ownership, IPC security, media streaming, cancellation, or large-library rendering.
+OsuMediaPlayer is an Electron and React app for playing music from osu!lazer. Favor clear behavior and a codebase that can be understood quickly. Start with the fewest moving parts that solve the actual problem. Keep existing complexity only when it is required by something concrete, such as Realm ownership, IPC security, media streaming, cancellation, or large-song-list rendering.
 
 ## Project layout
 
-- `src/main/` is the privileged Electron process. It owns filesystem access, Realm/library management, IPC handlers, media serving, caching, and video/FFmpeg work.
-- `src/main/library/` contains Realm import, indexing, querying, and cache logic. The library worker keeps Realm work out of Electron's main event loop.
+- `src/main/` is the privileged Electron process. It owns filesystem access, Realm/song-list management, IPC handlers, media serving, caching, and video/FFmpeg work.
+- `src/main/song-list/` contains Realm import, indexing, querying, and cache logic. The song-list worker keeps Realm work out of Electron's main event loop.
 - `src/main/video/` contains probing, encoding, HLS serving, and converted-video cache logic.
 - `src/preload/` is the only bridge into the renderer. Expose a narrow, typed API through `contextBridge`.
 - `src/renderer/src/` contains React components, hooks, browser APIs, and feature CSS.
@@ -23,20 +23,20 @@ Keep these boundaries intact. Renderer code must not import Electron, Node files
 - Keep related code together and files focused. Extract a responsibility when a module becomes hard to navigate; avoid both giant catch-all files and one-file-per-function fragmentation.
 - Follow the existing TypeScript, React, CSS, and Electron conventions. Similar features should look and behave alike.
 - Keep comments for decisions and constraints. Let clear code explain routine mechanics.
-- Treat caches as optional accelerators. A cache miss or cleanup failure should not prevent a valid library load or playback.
+- Treat caches as optional accelerators. A cache miss or cleanup failure should not prevent a valid song list load or playback.
 
 ## Electron and IPC
 
 - Keep `contextIsolation`, `sandbox`, `nodeIntegration: false`, and web security settings intact.
 - Validate IPC arguments in the main process and retain trusted sender and frame checks. Add shared request and response types in `src/shared/types.ts`.
 - Centralize media path, hash, MIME, and range handling in the existing media helpers.
-- Keep expensive Realm imports, full-library work, probing, and encoding off the renderer and Electron main event loop. Reuse the library worker and existing child-process helpers.
+- Keep expensive Realm imports, full-song-list work, probing, and encoding off the renderer and Electron main event loop. Reuse the song-list worker and existing child-process helpers.
 - Add cancellation and cleanup for long-running imports, encodes, streams, timers, listeners, and temporary files.
 
 ## Renderer and performance
 
-- Preserve the existing paged and virtualized library list. Keep result sizes, concurrent requests, page caches, and overscan bounded instead of putting the whole library in the DOM.
-- Avoid duplicate IPC calls and repeated full-library work. Reuse query, sort, facet, artwork, and video caches where they already apply, and invalidate them when their source data changes.
+- Preserve the existing paged and virtualized song list. Keep result sizes, concurrent requests, page caches, and overscan bounded instead of putting the whole song list in the DOM.
+- Avoid duplicate IPC calls and repeated full-song-list work. Reuse query, sort, facet, artwork, and video caches where they already apply, and invalidate them when their source data changes.
 - Keep React state out of high-frequency loops. Use refs and one scheduled frame for playback or visualizer work; clean up `requestAnimationFrame`, observers, media listeners, and abort controllers.
 - Treat CSS compositing as a limited resource. Prefer short `transform` and `opacity` transitions. Avoid animating layout, large blurred surfaces, persistent `will-change`, heavy shadows, or always-running animations without evidence that they help. Respect reduced-motion behavior.
 - Avoid reading whole media files into memory. Use the existing streaming and range-serving paths.
@@ -73,6 +73,6 @@ Also use these when applicable:
 
 - `npm run build` for renderer, Electron, or packaging changes.
 - `npm run test:e2e` for Electron lifecycle and end-to-end UI changes.
-- `npm run test:streaming` for library worker, streaming, media, or cache changes.
+- `npm run test:streaming` for song-list worker, streaming, media, or cache changes.
 
 Review the diff after formatting and keep each change narrowly scoped. Do not modify `README.md` unless the task explicitly requests it. If a change deserves README documentation, tell the developer exactly what should be added and where.

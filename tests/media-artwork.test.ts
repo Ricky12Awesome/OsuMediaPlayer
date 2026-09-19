@@ -7,10 +7,7 @@ import {
 } from "../src/renderer/src/media-artwork";
 
 test("MediaImage accepts standard URL schemes only", () => {
-  assert.equal(
-    directMediaImageUrl("osu-media://asset/" + "a".repeat(64)),
-    undefined,
-  );
+  assert.equal(directMediaImageUrl("omp://asset/" + "a".repeat(64)), undefined);
   assert.equal(
     directMediaImageUrl("https://example.test/cover.png"),
     "https://example.test/cover.png",
@@ -25,7 +22,7 @@ test("MediaImage accepts standard URL schemes only", () => {
   );
 });
 
-test("tracks without background art use the music-note fallback artwork", async () => {
+test("songs without background art use the music-note fallback artwork", async () => {
   assert.equal(await resolveMediaArtwork(undefined), undefined);
   assert.match(
     fallbackMediaArtwork.url,
