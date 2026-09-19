@@ -3,45 +3,45 @@ import type { Dispatch, RefObject, SetStateAction } from "react";
 type ResizeStart = { x: number; width: number };
 
 interface PanelResizersProps {
-  libraryRef: RefObject<HTMLElement | null>;
+  songListRef: RefObject<HTMLElement | null>;
   sidePanelRef: RefObject<HTMLElement | null>;
   resizeStart: RefObject<ResizeStart | null>;
   sidePanelResizeStart: RefObject<ResizeStart | null>;
-  libraryHidden: boolean;
+  songListHidden: boolean;
   sidePanelOpen: boolean;
   isDesktop: boolean;
-  libraryPosition: "left" | "right";
-  libraryWidth: number;
+  songListPosition: "left" | "right";
+  songListWidth: number;
   sidePanelWidth: number;
   minSidePanelWidth: number;
   maxSidePanelWidth: number;
   setResizing: Dispatch<SetStateAction<boolean>>;
   setSidePanelResizing: Dispatch<SetStateAction<boolean>>;
-  setLibraryWidth: Dispatch<SetStateAction<number>>;
+  setSongListWidth: Dispatch<SetStateAction<number>>;
   setSidePanelWidth: Dispatch<SetStateAction<number>>;
-  clampLibraryWidth: (value: number) => number;
+  clampSongListWidth: (value: number) => number;
   clampSidePanelWidth: (value: number) => number;
   defaultSidePanelWidth: number;
 }
 
 export function PanelResizers({
-  libraryRef,
+  songListRef,
   sidePanelRef,
   resizeStart,
   sidePanelResizeStart,
-  libraryHidden,
+  songListHidden,
   sidePanelOpen,
   isDesktop,
-  libraryPosition,
-  libraryWidth,
+  songListPosition,
+  songListWidth,
   sidePanelWidth,
   minSidePanelWidth,
   maxSidePanelWidth,
   setResizing,
   setSidePanelResizing,
-  setLibraryWidth,
+  setSongListWidth,
   setSidePanelWidth,
-  clampLibraryWidth,
+  clampSongListWidth,
   clampSidePanelWidth,
   defaultSidePanelWidth,
 }: PanelResizersProps) {
@@ -76,7 +76,7 @@ export function PanelResizers({
           if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
             event.preventDefault();
             const direction = event.key === "ArrowRight" ? 1 : -1;
-            const sign = libraryPosition === "right" ? 1 : -1;
+            const sign = songListPosition === "right" ? 1 : -1;
             setSidePanelWidth((value) =>
               clampSidePanelWidth(value + direction * sign * 16),
             );
@@ -87,48 +87,49 @@ export function PanelResizers({
       </div>
 
       <div
-        className="library-resizer"
+        className="song-list-resizer"
         role="separator"
-        aria-label="Resize library sidebar"
-        aria-hidden={libraryHidden}
+        aria-label="Resize song list sidebar"
+        aria-hidden={songListHidden}
         aria-orientation="vertical"
         aria-valuemin={320}
         aria-valuemax={720}
-        aria-valuenow={Math.round(libraryWidth)}
-        tabIndex={libraryHidden ? -1 : 0}
+        aria-valuenow={Math.round(songListWidth)}
+        tabIndex={songListHidden ? -1 : 0}
         title="Drag to resize · double-click to reset"
         onPointerDown={(event) => {
-          if (event.button !== 0 || libraryHidden) return;
+          if (event.button !== 0 || songListHidden) return;
           event.preventDefault();
           resizeStart.current = {
             x: event.clientX,
             width:
-              libraryRef.current?.getBoundingClientRect().width ?? libraryWidth,
+              songListRef.current?.getBoundingClientRect().width ??
+              songListWidth,
           };
           setResizing(true);
         }}
-        onDoubleClick={() => setLibraryWidth(clampLibraryWidth(430))}
+        onDoubleClick={() => setSongListWidth(clampSongListWidth(430))}
         onKeyDown={(event) => {
           if (event.key === "ArrowLeft") {
             event.preventDefault();
-            setLibraryWidth((value) =>
-              clampLibraryWidth(
-                value + (libraryPosition === "right" ? 16 : -16),
+            setSongListWidth((value) =>
+              clampSongListWidth(
+                value + (songListPosition === "right" ? 16 : -16),
               ),
             );
           } else if (event.key === "ArrowRight") {
             event.preventDefault();
-            setLibraryWidth((value) =>
-              clampLibraryWidth(
-                value + (libraryPosition === "right" ? -16 : 16),
+            setSongListWidth((value) =>
+              clampSongListWidth(
+                value + (songListPosition === "right" ? -16 : 16),
               ),
             );
           } else if (event.key === "Home") {
             event.preventDefault();
-            setLibraryWidth(320);
+            setSongListWidth(320);
           } else if (event.key === "End") {
             event.preventDefault();
-            setLibraryWidth(clampLibraryWidth(720));
+            setSongListWidth(clampSongListWidth(720));
           }
         }}
       >

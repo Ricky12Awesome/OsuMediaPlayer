@@ -11,7 +11,7 @@ import {
 } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
-import type { LibraryIndex } from "../src/main/library/index";
+import type { SongListIndex } from "../src/main/song-list/index";
 import { assetUrl } from "../src/main/media";
 import {
   convertedVideoUrl,
@@ -107,15 +107,15 @@ test("a changed encoding profile invalidates the source-hash cache", async () =>
   try {
     await mkdir(cache, { recursive: true });
     const cached = await writeCachedVideo(cache, hash, videoSettings, "cached");
-    const library = {
+    const songList = {
       summary: { installPath: root },
       assets: new Map([[hash, { hash, filename: "video.avi" }]]),
-      getTrack: () => ({ videoUrl: assetUrl(hash) }),
-    } as unknown as LibraryIndex;
+      getSong: () => ({ videoUrl: assetUrl(hash) }),
+    } as unknown as SongListIndex;
     const transcoder = new VideoTranscoder(cache, "missing-ffmpeg");
 
     await assert.rejects(
-      transcoder.prepare(library, "track", {
+      transcoder.prepare(songList, "song", {
         ...videoSettings,
         quality: "high",
         cacheLimitGb: -1,
@@ -155,15 +155,15 @@ test("a changed encoding profile discards the old same-source HLS stream", async
       }),
     );
     await writeFile(playlist, "#EXTM3U\n");
-    const library = {
+    const songList = {
       summary: { installPath: root },
       assets: new Map([[hash, { hash, filename: "video.avi" }]]),
-      getTrack: () => ({ videoUrl: assetUrl(hash) }),
-    } as unknown as LibraryIndex;
+      getSong: () => ({ videoUrl: assetUrl(hash) }),
+    } as unknown as SongListIndex;
     const transcoder = new VideoTranscoder(cache, "missing-ffmpeg");
 
     await assert.rejects(
-      transcoder.prepare(library, "track", {
+      transcoder.prepare(songList, "song", {
         ...videoSettings,
         forceRemux: true,
       }),
@@ -196,17 +196,17 @@ test("the video cache evicts the least recently used conversion", async () => {
     );
     await utimes(oldFile, new Date(1_000), new Date(1_000));
     await utimes(recentFile, new Date(2_000), new Date(2_000));
-    const library = {
+    const songList = {
       summary: { installPath: root },
       assets: new Map([
         [recentHash, { hash: recentHash, filename: "video.avi" }],
       ]),
-      getTrack: () => ({ videoUrl: assetUrl(recentHash) }),
-    } as unknown as LibraryIndex;
+      getSong: () => ({ videoUrl: assetUrl(recentHash) }),
+    } as unknown as SongListIndex;
     const transcoder = new VideoTranscoder(cache, "missing-ffmpeg");
 
     assert.deepEqual(
-      await transcoder.prepare(library, "track", {
+      await transcoder.prepare(songList, "song", {
         ...videoSettings,
         cacheLimitGb: 6 / 1024 ** 3,
       }),
@@ -268,11 +268,11 @@ process.stdout.write(JSON.stringify({
       );
       await chmod(ffmpeg, 0o755);
       await chmod(ffprobe, 0o755);
-      const library = {
+      const songList = {
         summary: { installPath },
         assets: new Map([[hash, { hash, filename: "video.avi" }]]),
-        getTrack: () => ({ videoUrl: assetUrl(hash) }),
-      } as unknown as LibraryIndex;
+        getSong: () => ({ videoUrl: assetUrl(hash) }),
+      } as unknown as SongListIndex;
       const statuses: Array<{
         encoding: boolean;
         encoder?: string;
@@ -283,7 +283,7 @@ process.stdout.write(JSON.stringify({
       });
 
       assert.deepEqual(
-        await transcoder.prepare(library, "track", {
+        await transcoder.prepare(songList, "song", {
           ...videoSettings,
           cacheLimitGb: 0,
         }),
@@ -346,15 +346,15 @@ test("an existing shared HLS stream is reused and served through the hash URL", 
         "segment-000000.m4s",
       ].join("\n"),
     );
-    const library = {
+    const songList = {
       summary: { installPath: root },
       assets: new Map([[hash, { hash, filename: "video.avi" }]]),
-      getTrack: () => ({ videoUrl: assetUrl(hash) }),
-    } as unknown as LibraryIndex;
+      getSong: () => ({ videoUrl: assetUrl(hash) }),
+    } as unknown as SongListIndex;
     const transcoder = new VideoTranscoder(cache, "missing-ffmpeg");
 
     assert.deepEqual(
-      await transcoder.prepare(library, "track", videoSettings),
+      await transcoder.prepare(songList, "song", videoSettings),
       {
         url: profiledVideoUrl(hash),
         streaming: true,
@@ -435,13 +435,13 @@ process.stdout.write(JSON.stringify({
       await chmod(ffmpeg, 0o755);
       await chmod(ffprobe, 0o755);
 
-      const library = {
+      const songList = {
         summary: { installPath },
         assets: new Map([[hash, { hash, filename: "video.avi" }]]),
-        getTrack: () => ({ videoUrl: assetUrl(hash) }),
-      } as unknown as LibraryIndex;
+        getSong: () => ({ videoUrl: assetUrl(hash) }),
+      } as unknown as SongListIndex;
       transcoder = new VideoTranscoder(cache, ffmpeg);
-      const preparing = transcoder.prepare(library, "track");
+      const preparing = transcoder.prepare(songList, "song");
       for (let attempt = 0; attempt < 100; attempt++) {
         if (transcoder.encodingStatus) break;
         await new Promise((resolve) => setTimeout(resolve, 10));

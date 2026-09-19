@@ -49,7 +49,7 @@
   opacity: 1;
   transform: translate(-50%);
 }
-.transport-track {
+.transport-song {
   grid-area: 1/2;
   justify-content: center;
   align-items: center;
@@ -58,27 +58,27 @@
   display: flex;
   overflow: hidden;
 }
-.transport-track .track-art {
+.transport-song .song-art {
   width: 2.375rem;
   height: 2.375rem;
   border-radius: 0.375rem;
 }
-.transport-track .track-art svg {
+.transport-song .song-art svg {
   width: 18px;
   height: 18px;
 }
-.transport-controls-centered .transport-track {
+.transport-controls-centered .transport-song {
   grid-area: 1/1;
   justify-content: flex-start;
   justify-self: start;
   max-width: 100%;
   margin-left: 0;
 }
-.transport-controls-centered .transport-track-text {
+.transport-controls-centered .transport-song-text {
   text-align: left;
   align-items: flex-start;
 }
-.transport-track-text {
+.transport-song-text {
   text-align: center;
   flex-direction: column;
   flex: 0 auto;
@@ -89,7 +89,7 @@
   display: flex;
   overflow: hidden;
 }
-.transport-track-text strong {
+.transport-song-text strong {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: #e6d9eb;
@@ -98,7 +98,7 @@
   font-weight: 800;
   overflow: hidden;
 }
-.transport-track-text > span {
+.transport-song-text > span {
   color: #9f8aab;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -180,8 +180,8 @@
     to right,
     var(--pink) 0%,
     var(--pink) var(--range-progress),
-    var(--range-track) var(--range-progress),
-    var(--range-track) 100%
+    var(--range-song) var(--range-progress),
+    var(--range-song) 100%
   );
   border-radius: 0.3125rem;
   outline: none;

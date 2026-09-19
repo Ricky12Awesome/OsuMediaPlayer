@@ -7,10 +7,10 @@ import type {
   BeatmapSet,
 } from "../../shared/client-model";
 import type {
-  LibraryFacet,
-  LibraryProgress,
-  LibrarySummary,
-  Track,
+  SongListFacet,
+  SongListProgress,
+  SongListSummary,
+  Song,
 } from "../../shared/types";
 import {
   assetUrl,
@@ -19,12 +19,12 @@ import {
   type MediaAsset,
 } from "../media";
 import { resolveLazerInstallPath } from "../lazer-path";
-import { LibraryIndex } from "./index";
-import { sortedLibraryBeatmaps } from "./realm";
+import { SongListIndex } from "./index";
+import { sortedSongListBeatmaps } from "./realm";
 import type {
-  LibraryCancellation,
-  LibraryCollection,
-  LibrarySnapshot,
+  SongListCancellation,
+  SongListCollection,
+  SongListSnapshot,
 } from "./types";
 import { collator, dateTimestamp, normalize, number, string } from "./utils";
 
@@ -71,14 +71,12 @@ export interface BeatmapVideoEvent {
   offset: number;
 }
 
-interface PriorityTrackId {
+interface PrioritySongId {
   onlineId: number;
   audioHash: string;
 }
 
-function parsePriorityTrackId(
-  value: string | undefined,
-): PriorityTrackId | null {
+function parsePrioritySongId(value: string | undefined): PrioritySongId | null {
   const match = /^(\d+)-([a-f\d]{64})$/i.exec(value ?? "");
   if (!match) return null;
   const onlineId = Number(match[1]);
@@ -87,13 +85,13 @@ function parsePriorityTrackId(
     : null;
 }
 
-/** Find the saved song without materializing the rest of the library first. */
+/** Find the saved song without materializing the rest of the song list first. */
 function priorityBeatmap(
   realm: Realm,
-  priorityTrackId: string | undefined,
-  signal?: LibraryCancellation,
+  prioritySongId: string | undefined,
+  signal?: SongListCancellation,
 ): Beatmap | undefined {
-  const priority = parsePriorityTrackId(priorityTrackId);
+  const priority = parsePrioritySongId(prioritySongId);
   if (!priority) return undefined;
   const candidates = realm
     .objects<Beatmap>("Beatmap")
@@ -175,14 +173,14 @@ async function readBeatmapVideoEvent(
   return null;
 }
 
-/** Read a consistent library snapshot without modifying osu!'s database. */
-export async function loadLibraryFromRealm(
+/** Read a consistent song list snapshot without modifying osu!'s database. */
+export async function loadSongListFromRealm(
   requestedPath?: string,
-  onProgress?: (progress: LibraryProgress) => void,
-  signal?: LibraryCancellation,
-  onBatch?: (index: LibraryIndex) => void,
-  priorityTrackId?: string,
-): Promise<LibraryIndex> {
+  onProgress?: (progress: SongListProgress) => void,
+  signal?: SongListCancellation,
+  onBatch?: (index: SongListIndex) => void,
+  prioritySongId?: string,
+): Promise<SongListIndex> {
   signal?.throwIfAborted();
   const installPath = await resolveLazerInstallPath(requestedPath);
   signal?.throwIfAborted();
@@ -223,8 +221,8 @@ export async function loadLibraryFromRealm(
         }
       }
     }
-    const sortedMaps = sortedLibraryBeatmaps(realm);
-    const priorityMap = priorityBeatmap(realm, priorityTrackId, signal);
+    const sortedMaps = sortedSongListBeatmaps(realm);
+    const priorityMap = priorityBeatmap(realm, prioritySongId, signal);
     const priorityMapId = priorityMap?.ID.toHexString();
     // Filter in Realm and traverse its links directly, without a detached copy of every difficulty.
     function* beatmaps(): Generator<{ map: Beatmap; set: RawSet }> {
@@ -282,7 +280,7 @@ export async function loadLibraryFromRealm(
       signal,
       onBatch,
       realm,
-      priorityTrackId,
+      prioritySongId,
     );
     handedOff = true;
     return index;
@@ -297,44 +295,44 @@ async function buildIndex(
   collectionsByHash: Map<string, Set<string>>,
   collectionNames: Set<string>,
   pendingCollections: readonly PendingCollection[],
-  onProgress?: (progress: LibraryProgress) => void,
-  signal?: LibraryCancellation,
-  onBatch?: (index: LibraryIndex) => void,
+  onProgress?: (progress: SongListProgress) => void,
+  signal?: SongListCancellation,
+  onBatch?: (index: SongListIndex) => void,
   realm?: Realm,
-  priorityTrackId?: string,
-): Promise<LibraryIndex> {
-  const tracks = new Map<string, Track>();
+  prioritySongId?: string,
+): Promise<SongListIndex> {
+  const songs = new Map<string, Song>();
   const assets = new Map<string, MediaAsset>();
   const pendingVideos: {
-    track: Track;
+    song: Song;
     set: RawSet;
     directory: string;
     beatmapHash: string;
     fallback: MediaAsset;
   }[] = [];
-  const trackIdByBeatmap = new Map<string, string>();
-  const trackIdsByMd5 = new Map<string, Set<string>>();
+  const songIdByBeatmap = new Map<string, string>();
+  const songIdsByMd5 = new Map<string, Set<string>>();
   let skippedCount = 0;
   let beatmapCount = 0;
   let lastYield = performance.now();
   let lastPublish = 0;
-  const changedTracks = new Map<string, Track>();
+  const changedSongs = new Map<string, Song>();
   const publishBatch = () => {
-    if (!onBatch || !changedTracks.size) return;
+    if (!onBatch || !changedSongs.size) return;
     signal?.throwIfAborted();
     const changedAssets = new Map<string, MediaAsset>();
-    for (const track of changedTracks.values()) {
+    for (const song of changedSongs.values()) {
       for (const hash of [
-        track.audioHash,
-        track.backgroundHash,
-        track.videoHash,
+        song.audioHash,
+        song.backgroundHash,
+        song.videoHash,
       ]) {
         if (hash && assets.has(hash))
           changedAssets.set(hash, assets.get(hash)!);
       }
     }
     const batch = finishIndex(
-      changedTracks,
+      changedSongs,
       changedAssets,
       installPath,
       beatmapCount,
@@ -342,9 +340,9 @@ async function buildIndex(
       collectionNames,
       [],
     );
-    batch.summary.trackCount = tracks.size;
+    batch.summary.songCount = songs.size;
     onBatch(batch);
-    changedTracks.clear();
+    changedSongs.clear();
     lastPublish = performance.now();
   };
   for (const { map, set } of maps) {
@@ -388,12 +386,12 @@ async function buildIndex(
         filename: artwork.filename,
       });
     const id = `${set.identity}-${audio.hash}`;
-    trackIdByBeatmap.set(map.ID.toHexString(), id);
+    songIdByBeatmap.set(map.ID.toHexString(), id);
     for (const hash of hashes) {
       if (!hash) continue;
-      const ids = trackIdsByMd5.get(hash) ?? new Set<string>();
+      const ids = songIdsByMd5.get(hash) ?? new Set<string>();
       ids.add(id);
-      trackIdsByMd5.set(hash, ids);
+      songIdsByMd5.set(hash, ids);
     }
     const tags = [
       ...new Set(
@@ -418,7 +416,7 @@ async function buildIndex(
       ? Math.max(0, playedTimestamp)
       : 0;
     const { dateAddedAt, dateSubmittedAt, dateRankedAt } = set;
-    const current = tracks.get(id);
+    const current = songs.get(id);
     if (current) {
       current.difficultyCount++;
       current.tags = [...new Set([...current.tags, ...tags])];
@@ -440,7 +438,7 @@ async function buildIndex(
       current.onlineId ??= onlineId;
       current.md5Hash ??= md5Hash;
     } else {
-      const track: Track = {
+      const song: Song = {
         id,
         title: beatmapTitle(map),
         titleUnicode: string(metadata.TitleUnicode) || undefined,
@@ -468,7 +466,7 @@ async function buildIndex(
         dateRankedAt,
         lastPlayedAt,
       };
-      tracks.set(id, track);
+      songs.set(id, song);
       const videos = [...set.files.entries()].filter(([, file]) =>
         isVideoFilename(file.filename),
       );
@@ -479,8 +477,8 @@ async function buildIndex(
           videos.find(([path]) => path.startsWith(localPrefix))?.[1] ??
           videos[0][1];
         const beatmapHash = string(map.Hash).toLowerCase();
-        if (id === priorityTrackId) {
-          // The saved track is streamed before the rest of the library. Read
+        if (id === prioritySongId) {
+          // The saved song is streamed before the rest of the song list. Read
           // its event file now so its video is ready with that first batch.
           const event = await readBeatmapVideoEvent(installPath, beatmapHash);
           const referenced = event
@@ -492,16 +490,16 @@ async function buildIndex(
             referenced && isVideoFilename(referenced.filename)
               ? referenced
               : fallback;
-          track.videoUrl = assetUrl(video.hash);
-          track.videoHash = video.hash;
-          track.videoOffset = referenced && event ? event.offset : 0;
+          song.videoUrl = assetUrl(video.hash);
+          song.videoHash = video.hash;
+          song.videoOffset = referenced && event ? event.offset : 0;
           assets.set(video.hash, {
             hash: video.hash,
             filename: video.filename,
           });
         } else {
           pendingVideos.push({
-            track,
+            song,
             set,
             directory,
             beatmapHash,
@@ -510,7 +508,7 @@ async function buildIndex(
         }
       }
     }
-    if (onBatch) changedTracks.set(id, tracks.get(id)!);
+    if (onBatch) changedSongs.set(id, songs.get(id)!);
     if (!lastPublish) publishBatch();
   }
   publishBatch();
@@ -538,11 +536,11 @@ async function buildIndex(
         referenced && isVideoFilename(referenced.filename)
           ? referenced
           : pending.fallback;
-      pending.track.videoUrl = assetUrl(video.hash);
-      pending.track.videoHash = video.hash;
-      pending.track.videoOffset = referenced && event ? event.offset : 0;
+      pending.song.videoUrl = assetUrl(video.hash);
+      pending.song.videoHash = video.hash;
+      pending.song.videoOffset = referenced && event ? event.offset : 0;
       assets.set(video.hash, { hash: video.hash, filename: video.filename });
-      if (onBatch) changedTracks.set(pending.track.id, pending.track);
+      if (onBatch) changedSongs.set(pending.song.id, pending.song);
       if (performance.now() - lastPublish >= 150) publishBatch();
     }
   };
@@ -554,7 +552,7 @@ async function buildIndex(
   signal?.throwIfAborted();
   publishBatch();
   return finishIndex(
-    tracks,
+    songs,
     assets,
     installPath,
     beatmapCount,
@@ -562,14 +560,14 @@ async function buildIndex(
     collectionNames,
     pendingCollections,
     realm,
-    trackIdByBeatmap,
-    trackIdsByMd5,
-    [...tracks.keys()],
+    songIdByBeatmap,
+    songIdsByMd5,
+    [...songs.keys()],
   );
 }
 
 function finishIndex(
-  tracks: Map<string, Track>,
+  songs: Map<string, Song>,
   assets: Map<string, MediaAsset>,
   installPath: string,
   beatmapCount: number,
@@ -577,51 +575,51 @@ function finishIndex(
   collectionNames: Set<string>,
   pendingCollections: readonly PendingCollection[],
   realm?: Realm,
-  trackIdByBeatmap: ReadonlyMap<string, string> = new Map(),
-  trackIdsByMd5: ReadonlyMap<string, ReadonlySet<string>> = new Map(),
+  songIdByBeatmap: ReadonlyMap<string, string> = new Map(),
+  songIdsByMd5: ReadonlyMap<string, ReadonlySet<string>> = new Map(),
   initialTitleOrder?: readonly string[],
-): LibraryIndex {
+): SongListIndex {
   const collectionCounts = new Map(
     [...collectionNames].map((name) => [name, 0]),
   );
   const tagCounts = new Map<string, number>();
-  for (const track of tracks.values()) {
-    track.tags.sort(collator.compare);
-    track.collections.sort(collator.compare);
-    for (const name of track.collections)
+  for (const song of songs.values()) {
+    song.tags.sort(collator.compare);
+    song.collections.sort(collator.compare);
+    for (const name of song.collections)
       collectionCounts.set(name, (collectionCounts.get(name) ?? 0) + 1);
-    for (const name of track.tags)
+    for (const name of song.tags)
       tagCounts.set(name, (tagCounts.get(name) ?? 0) + 1);
   }
-  const facets = (values: Map<string, number>): LibraryFacet[] =>
+  const facets = (values: Map<string, number>): SongListFacet[] =>
     [...values].map(([name, count]) => ({ name, count }));
-  const beatmapHashesByTrack = new Map<string, Set<string>>();
-  for (const [hash, ids] of trackIdsByMd5) {
+  const beatmapHashesBySong = new Map<string, Set<string>>();
+  for (const [hash, ids] of songIdsByMd5) {
     for (const id of ids) {
-      const hashes = beatmapHashesByTrack.get(id) ?? new Set<string>();
+      const hashes = beatmapHashesBySong.get(id) ?? new Set<string>();
       hashes.add(hash);
-      beatmapHashesByTrack.set(id, hashes);
+      beatmapHashesBySong.set(id, hashes);
     }
   }
-  const collections: LibraryCollection[] = pendingCollections.map(
+  const collections: SongListCollection[] = pendingCollections.map(
     (collection) => {
-      const trackIds = new Set<string>();
+      const songIds = new Set<string>();
       for (const hash of collection.hashes) {
-        for (const id of trackIdsByMd5.get(hash) ?? []) trackIds.add(id);
+        for (const id of songIdsByMd5.get(hash) ?? []) songIds.add(id);
       }
       return {
         id: collection.id,
         name: collection.name,
         lastModified: collection.lastModified,
-        trackIds: [...trackIds],
+        songIds: [...songIds],
       };
     },
   );
-  return new LibraryIndex(
-    [...tracks.values()],
+  return new SongListIndex(
+    [...songs.values()],
     assets,
     {
-      trackCount: tracks.size,
+      songCount: songs.size,
       beatmapCount,
       collectionCount: collectionNames.size,
       collections: facets(collectionCounts).sort((a, b) =>
@@ -634,10 +632,10 @@ function finishIndex(
       skippedCount,
     },
     realm,
-    trackIdByBeatmap,
-    trackIdsByMd5,
+    songIdByBeatmap,
+    songIdsByMd5,
     initialTitleOrder,
-    beatmapHashesByTrack,
+    beatmapHashesBySong,
     collections,
   );
 }

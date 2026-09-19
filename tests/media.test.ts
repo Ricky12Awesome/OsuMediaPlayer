@@ -12,7 +12,7 @@ const hash = "0123456789abcdef".repeat(4);
 
 test("asset URLs and hashed paths use normalized hashes", () => {
   assert.equal(isAssetHash(hash), true);
-  assert.equal(assetUrl(hash.toUpperCase()), "osu-media://asset/" + hash);
+  assert.equal(assetUrl(hash.toUpperCase()), "omp://asset/" + hash);
   assert.equal(hashedFilePath("/osu", hash), "/osu/files/0/01/" + hash);
 });
 

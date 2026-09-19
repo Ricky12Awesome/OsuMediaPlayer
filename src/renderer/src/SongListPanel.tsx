@@ -19,35 +19,35 @@ import {
   X,
 } from "lucide-react";
 import type {
-  LibraryQuery,
-  LibrarySummary,
+  SongListQuery,
+  SongListSummary,
   PlayerAPI,
   SortKey,
-  Track,
-  TrackContextMenuInfo,
+  Song,
+  SongContextMenuInfo,
 } from "../../shared/types";
 import { FacetPicker } from "./FacetPicker";
 import { SortPicker } from "./SortPicker";
 import {
-  VirtualTrackList,
-  type VirtualTrackListKeyboardControls,
-} from "./VirtualTrackList";
+  VirtualSongList,
+  type VirtualSongListKeyboardControls,
+} from "./VirtualSongList";
 
-export type LibraryTab = "all" | "favorites";
+export type SongListTab = "all" | "favorites";
 
-export interface LibraryPanelProps {
+export interface SongListPanelProps {
   api: PlayerAPI;
-  libraryRef: RefObject<HTMLElement | null>;
-  libraryHidden: boolean;
+  songListRef: RefObject<HTMLElement | null>;
+  songListHidden: boolean;
   searchRef: RefObject<HTMLInputElement | null>;
   searchDraft: string;
   setSearchDraft: Dispatch<SetStateAction<string>>;
   onSearchKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
   importing: boolean;
-  refreshLibrary: () => Promise<void>;
-  summary: LibrarySummary | null;
-  tab: LibraryTab;
-  setTab: Dispatch<SetStateAction<LibraryTab>>;
+  refreshSongList: () => Promise<void>;
+  summary: SongListSummary | null;
+  tab: SongListTab;
+  setTab: Dispatch<SetStateAction<SongListTab>>;
   favorites: Set<string>;
   tags: string[];
   setTags: Dispatch<SetStateAction<string[]>>;
@@ -62,34 +62,34 @@ export interface LibraryPanelProps {
   search: string;
   clearFilters: () => void;
   loadError: string;
-  chooseLibrary: () => Promise<void>;
-  query: LibraryQuery;
+  chooseSongList: () => Promise<void>;
+  query: SongListQuery;
   revision: number;
-  currentTrackId: string | undefined;
-  followCurrentTrackIndex: number | undefined;
-  libraryReady: boolean;
+  currentSongId: string | undefined;
+  followCurrentSongIndex: number | undefined;
+  songListReady: boolean;
   playing: boolean;
   showTitleUnicode: boolean;
   showArtistUnicode: boolean;
-  onPlay: (track: Track, index: number) => void;
-  onFavorite: (track: Track) => void;
-  onContextMenu: (track: Track, x: number, y: number) => void;
+  onPlay: (song: Song, index: number) => void;
+  onFavorite: (song: Song) => void;
+  onContextMenu: (song: Song, x: number, y: number) => void;
   onTotal: (total: number) => void;
-  onFirstTrack: (track: Track) => void;
-  keyboardControlsRef: RefObject<VirtualTrackListKeyboardControls | null>;
+  onFirstSong: (song: Song) => void;
+  keyboardControlsRef: RefObject<VirtualSongListKeyboardControls | null>;
   resultTotal: number;
 }
 
-export function LibraryPanel({
+export function SongListPanel({
   api,
-  libraryRef,
-  libraryHidden,
+  songListRef,
+  songListHidden,
   searchRef,
   searchDraft,
   setSearchDraft,
   onSearchKeyDown,
   importing,
-  refreshLibrary,
+  refreshSongList,
   summary,
   tab,
   setTab,
@@ -107,12 +107,12 @@ export function LibraryPanel({
   search,
   clearFilters,
   loadError,
-  chooseLibrary,
+  chooseSongList,
   query,
   revision,
-  currentTrackId,
-  followCurrentTrackIndex,
-  libraryReady,
+  currentSongId,
+  followCurrentSongIndex,
+  songListReady,
   playing,
   showTitleUnicode,
   showArtistUnicode,
@@ -120,19 +120,19 @@ export function LibraryPanel({
   onFavorite,
   onContextMenu,
   onTotal,
-  onFirstTrack,
+  onFirstSong,
   keyboardControlsRef,
   resultTotal,
-}: LibraryPanelProps) {
+}: SongListPanelProps) {
   return (
     <section
-      ref={libraryRef}
-      className="library-panel"
-      aria-label="Music library"
-      aria-hidden={libraryHidden}
-      inert={libraryHidden || undefined}
+      ref={songListRef}
+      className="song-list-panel"
+      aria-label="Song list"
+      aria-hidden={songListHidden}
+      inert={songListHidden || undefined}
     >
-      <div className="library-search-row">
+      <div className="song-list-search-row">
         <div className="search-box">
           <Search size={19} />
           <input
@@ -143,7 +143,7 @@ export function LibraryPanel({
             }
             onKeyDown={onSearchKeyDown}
             placeholder="Search songs, artists, tags…"
-            aria-label="Search library"
+            aria-label="Search song list"
           />
           {searchDraft ? (
             <button
@@ -160,19 +160,19 @@ export function LibraryPanel({
           className={
             "icon-button refresh-button " + (importing ? "spinning" : "")
           }
-          title="Refresh library"
-          aria-label="Refresh library"
+          title="Refresh song list"
+          aria-label="Refresh song list"
           disabled={importing}
-          onClick={() => void refreshLibrary()}
+          onClick={() => void refreshSongList()}
         >
           <RefreshCw size={17} />
         </button>
       </div>
 
       <div
-        className="panel-tabs library-tabs"
+        className="panel-tabs song-list-tabs"
         role="tablist"
-        aria-label="Library view"
+        aria-label="Song list view"
       >
         <button
           role="tab"
@@ -251,31 +251,31 @@ export function LibraryPanel({
 
       <div className="list-area">
         {loadError ? (
-          <div className="library-state error-state">
+          <div className="song-list-state error-state">
             <CircleAlert size={35} />
             <h3>Let’s find your music</h3>
             <p>{loadError}</p>
             <button
               className="primary-button"
-              onClick={() => void chooseLibrary()}
+              onClick={() => void chooseSongList()}
             >
               <FolderOpen size={16} /> Choose osu! folder
             </button>
             <button
               className="text-button"
-              onClick={() => void refreshLibrary()}
+              onClick={() => void refreshSongList()}
             >
               Try again
             </button>
           </div>
         ) : summary ? (
-          <VirtualTrackList
+          <VirtualSongList
             api={api}
             query={query}
             revision={revision}
-            currentTrackId={currentTrackId}
-            followCurrentTrackIndex={followCurrentTrackIndex}
-            libraryReady={libraryReady}
+            currentSongId={currentSongId}
+            followCurrentSongIndex={followCurrentSongIndex}
+            songListReady={songListReady}
             playing={playing}
             showTitleUnicode={showTitleUnicode}
             showArtistUnicode={showArtistUnicode}
@@ -284,19 +284,19 @@ export function LibraryPanel({
             onFavorite={onFavorite}
             onContextMenu={onContextMenu}
             onTotal={onTotal}
-            onFirstTrack={onFirstTrack}
+            onFirstSong={onFirstSong}
             keyboardControlsRef={keyboardControlsRef}
           />
         ) : null}
       </div>
 
-      <div className="library-footer">
+      <div className="song-list-footer">
         <span>
           <i />
           {importing
-            ? (summary?.trackCount ?? 0).toLocaleString() + " songs loaded"
+            ? (summary?.songCount ?? 0).toLocaleString() + " songs loaded"
             : resultTotal.toLocaleString() +
-              (hasFilters ? " songs found" : " songs in your library")}
+              (hasFilters ? " songs found" : " songs in your song list")}
         </span>
       </div>
     </section>

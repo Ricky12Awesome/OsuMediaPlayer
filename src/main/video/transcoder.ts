@@ -7,7 +7,7 @@ import type {
   VideoEncodingStatus,
   PreparedVideo,
 } from "../../shared/types";
-import type { LibraryIndex } from "../library/index";
+import type { SongListIndex } from "../song-list/index";
 import { isAssetHash, resolveMediaFile } from "../media";
 import {
   ffprobeFor,
@@ -57,7 +57,7 @@ function hashFromAssetUrl(value: string): string | null {
   try {
     const url = new URL(value);
     const hash = url.pathname.slice(1);
-    return url.protocol === "osu-media:" &&
+    return url.protocol === "omp:" &&
       url.host === "asset" &&
       !url.search &&
       isAssetHash(hash)
@@ -181,27 +181,27 @@ export class VideoTranscoder {
   }
 
   async prepare(
-    library: LibraryIndex | null,
-    trackId: string,
+    songList: SongListIndex | null,
+    songId: string,
     inputSettings?: VideoEncodingSettings,
   ): Promise<PreparedVideo | null> {
     if (this.clearPromise) await this.clearPromise;
     const requestVersion = ++this.requestVersion;
-    const track = library?.getTrack(trackId);
-    if (!library || !track?.videoUrl) return null;
-    const hash = hashFromAssetUrl(track.videoUrl);
+    const song = songList?.getSong(songId);
+    if (!songList || !song?.videoUrl) return null;
+    const hash = hashFromAssetUrl(song.videoUrl);
     if (!hash) return null;
-    const asset = library.assets.get(hash);
+    const asset = songList.assets.get(hash);
     if (!asset) return null;
     if (!videoNeedsConversion(asset.filename)) {
       await this.cancelEncoding();
-      return { url: track.videoUrl, streaming: false };
+      return { url: song.videoUrl, streaming: false };
     }
     const settings = normalizeVideoEncodingSettings(inputSettings);
     const profileHash = videoEncodingProfileHash(settings);
     let source: Awaited<ReturnType<typeof resolveMediaFile>> = null;
     try {
-      source = await resolveMediaFile(library, hash);
+      source = await resolveMediaFile(songList, hash);
     } catch {
       // A cached conversion or an already-running stream does not need the
       // original asset to be present.

@@ -9,7 +9,11 @@ import {
   SlidersHorizontal,
   Trash2,
 } from "lucide-react";
-import type { CacheKind, CacheUsage, LibrarySummary } from "../../shared/types";
+import type {
+  CacheKind,
+  CacheUsage,
+  SongListSummary,
+} from "../../shared/types";
 import type { PlayerState } from "./usePlayer";
 import { SettingsPicker } from "./SettingsPicker";
 import type { VisualizerSettings } from "./visualizer-settings";
@@ -40,17 +44,17 @@ export type CacheNotice = {
   message: string;
 };
 
-export type LibraryPosition = "left" | "right";
+export type SongListPosition = "left" | "right";
 export type TransportLayout = "controls-left" | "controls-centered";
 
 export interface SettingsPanelProps {
-  summary: LibrarySummary | null;
+  summary: SongListSummary | null;
   importing: boolean;
   player: PlayerState;
-  chooseLibrary: () => Promise<void>;
-  refreshLibrary: () => Promise<void>;
-  libraryPosition: LibraryPosition;
-  setLibraryPosition: Dispatch<SetStateAction<LibraryPosition>>;
+  chooseSongList: () => Promise<void>;
+  refreshSongList: () => Promise<void>;
+  songListPosition: SongListPosition;
+  setSongListPosition: Dispatch<SetStateAction<SongListPosition>>;
   transportLayout: TransportLayout;
   setTransportLayout: Dispatch<SetStateAction<TransportLayout>>;
   artworkThemeEnabled: boolean;
@@ -93,10 +97,10 @@ export function SettingsPanel({
   summary,
   importing,
   player,
-  chooseLibrary,
-  refreshLibrary,
-  libraryPosition,
-  setLibraryPosition,
+  chooseSongList,
+  refreshSongList,
+  songListPosition,
+  setSongListPosition,
   transportLayout,
   setTransportLayout,
   artworkThemeEnabled,
@@ -143,9 +147,9 @@ export function SettingsPanel({
 
   return (
     <>
-      <div className="settings-block settings-library">
+      <div className="settings-block settings-song-list">
         <span className="settings-label">
-          <FolderOpen size={16} /> OSU!LAZER LIBRARY
+          <FolderOpen size={16} /> OSU!LAZER SONG LIST
         </span>
         <div className="settings-row">
           <span className="settings-row-label">Folder</span>
@@ -159,7 +163,7 @@ export function SettingsPanel({
         <div className="settings-actions">
           <button
             className="primary-button"
-            onClick={() => void chooseLibrary()}
+            onClick={() => void chooseSongList()}
           >
             <FolderOpen size={15} /> Choose folder
           </button>
@@ -167,10 +171,10 @@ export function SettingsPanel({
             className="secondary-button"
             disabled={importing}
             onClick={() => {
-              void refreshLibrary();
+              void refreshSongList();
             }}
           >
-            <RefreshCw size={15} /> Refresh library
+            <RefreshCw size={15} /> Refresh song list
           </button>
         </div>
       </div>
@@ -187,11 +191,11 @@ export function SettingsPanel({
               type="button"
               className={
                 "settings-choice-option " +
-                (libraryPosition === "left" ? "active" : "")
+                (songListPosition === "left" ? "active" : "")
               }
-              aria-pressed={libraryPosition === "left"}
+              aria-pressed={songListPosition === "left"}
               title="Show the song list on the left"
-              onClick={() => setLibraryPosition("left")}
+              onClick={() => setSongListPosition("left")}
             >
               Left
             </button>
@@ -199,11 +203,11 @@ export function SettingsPanel({
               type="button"
               className={
                 "settings-choice-option " +
-                (libraryPosition === "right" ? "active" : "")
+                (songListPosition === "right" ? "active" : "")
               }
-              aria-pressed={libraryPosition === "right"}
+              aria-pressed={songListPosition === "right"}
               title="Show the song list on the right"
-              onClick={() => setLibraryPosition("right")}
+              onClick={() => setSongListPosition("right")}
             >
               Right
             </button>
@@ -261,7 +265,7 @@ export function SettingsPanel({
         )}
         {settingsSwitch(
           "Show title / artist",
-          "Display track details over the artwork",
+          "Display song details over the artwork",
           showNowPlayingTitleArtist,
           () => setShowNowPlayingTitleArtist((value) => !value),
         )}
@@ -362,7 +366,7 @@ export function SettingsPanel({
       </div>
       <div className="settings-stats">
         <span>
-          <strong>{summary?.trackCount.toLocaleString() ?? "—"}</strong> songs
+          <strong>{summary?.songCount.toLocaleString() ?? "—"}</strong> songs
         </span>
         <span>
           <strong>{summary?.beatmapCount.toLocaleString() ?? "—"}</strong>{" "}
@@ -418,7 +422,7 @@ export function SettingsPanel({
       <div className="settings-block debug-setting">
         {settingsSwitch(
           "Debug mode",
-          "Display technical metadata for the current track",
+          "Display technical metadata for the current song",
           debugMode,
           () => setDebugMode((value) => !value),
         )}

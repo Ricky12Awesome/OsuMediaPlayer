@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  LibraryIndex,
+  SongListIndex,
   parseBeatmapVideoEvent,
-} from "../src/main/library/index";
-import type { Track } from "../src/shared/types";
+} from "../src/main/song-list/index";
+import type { Song } from "../src/shared/types";
 
 test("beatmap video events parse quoted and unquoted filenames", () => {
   assert.deepEqual(
@@ -17,8 +17,8 @@ test("beatmap video events parse quoted and unquoted filenames", () => {
   });
 });
 
-test("library queries search, filter, sort, and paginate tracks", () => {
-  const makeTrack = (id: string, title: string, collection: string): Track => ({
+test("song list queries search, filter, sort, and paginate songs", () => {
+  const makeSong = (id: string, title: string, collection: string): Song => ({
     id,
     title,
     artist: "Artist",
@@ -29,18 +29,18 @@ test("library queries search, filter, sort, and paginate tracks", () => {
     bpm: 180,
     stars: 4,
     difficultyCount: 1,
-    audioUrl: "osu-media://asset/" + "a".repeat(64),
+    audioUrl: "omp://asset/" + "a".repeat(64),
     addedAt: 0,
   });
-  const index = new LibraryIndex(
+  const index = new SongListIndex(
     [
-      makeTrack("1", "Alpha", "Favorites"),
-      makeTrack("2", "Beta", "Other"),
-      { ...makeTrack("3", "Gamma", "Other"), tags: ["electronic", "vocal"] },
+      makeSong("1", "Alpha", "Favorites"),
+      makeSong("2", "Beta", "Other"),
+      { ...makeSong("3", "Gamma", "Other"), tags: ["electronic", "vocal"] },
     ],
     new Map(),
     {
-      trackCount: 3,
+      songCount: 3,
       beatmapCount: 3,
       collectionCount: 2,
       collections: [],
@@ -50,32 +50,30 @@ test("library queries search, filter, sort, and paginate tracks", () => {
     },
   );
   assert.deepEqual(
-    index.query({ search: "alpha" }).items.map((track) => track.id),
+    index.query({ search: "alpha" }).items.map((song) => song.id),
     ["1"],
   );
   assert.deepEqual(
-    index.query({ collection: "favorites" }).items.map((track) => track.id),
+    index.query({ collection: "favorites" }).items.map((song) => song.id),
     ["1"],
   );
   assert.deepEqual(
-    index
-      .query({ tags: ["electronic", "vocal"] })
-      .items.map((track) => track.id),
+    index.query({ tags: ["electronic", "vocal"] }).items.map((song) => song.id),
     ["3"],
   );
-  assert.deepEqual(index.getTrackLocation("2"), {
-    track: index.getTrack("2"),
+  assert.deepEqual(index.getSongLocation("2"), {
+    song: index.getSong("2"),
     index: 1,
   });
   assert.equal(
-    index.getTrackLocation("1", { sort: "title", descending: true })?.index,
+    index.getSongLocation("1", { sort: "title", descending: true })?.index,
     2,
   );
-  assert.equal(index.getTrackLocation("2", { search: "alpha" }), null);
+  assert.equal(index.getSongLocation("2", { search: "alpha" }), null);
 });
 
-test("library sorts tracks by their most recent play time", () => {
-  const makeTrack = (id: string, lastPlayedAt: number): Track => ({
+test("song list sorts songs by their most recent play time", () => {
+  const makeSong = (id: string, lastPlayedAt: number): Song => ({
     id,
     title: id,
     artist: "Artist",
@@ -86,15 +84,15 @@ test("library sorts tracks by their most recent play time", () => {
     bpm: 180,
     stars: 4,
     difficultyCount: 1,
-    audioUrl: "osu-media://asset/" + id.padEnd(64, "a"),
+    audioUrl: "omp://asset/" + id.padEnd(64, "a"),
     addedAt: 0,
     lastPlayedAt,
   });
-  const index = new LibraryIndex(
-    [makeTrack("never", 0), makeTrack("older", 100), makeTrack("newer", 200)],
+  const index = new SongListIndex(
+    [makeSong("never", 0), makeSong("older", 100), makeSong("newer", 200)],
     new Map(),
     {
-      trackCount: 3,
+      songCount: 3,
       beatmapCount: 3,
       collectionCount: 0,
       collections: [],
@@ -105,24 +103,24 @@ test("library sorts tracks by their most recent play time", () => {
   );
 
   assert.deepEqual(
-    index.query({ sort: "lastPlayed" }).items.map((track) => track.id),
+    index.query({ sort: "lastPlayed" }).items.map((song) => song.id),
     ["never", "older", "newer"],
   );
   assert.deepEqual(
     index
       .query({ sort: "lastPlayed", descending: true })
-      .items.map((track) => track.id),
+      .items.map((song) => song.id),
     ["newer", "older", "never"],
   );
 });
 
-test("library sorts tracks by beatmap set dates", () => {
-  const makeTrack = (
+test("song list sorts songs by beatmap set dates", () => {
+  const makeSong = (
     id: string,
     dateAddedAt: number,
     dateSubmittedAt: number,
     dateRankedAt: number,
-  ): Track => ({
+  ): Song => ({
     id,
     title: id,
     artist: "Artist",
@@ -133,21 +131,21 @@ test("library sorts tracks by beatmap set dates", () => {
     bpm: 180,
     stars: 4,
     difficultyCount: 1,
-    audioUrl: "osu-media://asset/" + id.padEnd(64, "a"),
+    audioUrl: "omp://asset/" + id.padEnd(64, "a"),
     addedAt: 0,
     dateAddedAt,
     dateSubmittedAt,
     dateRankedAt,
   });
-  const index = new LibraryIndex(
+  const index = new SongListIndex(
     [
-      makeTrack("first", 100, 300, 200),
-      makeTrack("second", 300, 100, 300),
-      makeTrack("third", 200, 200, 100),
+      makeSong("first", 100, 300, 200),
+      makeSong("second", 300, 100, 300),
+      makeSong("third", 200, 200, 100),
     ],
     new Map(),
     {
-      trackCount: 3,
+      songCount: 3,
       beatmapCount: 3,
       collectionCount: 0,
       collections: [],
@@ -167,11 +165,11 @@ test("library sorts tracks by beatmap set dates", () => {
     ["dateRanked", ["third", "first", "second"], ["second", "first", "third"]],
   ] as const) {
     assert.deepEqual(
-      index.query({ sort }).items.map((track) => track.id),
+      index.query({ sort }).items.map((song) => song.id),
       ascending,
     );
     assert.deepEqual(
-      index.query({ sort, descending: true }).items.map((track) => track.id),
+      index.query({ sort, descending: true }).items.map((song) => song.id),
       descending,
     );
   }
@@ -179,7 +177,7 @@ test("library sorts tracks by beatmap set dates", () => {
 
 test("streamed batches update existing difficulties and invalidate query and facet caches", () => {
   const summary = {
-    trackCount: 1,
+    songCount: 1,
     beatmapCount: 1,
     collectionCount: 1,
     collections: [{ name: "Favorites", count: 1 }],
@@ -187,7 +185,7 @@ test("streamed batches update existing difficulties and invalidate query and fac
     installPath: "/osu",
     skippedCount: 0,
   };
-  const track: Track = {
+  const song: Song = {
     id: "song",
     title: "Song",
     artist: "Artist",
@@ -199,31 +197,31 @@ test("streamed batches update existing difficulties and invalidate query and fac
     bpm: 120,
     stars: 1,
     addedAt: 0,
-    audioUrl: "osu-media://asset/" + "a".repeat(64),
+    audioUrl: "omp://asset/" + "a".repeat(64),
   };
-  const index = new LibraryIndex([], new Map(), {
+  const index = new SongListIndex([], new Map(), {
     ...summary,
-    trackCount: 0,
+    songCount: 0,
     collections: [],
     tags: [],
   });
-  index.applyBatch(new LibraryIndex([track], new Map(), summary).snapshot());
+  index.applyBatch(new SongListIndex([song], new Map(), summary).snapshot());
   assert.equal(index.query({ tags: ["vocal"] }).total, 0);
   const updated = {
-    ...track,
+    ...song,
     difficultyCount: 2,
     duration: 200,
     tags: ["rock", "vocal"],
   };
   index.applyBatch(
-    new LibraryIndex([updated], new Map(), {
+    new SongListIndex([updated], new Map(), {
       ...summary,
       beatmapCount: 2,
     }).snapshot(),
   );
   assert.equal(index.query().total, 1);
   assert.equal(index.query({ tags: ["vocal"] }).items[0].duration, 200);
-  assert.equal(index.getTrack("song")?.difficultyCount, 2);
+  assert.equal(index.getSong("song")?.difficultyCount, 2);
   assert.deepEqual(index.summary.tags, [
     { name: "rock", count: 1 },
     { name: "vocal", count: 1 },

@@ -7,36 +7,39 @@ import { build } from "esbuild";
 import Realm from "realm";
 import { Schema } from "../src/shared/client-model";
 import {
-  LibraryIndex,
-  loadLibraryFromRealm,
-  readLibraryFingerprint,
-} from "../src/main/library/index";
+  SongListIndex,
+  loadSongListFromRealm,
+  readSongListFingerprint,
+} from "../src/main/song-list/index";
 import {
-  libraryCachePath,
-  libraryCachePaths,
-  libraryFingerprintsEqual,
-  readLibraryCache,
-  writeLibraryCache,
-} from "../src/main/library/cache";
-import type { loadLibraryInWorker } from "../src/main/library/loader";
+  songListCachePath,
+  songListCachePaths,
+  songListFingerprintsEqual,
+  readSongListCache,
+  writeSongListCache,
+} from "../src/main/song-list/cache";
+import type { loadSongListInWorker } from "../src/main/song-list/loader";
 import type { SortKey } from "../src/shared/types";
 
 test("worker imports Realm and transfers canonical sort orders; errors and cancellation reject", async () => {
   const directory = await mkdtemp(join(process.cwd(), ".worker-test-"));
   try {
     await build({
-      entryPoints: ["src/main/library/worker.ts", "src/main/library/loader.ts"],
+      entryPoints: [
+        "src/main/song-list/worker.ts",
+        "src/main/song-list/loader.ts",
+      ],
       outdir: directory,
-      entryNames: "library-[name]",
+      entryNames: "song-list-[name]",
       outExtension: { ".js": ".cjs" },
       bundle: true,
       platform: "node",
       format: "cjs",
       external: ["realm"],
     });
-    const load: typeof loadLibraryInWorker = createRequire(import.meta.url)(
-      join(directory, "library-loader.cjs"),
-    ).loadLibraryInWorker;
+    const load: typeof loadSongListInWorker = createRequire(import.meta.url)(
+      join(directory, "song-list-loader.cjs"),
+    ).loadSongListInWorker;
     const fixture = new Realm({
       path: join(directory, "client.realm"),
       schema: Schema,
@@ -95,10 +98,10 @@ test("worker imports Realm and transfers canonical sort orders; errors and cance
       });
     });
     fixture.close();
-    const direct = await loadLibraryFromRealm(directory);
+    const direct = await loadSongListFromRealm(directory);
     try {
       const progress: unknown[] = [];
-      const batches: { index: LibraryIndex; indexingStarted: boolean }[] = [];
+      const batches: { index: SongListIndex; indexingStarted: boolean }[] = [];
       let indexingStarted = false;
       const loaded = await load(
         directory,
@@ -109,17 +112,19 @@ test("worker imports Realm and transfers canonical sort orders; errors and cance
         undefined,
         (index) =>
           batches.push({
-            index: LibraryIndex.fromSnapshot(structuredClone(index.snapshot())),
+            index: SongListIndex.fromSnapshot(
+              structuredClone(index.snapshot()),
+            ),
             indexingStarted,
           }),
       );
       assert.ok(batches.length >= 2);
-      assert.equal(batches[0].index.summary.trackCount, 1);
+      assert.equal(batches[0].index.summary.songCount, 1);
       assert.equal(batches[0].index.query().total, 1);
       assert.equal(batches[0].indexingStarted, false);
       assert.deepEqual(batches.at(-1)!.index.summary, loaded.summary);
       assert.deepEqual(batches.at(-1)!.index.query(), loaded.query());
-      assert.equal(loaded.summary.trackCount, 3);
+      assert.equal(loaded.summary.songCount, 3);
       assert.ok(progress.length);
       assert.equal(loaded.snapshot().orders.size, 12);
       for (const sort of [
@@ -149,18 +154,18 @@ test("worker imports Realm and transfers canonical sort orders; errors and cance
       }
       assert.deepEqual(loaded.assets, direct.assets);
       assert.deepEqual(
-        loaded.getTrack(loaded.query().items[0].id),
+        loaded.getSong(loaded.query().items[0].id),
         direct.query().items[0],
       );
 
-      const priorityBatches: LibraryIndex[] = [];
+      const priorityBatches: SongListIndex[] = [];
       await load(
         directory,
         undefined,
         undefined,
         (index) =>
           priorityBatches.push(
-            LibraryIndex.fromSnapshot(structuredClone(index.snapshot())),
+            SongListIndex.fromSnapshot(structuredClone(index.snapshot())),
           ),
         undefined,
         `3-${"3".repeat(64)}`,
@@ -173,7 +178,7 @@ test("worker imports Realm and transfers canonical sort orders; errors and cance
     } finally {
       direct.close();
     }
-    const cacheDirectory = join(directory, "library-cache");
+    const cacheDirectory = join(directory, "song-list-cache");
     const firstCached = await load(
       directory,
       undefined,
@@ -181,9 +186,9 @@ test("worker imports Realm and transfers canonical sort orders; errors and cance
       undefined,
       cacheDirectory,
     );
-    const cachePath = libraryCachePath(cacheDirectory, directory);
-    const cacheFiles = libraryCachePaths(cachePath);
-    const fingerprint = await readLibraryFingerprint(directory);
+    const cachePath = songListCachePath(cacheDirectory, directory);
+    const cacheFiles = songListCachePaths(cachePath);
+    const fingerprint = await readSongListFingerprint(directory);
     const manifest = JSON.parse(
       await readFile(cacheFiles.manifest, "utf8"),
     ) as {
@@ -204,15 +209,15 @@ test("worker imports Realm and transfers canonical sort orders; errors and cance
     const collections = JSON.parse(
       await readFile(cacheFiles.collections, "utf8"),
     ) as Record<string, number>;
-    const tracksBinary = await readFile(cacheFiles.tracks);
-    const collectionsBinary = await readFile(cacheFiles.collectionTracks);
+    const songsBinary = await readFile(cacheFiles.songs);
+    const collectionsBinary = await readFile(cacheFiles.collectionSongs);
     const ordersBinary = await readFile(cacheFiles.orders);
-    const cachedData = await readLibraryCache(
+    const cachedData = await readSongListCache(
       cachePath,
       fingerprint.fingerprint,
     );
     assert.ok(cachedData);
-    assert.equal(firstCached.summary.trackCount, 3);
+    assert.equal(firstCached.summary.songCount, 3);
     assert.deepEqual(manifest.fingerprint, fingerprint.fingerprint);
     assert.equal(manifest.fingerprint.beatmapSetCount, 3);
     assert.equal(manifest.fingerprint.beatmapCount, 3);
@@ -222,7 +227,7 @@ test("worker imports Realm and transfers canonical sort orders; errors and cance
     assert.equal("collections" in manifest, false);
     assert.equal("collectionFingerprint" in manifest, false);
     assert.equal(Object.keys(collectionFingerprint).length, 1);
-    assert.equal(tracksBinary.subarray(0, 4).toString(), "OMTR");
+    assert.equal(songsBinary.subarray(0, 4).toString(), "OMTR");
     assert.equal(collectionsBinary.subarray(0, 4).toString(), "OMCL");
     assert.equal(ordersBinary.subarray(0, 4).toString(), "OMOR");
     assert.equal(cachedData.snapshot.collections.length, 1);
@@ -230,24 +235,24 @@ test("worker imports Realm and transfers canonical sort orders; errors and cance
     assert.equal(collections[cachedData.snapshot.collections[0].id], 1);
     assert.deepEqual(tags, { pop: 1, jazz: 1, rock: 1 });
     assert.equal(cachedData.snapshot.orders.size, 12);
-    const firstTrack = cachedData.snapshot.indexed[0].track;
-    const firstTrackId = firstTrack.id;
-    firstTrack.title = "From disk cache";
-    firstTrack.artist = "Cached artist";
-    firstTrack.titleUnicode = "キャッシュタイトル";
-    firstTrack.artistUnicode = "キャッシュアーティスト";
-    firstTrack.backgroundHash = "b".repeat(64);
-    firstTrack.videoHash = "c".repeat(64);
-    firstTrack.videoOffset = 1.25;
-    cachedData.snapshot.assets.set(firstTrack.backgroundHash, {
-      hash: firstTrack.backgroundHash,
+    const firstSong = cachedData.snapshot.indexed[0].song;
+    const firstSongId = firstSong.id;
+    firstSong.title = "From disk cache";
+    firstSong.artist = "Cached artist";
+    firstSong.titleUnicode = "キャッシュタイトル";
+    firstSong.artistUnicode = "キャッシュアーティスト";
+    firstSong.backgroundHash = "b".repeat(64);
+    firstSong.videoHash = "c".repeat(64);
+    firstSong.videoOffset = 1.25;
+    cachedData.snapshot.assets.set(firstSong.backgroundHash, {
+      hash: firstSong.backgroundHash,
       filename: "background.jpg",
     });
-    cachedData.snapshot.assets.set(firstTrack.videoHash, {
-      hash: firstTrack.videoHash,
+    cachedData.snapshot.assets.set(firstSong.videoHash, {
+      hash: firstSong.videoHash,
       filename: "video.mp4",
     });
-    await writeLibraryCache(
+    await writeSongListCache(
       cachePath,
       cachedData.fingerprint,
       cachedData.collectionFingerprint,
@@ -262,25 +267,25 @@ test("worker imports Realm and transfers canonical sort orders; errors and cance
       cacheDirectory,
     );
     assert.ok(
-      cached.query().items.some((track) => track.title === "From disk cache"),
+      cached.query().items.some((song) => song.title === "From disk cache"),
     );
     assert.ok(
-      cached.query().items.some((track) => track.artist === "Cached artist"),
+      cached.query().items.some((song) => song.artist === "Cached artist"),
     );
     assert.equal(
-      cached.getTrack(firstTrackId)?.titleUnicode,
+      cached.getSong(firstSongId)?.titleUnicode,
       "キャッシュタイトル",
     );
     assert.equal(
-      cached.getTrack(firstTrackId)?.artistUnicode,
+      cached.getSong(firstSongId)?.artistUnicode,
       "キャッシュアーティスト",
     );
-    assert.equal(cached.getTrack(firstTrackId)?.videoOffset, 1.25);
+    assert.equal(cached.getSong(firstSongId)?.videoOffset, 1.25);
     assert.equal(cached.assets.get("b".repeat(64))?.filename, "background.jpg");
     assert.equal(cached.assets.get("c".repeat(64))?.filename, "video.mp4");
     assert.equal(cached.snapshot().orders.size, 12);
     assert.equal(
-      libraryFingerprintsEqual(fingerprint.fingerprint, {
+      songListFingerprintsEqual(fingerprint.fingerprint, {
         ...fingerprint.fingerprint,
         beatmapCount: fingerprint.fingerprint.beatmapCount + 1,
       }),
@@ -315,17 +320,17 @@ test("worker imports Realm and transfers canonical sort orders; errors and cance
       cacheDirectory,
     );
     assert.equal(
-      collectionCached.getTrack(firstTrackId)?.title,
+      collectionCached.getSong(firstSongId)?.title,
       "From disk cache",
     );
     assert.deepEqual(
       collectionCached
         .query({ collection: "Renamed" })
-        .items.map((track) => track.id),
+        .items.map((song) => song.id),
       [
         cachedData.snapshot.indexed.find((item) =>
           item.beatmapHashes.has("2".repeat(32)),
-        )?.track.id,
+        )?.song.id,
       ],
     );
     assert.equal(collectionCached.query({ collection: "Favorites" }).total, 0);
@@ -352,7 +357,7 @@ test("worker imports Realm and transfers canonical sort orders; errors and cance
       cacheDirectory,
     );
     assert.ok(
-      rebuilt.query().items.every((track) => track.title !== "From disk cache"),
+      rebuilt.query().items.every((song) => song.title !== "From disk cache"),
     );
 
     // Cancellation during reading and sorting must wait for graceful worker exit.
@@ -374,10 +379,10 @@ test("worker imports Realm and transfers canonical sort orders; errors and cance
         new RegExp(`Cancelled during ${phase}`),
       );
       // Reopening immediately after rejection verifies the worker released Realm.
-      const reopened = await loadLibraryFromRealm(directory);
+      const reopened = await loadSongListFromRealm(directory);
       reopened.close();
     }
-    const sorting = await loadLibraryFromRealm(directory);
+    const sorting = await loadSongListFromRealm(directory);
     try {
       let checks = 0;
       await assert.rejects(

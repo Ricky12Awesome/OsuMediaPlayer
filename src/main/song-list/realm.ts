@@ -4,19 +4,19 @@ import type {
   BeatmapCollection,
   BeatmapSet,
 } from "../../shared/client-model";
-import type { LibraryProgress, SortKey } from "../../shared/types";
+import type { SongListProgress, SortKey } from "../../shared/types";
 import { join } from "node:path";
 import { resolveLazerInstallPath } from "../lazer-path";
 import type {
-  LibraryCancellation,
-  LibraryCollection,
-  LibraryCollectionFingerprint,
-  LibraryFingerprint,
+  SongListCancellation,
+  SongListCollection,
+  SongListCollectionFingerprint,
+  SongListFingerprint,
 } from "./types";
 import { collator, dateTimestamp } from "./utils";
 
 /** Sort persisted title fields in Realm before materializing songs. */
-export function sortedLibraryBeatmaps(realm: Realm, descending = false) {
+export function sortedSongListBeatmaps(realm: Realm, descending = false) {
   const maps = realm
     .objects<Beatmap>("Beatmap")
     .filtered("BeatmapSet != nil AND BeatmapSet.DeletePending == false");
@@ -28,13 +28,13 @@ export function sortedLibraryBeatmaps(realm: Realm, descending = false) {
 }
 
 /** Read the small Realm metadata fingerprints used to validate disk caches. */
-export async function readLibraryFingerprints(
+export async function readSongListFingerprints(
   requestedPath?: string,
-  signal?: LibraryCancellation,
+  signal?: SongListCancellation,
 ): Promise<{
   installPath: string;
-  fingerprint: LibraryFingerprint;
-  collectionFingerprint: LibraryCollectionFingerprint;
+  fingerprint: SongListFingerprint;
+  collectionFingerprint: SongListCollectionFingerprint;
 }> {
   signal?.throwIfAborted();
   const installPath = await resolveLazerInstallPath(requestedPath);
@@ -74,7 +74,7 @@ export async function readLibraryFingerprints(
       if (Number.isFinite(timestamp))
         latestLastPlayed = Math.max(latestLastPlayed, timestamp);
     }
-    const collectionFingerprint: LibraryCollectionFingerprint = {};
+    const collectionFingerprint: SongListCollectionFingerprint = {};
     for (const collection of realm.objects<BeatmapCollection>(
       "BeatmapCollection",
     )) {
@@ -106,20 +106,20 @@ export async function readLibraryFingerprints(
   }
 }
 
-export async function readLibraryFingerprint(
+export async function readSongListFingerprint(
   requestedPath?: string,
-  signal?: LibraryCancellation,
-): Promise<{ installPath: string; fingerprint: LibraryFingerprint }> {
-  const result = await readLibraryFingerprints(requestedPath, signal);
+  signal?: SongListCancellation,
+): Promise<{ installPath: string; fingerprint: SongListFingerprint }> {
+  const result = await readSongListFingerprints(requestedPath, signal);
   return { installPath: result.installPath, fingerprint: result.fingerprint };
 }
 
-/** Rebuild only collection membership from Realm using cached beatmap-to-track mappings. */
-export async function readLibraryCollections(
+/** Rebuild only collection membership from Realm using cached beatmap-to-song mappings. */
+export async function readSongListCollections(
   requestedPath: string,
-  trackIdsByMd5: ReadonlyMap<string, ReadonlySet<string>>,
-  signal?: LibraryCancellation,
-): Promise<LibraryCollection[]> {
+  songIdsByMd5: ReadonlyMap<string, ReadonlySet<string>>,
+  signal?: SongListCancellation,
+): Promise<SongListCollection[]> {
   signal?.throwIfAborted();
   const installPath = await resolveLazerInstallPath(requestedPath);
   signal?.throwIfAborted();
@@ -132,24 +132,24 @@ export async function readLibraryCollections(
     disableFormatUpgrade: true,
   });
   try {
-    const result: LibraryCollection[] = [];
+    const result: SongListCollection[] = [];
     for (const collection of realm.objects<BeatmapCollection>(
       "BeatmapCollection",
     )) {
       signal?.throwIfAborted();
       const name = collection.Name?.trim();
       if (!name) continue;
-      const trackIds = new Set<string>();
+      const songIds = new Set<string>();
       for (const hash of collection.BeatmapMD5Hashes) {
-        for (const id of trackIdsByMd5.get(hash?.toLowerCase() ?? "") ?? [])
-          trackIds.add(id);
+        for (const id of songIdsByMd5.get(hash?.toLowerCase() ?? "") ?? [])
+          songIds.add(id);
       }
       const lastModified = collection.LastModified?.getTime() ?? 0;
       result.push({
         id: collection.ID.toHexString(),
         name,
         lastModified: Number.isFinite(lastModified) ? lastModified : 0,
-        trackIds: [...trackIds],
+        songIds: [...songIds],
       });
     }
     return result;
@@ -177,15 +177,15 @@ function sortedBeatmaps(
 
 function orderFromBeatmaps(
   maps: Iterable<Beatmap>,
-  trackIdByBeatmap: ReadonlyMap<string, string>,
+  songIdByBeatmap: ReadonlyMap<string, string>,
   fallback: readonly string[],
-  signal?: LibraryCancellation,
+  signal?: SongListCancellation,
 ): string[] {
   const order: string[] = [];
   const seen = new Set<string>();
   for (const map of maps) {
     signal?.throwIfAborted();
-    const id = trackIdByBeatmap.get(map.ID.toHexString());
+    const id = songIdByBeatmap.get(map.ID.toHexString());
     if (id && !seen.has(id)) {
       seen.add(id);
       order.push(id);
@@ -202,10 +202,10 @@ function orderFromBeatmaps(
 
 function collectionOrder(
   realm: Realm,
-  trackIdsByMd5: ReadonlyMap<string, ReadonlySet<string>>,
+  songIdsByMd5: ReadonlyMap<string, ReadonlySet<string>>,
   fallback: readonly string[],
   descending: boolean,
-  signal?: LibraryCancellation,
+  signal?: SongListCancellation,
 ): string[] {
   const order: string[] = [];
   const seen = new Set<string>();
@@ -215,7 +215,7 @@ function collectionOrder(
     signal?.throwIfAborted();
     for (const hash of collection.BeatmapMD5Hashes) {
       signal?.throwIfAborted();
-      for (const id of trackIdsByMd5.get(hash?.toLowerCase() ?? "") ?? []) {
+      for (const id of songIdsByMd5.get(hash?.toLowerCase() ?? "") ?? []) {
         if (!seen.has(id)) {
           seen.add(id);
           order.push(id);
@@ -232,23 +232,23 @@ function collectionOrder(
   return order;
 }
 
-export function realmTrackOrder(
+export function realmSongOrder(
   realm: Realm,
   sort: Exclude<
     SortKey,
     "dateAdded" | "dateSubmitted" | "dateRanked" | "lastPlayed"
   >,
-  trackIdByBeatmap: ReadonlyMap<string, string>,
-  trackIdsByMd5: ReadonlyMap<string, ReadonlySet<string>>,
+  songIdByBeatmap: ReadonlyMap<string, string>,
+  songIdsByMd5: ReadonlyMap<string, ReadonlySet<string>>,
   fallback: readonly string[],
-  signal?: LibraryCancellation,
+  signal?: SongListCancellation,
   cachedTitle?: readonly string[],
 ): readonly string[] {
   const titleFallback = (): readonly string[] =>
     cachedTitle ??
     orderFromBeatmaps(
-      sortedLibraryBeatmaps(realm),
-      trackIdByBeatmap,
+      sortedSongListBeatmaps(realm),
+      songIdByBeatmap,
       fallback,
       signal,
     );
@@ -265,21 +265,21 @@ export function realmTrackOrder(
           ],
           false,
         ),
-        trackIdByBeatmap,
+        songIdByBeatmap,
         titleFallback(),
         signal,
       );
     case "duration":
       return orderFromBeatmaps(
         sortedBeatmaps(realm, [["Length", false]], false),
-        trackIdByBeatmap,
+        songIdByBeatmap,
         titleFallback(),
         signal,
       );
     case "bpm":
       return orderFromBeatmaps(
         sortedBeatmaps(realm, [["BPM", false]], false),
-        trackIdByBeatmap,
+        songIdByBeatmap,
         titleFallback(),
         signal,
       );
@@ -293,28 +293,28 @@ export function realmTrackOrder(
           ],
           false,
         ),
-        trackIdByBeatmap,
+        songIdByBeatmap,
         titleFallback(),
         signal,
       );
     case "stars":
       return orderFromBeatmaps(
         sortedBeatmaps(realm, [["StarRating", false]], false),
-        trackIdByBeatmap,
+        songIdByBeatmap,
         titleFallback(),
         signal,
       );
     case "tags":
       return orderFromBeatmaps(
         sortedBeatmaps(realm, [["Metadata.Tags", false]], false),
-        trackIdByBeatmap,
+        songIdByBeatmap,
         titleFallback(),
         signal,
       );
     case "collection":
       return collectionOrder(
         realm,
-        trackIdsByMd5,
+        songIdsByMd5,
         titleFallback(),
         false,
         signal,

@@ -6,7 +6,7 @@ import {
 } from "react";
 import type { CacheKind, PlayerAPI } from "../../shared/types";
 import type { PlayerState } from "./usePlayer";
-import type { VirtualTrackListKeyboardControls } from "./VirtualTrackList";
+import type { VirtualSongListKeyboardControls } from "./VirtualSongList";
 
 export interface KeyboardShortcutsOptions {
   api: PlayerAPI;
@@ -23,7 +23,7 @@ export interface KeyboardShortcutsOptions {
   cacheConfirmation: CacheKind | null;
   settingsResetConfirmation: boolean;
   focusSearch: () => void;
-  trackListKeyboardRef: RefObject<VirtualTrackListKeyboardControls | null>;
+  songListKeyboardRef: RefObject<VirtualSongListKeyboardControls | null>;
 }
 
 export function useKeyboardShortcuts({
@@ -41,7 +41,7 @@ export function useKeyboardShortcuts({
   cacheConfirmation,
   settingsResetConfirmation,
   focusSearch,
-  trackListKeyboardRef,
+  songListKeyboardRef,
 }: KeyboardShortcutsOptions): void {
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
@@ -125,11 +125,11 @@ export function useKeyboardShortcuts({
         !event.altKey &&
         !event.ctrlKey &&
         !event.metaKey &&
-        trackListKeyboardRef.current
+        songListKeyboardRef.current
       ) {
         event.preventDefault();
         event.stopPropagation();
-        trackListKeyboardRef.current.moveAndPlay(
+        songListKeyboardRef.current.moveAndPlay(
           event.key === "ArrowUp" ? -1 : 1,
         );
         return;
@@ -198,6 +198,6 @@ export function useKeyboardShortcuts({
     shortcutsOpen,
     cacheConfirmation,
     settingsResetConfirmation,
-    trackListKeyboardRef,
+    songListKeyboardRef,
   ]);
 }

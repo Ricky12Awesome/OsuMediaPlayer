@@ -9,7 +9,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown, Search, X } from "lucide-react";
-import type { LibraryFacet } from "../../shared/types";
+import type { SongListFacet } from "../../shared/types";
 
 const rowHeight = 32;
 const viewportRows = 8;
@@ -18,7 +18,7 @@ const overscan = 3;
 interface FacetPickerBaseProps {
   label: string;
   allLabel: string;
-  items: LibraryFacet[];
+  items: SongListFacet[];
   icon?: ReactNode;
 }
 

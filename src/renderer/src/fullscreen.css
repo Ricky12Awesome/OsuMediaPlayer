@@ -47,16 +47,16 @@
 .is-fullscreen .now-playing-panel {
   padding: 0;
 }
-.is-fullscreen .library-panel {
+.is-fullscreen .song-list-panel {
   transition:
     opacity 0.18s,
     transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
     padding-bottom 0.24s;
 }
-.is-fullscreen.fullscreen-controls-visible .library-panel {
+.is-fullscreen.fullscreen-controls-visible .song-list-panel {
   padding-bottom: var(--fullscreen-transport-height);
 }
-.is-fullscreen.controls-always-visible .library-panel {
+.is-fullscreen.controls-always-visible .song-list-panel {
   padding-bottom: var(--fullscreen-transport-height);
 }
 .is-fullscreen .artwork-stage {

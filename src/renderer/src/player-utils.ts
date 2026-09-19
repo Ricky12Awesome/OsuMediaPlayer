@@ -1,5 +1,5 @@
 import type {
-  LibraryQuery,
+  SongListQuery,
   RepeatMode,
   VideoEncodingCodec,
   VideoEncodingQuality,
@@ -24,7 +24,7 @@ export interface ShuffleHistory {
   position: number;
 }
 
-export function cloneQueueQuery(input: LibraryQuery = {}): LibraryQuery {
+export function cloneQueueQuery(input: SongListQuery = {}): SongListQuery {
   const { offset: _offset, limit: _limit, ...query } = input;
   return {
     ...query,

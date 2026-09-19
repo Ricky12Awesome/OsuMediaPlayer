@@ -17,7 +17,7 @@ export const sortKeys = [
 
 export type SortKey = (typeof sortKeys)[number];
 
-export interface Track {
+export interface Song {
   id: string;
   title: string;
   titleUnicode?: string;
@@ -47,7 +47,7 @@ export interface Track {
 }
 
 /** A media asset's technical metadata used by the now-playing debug widget. */
-export interface TrackDebugMediaInfo {
+export interface SongDebugMediaInfo {
   /** The original asset filename without its parent directories. */
   name: string;
   /** The resolved absolute path on disk. */
@@ -61,29 +61,29 @@ export interface TrackDebugMediaInfo {
   bitrate: number | null;
 }
 
-export interface TrackDebugInfo {
-  audio: TrackDebugMediaInfo | null;
-  background: TrackDebugMediaInfo | null;
-  video: TrackDebugMediaInfo | null;
-  encodedVideo?: TrackDebugMediaInfo | null;
+export interface SongDebugInfo {
+  audio: SongDebugMediaInfo | null;
+  background: SongDebugMediaInfo | null;
+  video: SongDebugMediaInfo | null;
+  encodedVideo?: SongDebugMediaInfo | null;
 }
 
-export interface LibraryFacet {
+export interface SongListFacet {
   name: string;
   count: number;
 }
 
-export interface LibrarySummary {
-  trackCount: number;
+export interface SongListSummary {
+  songCount: number;
   beatmapCount: number;
   collectionCount: number;
-  collections: LibraryFacet[];
-  tags: LibraryFacet[];
+  collections: SongListFacet[];
+  tags: SongListFacet[];
   installPath: string;
   skippedCount: number;
 }
 
-export interface LibraryQuery {
+export interface SongListQuery {
   search?: string;
   collection?: string;
   tag?: string;
@@ -95,25 +95,25 @@ export interface LibraryQuery {
   limit?: number;
 }
 
-export interface LibraryPage {
-  items: Track[];
+export interface SongListPage {
+  items: Song[];
   total: number;
   offset: number;
 }
 
-export interface TrackLocation {
-  track: Track;
+export interface SongLocation {
+  song: Song;
   index: number;
 }
 
-export interface TrackContextMenuInfo {
+export interface SongContextMenuInfo {
   audio: boolean;
   background: boolean;
   video: boolean;
   listing: boolean;
 }
 
-export type TrackContextMenuAction =
+export type SongContextMenuAction =
   | "copy-title"
   | "copy-title-unicode"
   | "copy-artist"
@@ -131,12 +131,12 @@ export type TrackContextMenuAction =
   | "open-background"
   | "open-video";
 
-export type LibraryProgress =
+export type SongListProgress =
   | { phase: "reading" | "indexing"; records: number }
   | {
       phase: "reading";
       records: number;
-      summary: LibrarySummary;
+      summary: SongListSummary;
     };
 
 export type MediaAction =
@@ -184,34 +184,36 @@ export interface PreparedVideo {
 }
 
 export interface PlayerAPI {
-  loadLibrary: (
+  loadSongList: (
     installPath?: string,
-    priorityTrackId?: string,
-  ) => Promise<LibrarySummary>;
+    prioritySongId?: string,
+  ) => Promise<SongListSummary>;
   /** Loads only a valid disk cache. Returns null without scanning Realm on a miss. */
-  loadCachedLibrary?: (installPath?: string) => Promise<LibrarySummary | null>;
-  queryLibrary: (query?: LibraryQuery) => Promise<LibraryPage>;
-  getTrack: (id: string) => Promise<Track | null>;
-  getTrackDebugInfo: (
+  loadCachedSongList?: (
+    installPath?: string,
+  ) => Promise<SongListSummary | null>;
+  querySongList: (query?: SongListQuery) => Promise<SongListPage>;
+  getSong: (id: string) => Promise<Song | null>;
+  getSongDebugInfo: (
     id: string,
     videoSource?: VideoSource,
-  ) => Promise<TrackDebugInfo | null>;
+  ) => Promise<SongDebugInfo | null>;
   copyText?: (value: string) => Promise<void>;
-  getTrackLocation?: (
+  getSongLocation?: (
     id: string,
-    query?: LibraryQuery,
-  ) => Promise<TrackLocation | null>;
+    query?: SongListQuery,
+  ) => Promise<SongLocation | null>;
   prepareVideo: (
-    trackId: string,
+    songId: string,
     settings?: VideoEncodingSettings,
   ) => Promise<PreparedVideo | null>;
   cancelVideoEncoding: () => Promise<void>;
   completeVideoStream: (hash: string) => Promise<void>;
   getCacheUsage: () => Promise<CacheUsage>;
   clearCache: (kind: CacheKind) => Promise<void>;
-  chooseLibrary: () => Promise<string | null>;
-  onLibraryProgress: (
-    listener: (progress: LibraryProgress) => void,
+  chooseSongList: () => Promise<string | null>;
+  onSongListProgress: (
+    listener: (progress: SongListProgress) => void,
   ) => () => void;
   onMediaAction: (listener: (action: MediaAction) => void) => () => void;
   onVideoEncodingChange: (
@@ -219,12 +221,12 @@ export interface PlayerAPI {
   ) => () => void;
   onFullscreenChange: (listener: (active: boolean) => void) => () => void;
   onZoomChange: (listener: (percent: number) => void) => () => void;
-  getTrackContextMenuInfo: (
-    trackId: string,
-  ) => Promise<TrackContextMenuInfo | null>;
-  performTrackContextMenuAction: (
-    trackId: string,
-    action: TrackContextMenuAction,
+  getSongContextMenuInfo: (
+    songId: string,
+  ) => Promise<SongContextMenuInfo | null>;
+  performSongContextMenuAction: (
+    songId: string,
+    action: SongContextMenuAction,
   ) => Promise<void>;
   windowControl: (
     action: "minimize" | "maximize" | "fullscreen" | "close",

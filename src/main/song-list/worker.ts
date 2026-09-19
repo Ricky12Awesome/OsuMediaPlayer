@@ -2,21 +2,21 @@ import Realm from "realm";
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import {
-  LibraryIndex,
-  readLibraryCollections,
-  loadLibraryFromRealm,
-  readLibraryFingerprints,
-  type LibraryFingerprint,
+  SongListIndex,
+  readSongListCollections,
+  loadSongListFromRealm,
+  readSongListFingerprints,
+  type SongListFingerprint,
 } from "./index";
 import { resolveLazerInstallPath } from "../lazer-path";
 import {
   collectionFingerprintsEqual,
-  libraryCachePath,
-  libraryRealmMetadataEqual,
-  readLibraryCacheManifest,
-  readLibraryCache,
-  writeLibraryCache,
-  type LibraryRealmMetadata,
+  songListCachePath,
+  songListRealmMetadataEqual,
+  readSongListCacheManifest,
+  readSongListCache,
+  writeSongListCache,
+  type SongListRealmMetadata,
 } from "./cache";
 
 // Realm's native addon owns process-wide state. Keep it outside Electron's
@@ -24,7 +24,7 @@ import {
 const controller = new AbortController();
 process.on("message", (message) => {
   if (message === "cancel")
-    controller.abort(new Error("Library import cancelled."));
+    controller.abort(new Error("Song list import cancelled."));
 });
 process.on("disconnect", () => controller.abort());
 // `process.send` is asynchronous. Keep every snapshot in order and wait for
@@ -57,7 +57,7 @@ void (async () => {
     let options: {
       installPath?: string;
       cacheDirectory?: string;
-      priorityTrackId?: string;
+      prioritySongId?: string;
       cacheOnly?: boolean;
     };
     try {
@@ -72,23 +72,23 @@ void (async () => {
     }
     let resolvedPath = options.installPath;
     let cacheDirectory: string | undefined;
-    let fingerprint: LibraryFingerprint | undefined;
+    let fingerprint: SongListFingerprint | undefined;
     let collectionFingerprint: Record<string, number> | undefined;
-    let realmMetadata: LibraryRealmMetadata | undefined;
+    let realmMetadata: SongListRealmMetadata | undefined;
     if (options.cacheDirectory) {
       resolvedPath = await resolveLazerInstallPath(options.installPath);
       const realm = await stat(join(resolvedPath, "client.realm"));
       realmMetadata = { mtimeMs: realm.mtimeMs, size: realm.size };
-      cacheDirectory = libraryCachePath(options.cacheDirectory, resolvedPath);
-      const manifest = await readLibraryCacheManifest(
+      cacheDirectory = songListCachePath(options.cacheDirectory, resolvedPath);
+      const manifest = await readSongListCacheManifest(
         cacheDirectory,
         controller.signal,
       );
       let cached =
         manifest &&
         manifest.summary.installPath === resolvedPath &&
-        libraryRealmMetadataEqual(manifest.realm, realmMetadata)
-          ? await readLibraryCache(
+        songListRealmMetadataEqual(manifest.realm, realmMetadata)
+          ? await readSongListCache(
               cacheDirectory,
               undefined,
               controller.signal,
@@ -101,13 +101,13 @@ void (async () => {
       // delays its first streamed songs. We calculate it after the snapshot
       // has been delivered, before persisting the newly-built cache.
       if (!cached && manifest) {
-        const checked = await readLibraryFingerprints(
+        const checked = await readSongListFingerprints(
           resolvedPath,
           controller.signal,
         );
         fingerprint = checked.fingerprint;
         collectionFingerprint = checked.collectionFingerprint;
-        cached = await readLibraryCache(
+        cached = await readSongListCache(
           cacheDirectory,
           fingerprint,
           controller.signal,
@@ -118,30 +118,30 @@ void (async () => {
         collectionFingerprint = cached.collectionFingerprint;
       }
       if (cached && cached.snapshot.summary.installPath === resolvedPath) {
-        const index = LibraryIndex.fromSnapshot(cached.snapshot);
+        const index = SongListIndex.fromSnapshot(cached.snapshot);
         if (
           !collectionFingerprintsEqual(
             cached.collectionFingerprint,
             collectionFingerprint ?? cached.collectionFingerprint,
           )
         ) {
-          const trackIdsByMd5 = new Map<string, Set<string>>();
+          const songIdsByMd5 = new Map<string, Set<string>>();
           for (const item of cached.snapshot.indexed) {
             for (const hash of item.beatmapHashes) {
-              const ids = trackIdsByMd5.get(hash) ?? new Set<string>();
-              ids.add(item.track.id);
-              trackIdsByMd5.set(hash, ids);
+              const ids = songIdsByMd5.get(hash) ?? new Set<string>();
+              ids.add(item.song.id);
+              songIdsByMd5.set(hash, ids);
             }
           }
-          const collections = await readLibraryCollections(
+          const collections = await readSongListCollections(
             resolvedPath,
-            trackIdsByMd5,
+            songIdsByMd5,
             controller.signal,
           );
           index.replaceCollections(collections);
           await send({ type: "complete", snapshot: index.snapshot() });
           try {
-            await writeLibraryCache(
+            await writeSongListCache(
               cacheDirectory,
               fingerprint ?? cached.fingerprint,
               collectionFingerprint ?? cached.collectionFingerprint,
@@ -150,7 +150,7 @@ void (async () => {
             );
           } catch {
             // Caching is an optimization. A read-only or full cache directory
-            // must never make a successfully loaded library fail.
+            // must never make a successfully loaded song list fail.
           }
         } else {
           await send({ type: "complete", snapshot: cached.snapshot });
@@ -158,14 +158,14 @@ void (async () => {
         return;
       }
       if (options.cacheOnly)
-        throw new Error("No valid library cache is available.");
+        throw new Error("No valid song list cache is available.");
     }
-    const index = await loadLibraryFromRealm(
+    const index = await loadSongListFromRealm(
       resolvedPath,
       (progress) => void send({ type: "progress", progress }),
       controller.signal,
       (batch) => void send({ type: "batch", snapshot: batch.snapshot() }),
-      options.priorityTrackId,
+      options.prioritySongId,
     );
     try {
       await index.prepareSortOrders(controller.signal);
@@ -179,7 +179,7 @@ void (async () => {
           // A cache miss without a manifest intentionally defers this scan so
           // cold startup can begin streaming immediately.
           if (!fingerprint || !collectionFingerprint) {
-            const checked = await readLibraryFingerprints(
+            const checked = await readSongListFingerprints(
               resolvedPath,
               controller.signal,
             );
@@ -187,8 +187,8 @@ void (async () => {
             collectionFingerprint = checked.collectionFingerprint;
           }
           const currentRealm = await stat(join(resolvedPath!, "client.realm"));
-          if (libraryRealmMetadataEqual(currentRealm, realmMetadata))
-            await writeLibraryCache(
+          if (songListRealmMetadataEqual(currentRealm, realmMetadata))
+            await writeSongListCache(
               cacheDirectory,
               fingerprint,
               collectionFingerprint,
@@ -197,7 +197,7 @@ void (async () => {
             );
         } catch {
           // Caching is an optimization. A read-only or full cache directory
-          // must never make a successfully loaded library fail.
+          // must never make a successfully loaded song list fail.
         }
       }
     } finally {

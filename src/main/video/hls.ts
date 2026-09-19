@@ -6,7 +6,7 @@ import type { CachedVideo, StreamMetadata } from "./cache";
 export const playlistName = "playlist.m3u8";
 
 export function convertedVideoUrl(hash: string, profileHash?: string): string {
-  const base = `osu-media://video-cache/${hash.toLowerCase()}`;
+  const base = `omp://video-cache/${hash.toLowerCase()}`;
   return profileHash
     ? `${base}?profile=${encodeURIComponent(profileHash.toLowerCase())}`
     : base;
@@ -80,7 +80,7 @@ export async function serveHlsRequest(
     const url = new URL(request.url);
     const hash = url.pathname.slice(1).toLowerCase();
     if (
-      url.protocol !== "osu-media:" ||
+      url.protocol !== "omp:" ||
       url.host !== "video-cache" ||
       url.username ||
       url.password ||

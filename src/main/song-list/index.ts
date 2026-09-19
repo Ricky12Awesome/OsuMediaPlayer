@@ -1,19 +1,19 @@
 import type Realm from "realm";
 import type {
-  LibraryPage,
-  LibraryQuery,
-  LibrarySummary,
+  SongListPage,
+  SongListQuery,
+  SongListSummary,
   SortKey,
-  Track,
-  TrackLocation,
+  Song,
+  SongLocation,
 } from "../../shared/types";
 import { assetUrl, type MediaAsset } from "../media";
-import { realmTrackOrder } from "./realm";
+import { realmSongOrder } from "./realm";
 import type {
-  LibraryCancellation,
-  LibraryCollection,
-  LibrarySnapshot,
-  IndexedTrack,
+  SongListCancellation,
+  SongListCollection,
+  SongListSnapshot,
+  IndexedSong,
 } from "./types";
 import {
   collator,
@@ -22,83 +22,83 @@ import {
   sorts,
   string,
   strings,
-  trackSearch,
+  songSearch,
 } from "./utils";
 
-export { loadLibraryFromRealm, parseBeatmapVideoEvent } from "./builder";
+export { loadSongListFromRealm, parseBeatmapVideoEvent } from "./builder";
 export {
-  readLibraryCollections,
-  readLibraryFingerprint,
-  readLibraryFingerprints,
-  sortedLibraryBeatmaps,
+  readSongListCollections,
+  readSongListFingerprint,
+  readSongListFingerprints,
+  sortedSongListBeatmaps,
 } from "./realm";
 export type { BeatmapVideoEvent } from "./builder";
 export type {
-  IndexedTrack,
-  LibraryCancellation,
-  LibraryCollection,
-  LibraryCollectionFingerprint,
-  LibraryFingerprint,
-  LibrarySnapshot,
+  IndexedSong,
+  SongListCancellation,
+  SongListCollection,
+  SongListCollectionFingerprint,
+  SongListFingerprint,
+  SongListSnapshot,
 } from "./types";
 
-export class LibraryIndex {
+export class SongListIndex {
   readonly assets: Map<string, MediaAsset>;
-  readonly summary: LibrarySummary;
-  private readonly indexed: IndexedTrack[];
-  private readonly indexedById: Map<string, IndexedTrack>;
-  private readonly byId: Map<string, Track>;
+  readonly summary: SongListSummary;
+  private readonly indexed: IndexedSong[];
+  private readonly indexedById: Map<string, IndexedSong>;
+  private readonly byId: Map<string, Song>;
   private readonly realm?: Realm;
-  private readonly trackIdByBeatmap: ReadonlyMap<string, string>;
-  private readonly trackIdsByMd5: ReadonlyMap<string, ReadonlySet<string>>;
+  private readonly songIdByBeatmap: ReadonlyMap<string, string>;
+  private readonly songIdsByMd5: ReadonlyMap<string, ReadonlySet<string>>;
   private readonly orderCache = new Map<string, readonly string[]>();
-  private readonly queryCache = new Map<string, Track[]>();
-  private collections: LibraryCollection[];
+  private readonly queryCache = new Map<string, Song[]>();
+  private collections: SongListCollection[];
   private realmClosed = false;
 
   constructor(
-    tracks: Track[],
+    songs: Song[],
     assets: Map<string, MediaAsset>,
-    summary: LibrarySummary,
+    summary: SongListSummary,
     realm?: Realm,
-    trackIdByBeatmap: ReadonlyMap<string, string> = new Map(),
-    trackIdsByMd5: ReadonlyMap<string, ReadonlySet<string>> = new Map(),
+    songIdByBeatmap: ReadonlyMap<string, string> = new Map(),
+    songIdsByMd5: ReadonlyMap<string, ReadonlySet<string>> = new Map(),
     initialTitleOrder?: readonly string[],
-    beatmapHashesByTrack: ReadonlyMap<string, ReadonlySet<string>> = new Map(),
-    initialCollections: readonly LibraryCollection[] = [],
+    beatmapHashesBySong: ReadonlyMap<string, ReadonlySet<string>> = new Map(),
+    initialCollections: readonly SongListCollection[] = [],
   ) {
     this.assets = assets;
     this.summary = summary;
-    this.byId = new Map(tracks.map((track) => [track.id, track]));
-    this.indexed = tracks.map((track) => ({
-      track,
-      search: trackSearch(track),
-      tags: new Set(track.tags.map(normalize)),
-      collections: new Set(track.collections.map(normalize)),
+    this.byId = new Map(songs.map((song) => [song.id, song]));
+    this.indexed = songs.map((song) => ({
+      song,
+      search: songSearch(song),
+      tags: new Set(song.tags.map(normalize)),
+      collections: new Set(song.collections.map(normalize)),
       beatmapHashes: new Set(
-        beatmapHashesByTrack.get(track.id) ??
-          (track.md5Hash ? [track.md5Hash] : []),
+        beatmapHashesBySong.get(song.id) ??
+          (song.md5Hash ? [song.md5Hash] : []),
       ),
     }));
     this.indexedById = new Map(
-      this.indexed.map((item) => [item.track.id, item]),
+      this.indexed.map((item) => [item.song.id, item]),
     );
     this.realm = realm;
-    this.trackIdByBeatmap = trackIdByBeatmap;
-    this.trackIdsByMd5 = trackIdsByMd5;
+    this.songIdByBeatmap = songIdByBeatmap;
+    this.songIdsByMd5 = songIdsByMd5;
     this.collections = initialCollections.map((collection) => ({
       ...collection,
-      trackIds: [...collection.trackIds],
+      songIds: [...collection.songIds],
     }));
-    // Realm already supplied this order while the library was materialized.
+    // Realm already supplied this order while the song list was materialized.
     if (initialTitleOrder)
       this.orderCache.set("title:ascending", initialTitleOrder);
   }
 
   /** Materialize one canonical ascending order per sort key. */
-  async prepareSortOrders(signal?: LibraryCancellation): Promise<void> {
+  async prepareSortOrders(signal?: SongListCancellation): Promise<void> {
     // The first streamed batch may intentionally start with the restored
-    // track. Never carry that temporary order into the completed library.
+    // song. Never carry that temporary order into the completed song list.
     this.orderCache.delete("title:ascending");
     for (const sort of sorts) {
       await new Promise<void>((resolve) => setImmediate(resolve));
@@ -108,7 +108,7 @@ export class LibraryIndex {
   }
 
   /** Only detached data crosses the worker boundary; Realm stays in its owning process. */
-  snapshot(): LibrarySnapshot {
+  snapshot(): SongListSnapshot {
     return {
       assets: new Map(this.assets),
       summary: this.summary,
@@ -118,13 +118,13 @@ export class LibraryIndex {
       ),
       collections: this.collections.map((collection) => ({
         ...collection,
-        trackIds: [...collection.trackIds],
+        songIds: [...collection.songIds],
       })),
     };
   }
 
-  static fromSnapshot(snapshot: LibrarySnapshot): LibraryIndex {
-    const index = new LibraryIndex(
+  static fromSnapshot(snapshot: SongListSnapshot): SongListIndex {
+    const index = new SongListIndex(
       [],
       snapshot.assets,
       snapshot.summary,
@@ -139,11 +139,9 @@ export class LibraryIndex {
     Object.assign(index, {
       indexed: snapshot.indexed,
       indexedById: new Map(
-        snapshot.indexed.map((item) => [item.track.id, item]),
+        snapshot.indexed.map((item) => [item.song.id, item]),
       ),
-      byId: new Map(
-        snapshot.indexed.map((item) => [item.track.id, item.track]),
-      ),
+      byId: new Map(snapshot.indexed.map((item) => [item.song.id, item.song])),
       orderCache: snapshot.orders,
     });
     return index;
@@ -156,14 +154,14 @@ export class LibraryIndex {
     this.realmClosed = true;
   }
 
-  sharesRealm(other: LibraryIndex): boolean {
+  sharesRealm(other: SongListIndex): boolean {
     return this.realm !== undefined && this.realm === other.realm;
   }
 
   private orderFor(
     sort: SortKey,
     descending: boolean,
-    signal?: LibraryCancellation,
+    signal?: SongListCancellation,
   ): readonly string[] {
     signal?.throwIfAborted();
     const key = `${sort}:${descending ? "descending" : "ascending"}`;
@@ -178,7 +176,7 @@ export class LibraryIndex {
 
   private orderForAscending(
     sort: SortKey,
-    signal?: LibraryCancellation,
+    signal?: SongListCancellation,
   ): readonly string[] {
     const key = `${sort}:ascending`;
     const cached = this.orderCache.get(key);
@@ -193,16 +191,16 @@ export class LibraryIndex {
       this.orderCache.set(key, order);
       return order;
     }
-    const fallback = this.indexed.map((item) => item.track.id);
+    const fallback = this.indexed.map((item) => item.song.id);
     const order =
       sort === "collection" && this.collections.length
         ? this.collectionOrderFromSnapshot()
         : this.realm
-          ? realmTrackOrder(
+          ? realmSongOrder(
               this.realm,
               sort,
-              this.trackIdByBeatmap,
-              this.trackIdsByMd5,
+              this.songIdByBeatmap,
+              this.songIdsByMd5,
               fallback,
               signal,
               this.orderCache.get("title:ascending"),
@@ -213,7 +211,7 @@ export class LibraryIndex {
   }
 
   /** Merge only new/changed songs while the worker is still reading. */
-  applyBatch(batch: LibrarySnapshot): void {
+  applyBatch(batch: SongListSnapshot): void {
     const collectionCounts = new Map(
       this.summary.collections.map(({ name, count }) => [name, count]),
     );
@@ -223,23 +221,23 @@ export class LibraryIndex {
     for (const { name } of batch.summary.collections) {
       if (!collectionCounts.has(name)) collectionCounts.set(name, 0);
     }
-    const countFacets = (track: Track, delta: number) => {
-      for (const name of track.collections)
+    const countFacets = (song: Song, delta: number) => {
+      for (const name of song.collections)
         collectionCounts.set(name, (collectionCounts.get(name) ?? 0) + delta);
-      for (const name of track.tags)
+      for (const name of song.tags)
         tagCounts.set(name, (tagCounts.get(name) ?? 0) + delta);
     };
     for (const item of batch.indexed) {
-      const previous = this.indexedById.get(item.track.id);
+      const previous = this.indexedById.get(item.song.id);
       if (previous) {
-        countFacets(previous.track, -1);
+        countFacets(previous.song, -1);
         Object.assign(previous, item);
       } else {
         this.indexed.push(item);
-        this.indexedById.set(item.track.id, item);
+        this.indexedById.set(item.song.id, item);
       }
-      this.byId.set(item.track.id, item.track);
-      countFacets(item.track, 1);
+      this.byId.set(item.song.id, item.song);
+      countFacets(item.song, 1);
     }
     for (const [hash, asset] of batch.assets) this.assets.set(hash, asset);
     Object.assign(this.summary, batch.summary, {
@@ -256,38 +254,38 @@ export class LibraryIndex {
     // Batches arrive in Realm's title order, so this view needs no sorting.
     this.orderCache.set(
       "title:ascending",
-      this.indexed.map(({ track }) => track.id),
+      this.indexed.map(({ song }) => song.id),
     );
   }
 
-  /** Replace only collection-derived data while retaining the indexed tracks. */
-  replaceCollections(collections: readonly LibraryCollection[]): void {
+  /** Replace only collection-derived data while retaining the indexed songs. */
+  replaceCollections(collections: readonly SongListCollection[]): void {
     this.collections = collections.map((collection) => ({
       ...collection,
-      trackIds: [...collection.trackIds],
+      songIds: [...collection.songIds],
     }));
-    const namesByTrack = new Map<string, string[]>();
+    const namesBySong = new Map<string, string[]>();
     for (const collection of this.collections) {
-      for (const id of collection.trackIds) {
+      for (const id of collection.songIds) {
         if (!this.byId.has(id)) continue;
-        const names = namesByTrack.get(id) ?? [];
+        const names = namesBySong.get(id) ?? [];
         if (!names.includes(collection.name)) names.push(collection.name);
-        namesByTrack.set(id, names);
+        namesBySong.set(id, names);
       }
     }
     for (const item of this.indexed) {
-      const names = (namesByTrack.get(item.track.id) ?? []).sort(
+      const names = (namesBySong.get(item.song.id) ?? []).sort(
         collator.compare,
       );
-      item.track.collections = names;
+      item.song.collections = names;
       item.collections = new Set(names.map(normalize));
-      item.search = trackSearch(item.track);
+      item.search = songSearch(item.song);
     }
     const collectionCounts = new Map<string, number>();
     for (const collection of this.collections)
       collectionCounts.set(collection.name, 0);
     for (const item of this.indexed) {
-      for (const name of item.track.collections)
+      for (const name of item.song.collections)
         collectionCounts.set(name, (collectionCounts.get(name) ?? 0) + 1);
     }
     this.summary.collectionCount = new Set(
@@ -313,7 +311,7 @@ export class LibraryIndex {
         collator.compare(a.name, b.name) || collator.compare(a.id, b.id),
     );
     for (const collection of collections) {
-      for (const id of collection.trackIds) {
+      for (const id of collection.songIds) {
         if (this.byId.has(id) && !seen.has(id)) {
           seen.add(id);
           order.push(id);
@@ -321,37 +319,37 @@ export class LibraryIndex {
       }
     }
     for (const item of this.indexed) {
-      if (!seen.has(item.track.id)) {
-        seen.add(item.track.id);
-        order.push(item.track.id);
+      if (!seen.has(item.song.id)) {
+        seen.add(item.song.id);
+        order.push(item.song.id);
       }
     }
     return order;
   }
 
   private detachedOrder(sort: SortKey): string[] {
-    const value = (track: Track): string | number => {
+    const value = (song: Song): string | number => {
       switch (sort) {
         case "title":
-          return track.titleUnicode || track.title;
+          return song.titleUnicode || song.title;
         case "artist":
-          return track.artist;
+          return song.artist;
         case "added":
-          return track.addedAt;
+          return song.addedAt;
         case "dateAdded":
-          return track.dateAddedAt ?? 0;
+          return song.dateAddedAt ?? 0;
         case "dateSubmitted":
-          return track.dateSubmittedAt ?? 0;
+          return song.dateSubmittedAt ?? 0;
         case "dateRanked":
-          return track.dateRankedAt ?? 0;
+          return song.dateRankedAt ?? 0;
         case "lastPlayed":
-          return track.lastPlayedAt ?? 0;
+          return song.lastPlayedAt ?? 0;
         case "collection":
-          return track.collections[0] ?? "";
+          return song.collections[0] ?? "";
         case "tags":
-          return track.tags.join(" ");
+          return song.tags.join(" ");
         default:
-          return track[sort];
+          return song[sort];
       }
     };
     return [...this.byId.values()]
@@ -364,23 +362,23 @@ export class LibraryIndex {
             : collator.compare(String(left), String(right));
         return comparison || collator.compare(a.title, b.title);
       })
-      .map((track) => track.id);
+      .map((song) => song.id);
   }
 
-  getTrack(id: string): Track | null {
+  getSong(id: string): Song | null {
     return this.byId.get(id) ?? null;
   }
 
-  getTrackLocation(id: string, input: LibraryQuery = {}): TrackLocation | null {
+  getSongLocation(id: string, input: SongListQuery = {}): SongLocation | null {
     if (!this.byId.has(id)) return null;
     const limit = 250;
     let offset = 0;
     while (true) {
       const page = this.query({ ...input, offset, limit });
-      const itemIndex = page.items.findIndex((track) => track.id === id);
+      const itemIndex = page.items.findIndex((song) => song.id === id);
       if (itemIndex >= 0) {
         return {
-          track: page.items[itemIndex],
+          song: page.items[itemIndex],
           index: page.offset + itemIndex,
         };
       }
@@ -391,7 +389,7 @@ export class LibraryIndex {
     }
   }
 
-  query(input: LibraryQuery = {}): LibraryPage {
+  query(input: SongListQuery = {}): SongListPage {
     const search = normalize(string(input.search).slice(0, 1000)).trim();
     const collection = normalize(string(input.collection));
     const tagFilters = [...strings(input.tags), string(input.tag)]
@@ -421,10 +419,10 @@ export class LibraryIndex {
           item &&
           (!collection || item.collections.has(collection)) &&
           tagFilters.every((tag) => item.tags.has(tag)) &&
-          (!favorites || favorites.has(item.track.id)) &&
+          (!favorites || favorites.has(item.song.id)) &&
           terms.every((term) => item.search.includes(term))
         ) {
-          matches.push(item.track);
+          matches.push(item.song);
         }
       }
       if (this.queryCache.size >= 12)

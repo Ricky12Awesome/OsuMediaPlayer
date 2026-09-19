@@ -1,4 +1,4 @@
-import { sortKeys, type Track } from "../../shared/types";
+import { sortKeys, type Song } from "../../shared/types";
 
 export const collator = new Intl.Collator(undefined, {
   numeric: true,
@@ -21,16 +21,16 @@ export const dateTimestamp = (value: Date | undefined): number => {
 export const normalize = (value: string): string =>
   value.normalize("NFKC").toLocaleLowerCase();
 
-export const trackSearch = (track: Track): string =>
+export const songSearch = (song: Song): string =>
   normalize(
     [
-      track.title,
-      track.titleUnicode,
-      track.artist,
-      track.artistUnicode,
-      track.source,
-      ...track.tags,
-      ...track.collections,
+      song.title,
+      song.titleUnicode,
+      song.artist,
+      song.artistUnicode,
+      song.source,
+      ...song.tags,
+      ...song.collections,
     ].join(" "),
   );
 

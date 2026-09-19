@@ -11,13 +11,13 @@ import {
 import type {
   CacheKind,
   CacheUsage,
-  LibraryQuery,
-  LibrarySummary,
+  SongListQuery,
+  SongListSummary,
   PlayerAPI,
   SortKey,
-  Track,
-  TrackDebugInfo,
-  TrackContextMenuAction,
+  Song,
+  SongDebugInfo,
+  SongContextMenuAction,
 } from "../../shared/types";
 import { sortKeys } from "../../shared/types";
 import { extractArtworkTheme, type ArtworkTheme } from "./artwork-theme";
@@ -25,20 +25,20 @@ import {
   cacheLastArtworkTheme,
   clearCachedLastArtworkTheme,
 } from "./artwork-theme-cache";
-import { type VirtualTrackListKeyboardControls } from "./VirtualTrackList";
+import { type VirtualSongListKeyboardControls } from "./VirtualSongList";
 import { useVisualizerSettings } from "./AudioVisualizer";
 import { usePlayer } from "./usePlayer";
 import { parseVisualizer } from "./visualizer-settings";
-import { LibraryPanel, type LibraryTab } from "./LibraryPanel";
+import { SongListPanel, type SongListTab } from "./SongListPanel";
 import { NowPlaying, type CaptionPosition } from "./NowPlaying";
 import {
   SettingsPanel,
-  type LibraryPosition,
+  type SongListPosition,
   type TransportLayout,
 } from "./SettingsPanel";
 import { Transport } from "./Transport";
 import { useKeyboardShortcuts } from "./useKeyboardShortcuts";
-import { AppOverlays, type TrackContextMenuState } from "./AppOverlays";
+import { AppOverlays, type SongContextMenuState } from "./AppOverlays";
 import { PlayerToolsPanel, type SidePanelTab } from "./PlayerToolsPanel";
 import { PanelResizers } from "./PanelResizers";
 import {
@@ -49,7 +49,7 @@ import {
 } from "./preferences";
 
 const defaultPosition = "top-left";
-const defaultLibraryPosition = "right";
+const defaultSongListPosition = "right";
 const defaultSidePanelWidth = 320;
 const minSidePanelWidth = 280;
 const maxSidePanelWidth = 520;
@@ -79,20 +79,20 @@ const sortOptions: Array<{ value: SortKey; label: string }> = [
   { value: "tags", label: "Tags" },
 ];
 
-const showTitleUnicodeKey = "osu-music-show-title-unicode";
-const showArtistUnicodeKey = "osu-music-show-artist-unicode";
-const combinedShowUnicodeKey = "osu-music-show-unicode";
-const legacyShowUnicodeTitleKey = "osu-music-show-unicode-title";
+const showTitleUnicodeKey = "omp-show-title-unicode";
+const showArtistUnicodeKey = "omp-show-artist-unicode";
+const combinedShowUnicodeKey = "omp-show-unicode";
+const legacyShowUnicodeTitleKey = "omp-show-unicode-title";
 
 const defaultApi: PlayerAPI = {
-  loadLibrary: async () => {
+  loadSongList: async () => {
     throw new Error(
-      "Open osu! music in the desktop app to connect to your osu!lazer songs. Run npm run dev in the project folder.",
+      "Open OsuMediaPlayer in the desktop app to connect to your osu!lazer songs. Run npm run dev in the project folder.",
     );
   },
-  queryLibrary: async () => ({ items: [], total: 0, offset: 0 }),
-  getTrack: async () => null,
-  getTrackDebugInfo: async () => null,
+  querySongList: async () => ({ items: [], total: 0, offset: 0 }),
+  getSong: async () => null,
+  getSongDebugInfo: async () => null,
   prepareVideo: async () => null,
   cancelVideoEncoding: async () => {},
   completeVideoStream: async () => {},
@@ -102,14 +102,14 @@ const defaultApi: PlayerAPI = {
   clearCache: async () => {
     throw new Error("Cache management is only available in the desktop app.");
   },
-  chooseLibrary: async () => null,
-  onLibraryProgress: () => () => {},
+  chooseSongList: async () => null,
+  onSongListProgress: () => () => {},
   onMediaAction: () => () => {},
   onVideoEncodingChange: () => () => {},
   onFullscreenChange: () => () => {},
   onZoomChange: () => () => {},
-  getTrackContextMenuInfo: async () => null,
-  performTrackContextMenuAction: async () => {},
+  getSongContextMenuInfo: async () => null,
+  performSongContextMenuAction: async () => {},
   windowControl: () => {},
   platform: "browser",
 };
@@ -157,7 +157,7 @@ function isCaptionPosition(value: unknown): value is CaptionPosition {
   );
 }
 
-function isLibraryPosition(value: unknown): value is LibraryPosition {
+function isSongListPosition(value: unknown): value is SongListPosition {
   return value === "left" || value === "right";
 }
 
@@ -166,12 +166,12 @@ function cacheName(kind: CacheKind): string {
 }
 
 export function App({
-  initialLibrary = null,
-  initialTrack = null,
+  initialSongList = null,
+  initialSong = null,
   initialArtworkTheme = null,
 }: {
-  initialLibrary?: LibrarySummary | null;
-  initialTrack?: Track | null;
+  initialSongList?: SongListSummary | null;
+  initialSong?: Song | null;
   initialArtworkTheme?: { url: string; theme: ArtworkTheme } | null;
 }) {
   const [showTitleUnicode, setShowTitleUnicode] = useState(
@@ -182,13 +182,15 @@ export function App({
   );
   const player = usePlayer(
     api,
-    initialTrack,
+    initialSong,
     showTitleUnicode,
     showArtistUnicode,
   );
   const [visualizer, setVisualizer] = useVisualizerSettings();
-  const [summary, setSummary] = useState<LibrarySummary | null>(initialLibrary);
-  const [importing, setImporting] = useState(!initialLibrary);
+  const [summary, setSummary] = useState<SongListSummary | null>(
+    initialSongList,
+  );
+  const [importing, setImporting] = useState(!initialSongList);
   const [loadError, setLoadError] = useState("");
   const [clearingCache, setClearingCache] = useState<CacheKind | null>(null);
   const [cacheConfirmation, setCacheConfirmation] = useState<CacheKind | null>(
@@ -204,7 +206,7 @@ export function App({
   const [isDesktop, setIsDesktop] = useState(() => window.innerWidth > 760);
   const [searchDraft, setSearchDraft] = useState("");
   const [search, setSearch] = useState("");
-  const [tab, setTab] = useState<LibraryTab>("all");
+  const [tab, setTab] = useState<SongListTab>("all");
   const [collection, setCollection] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [sort, setSort] = useState<SortKey>(() => {
@@ -226,10 +228,10 @@ export function App({
   const [sidebarHidden, setSidebarHidden] = useState(() =>
     readPreference("sidebarHidden"),
   );
-  const [libraryPosition, setLibraryPosition] = useState<LibraryPosition>(
+  const [songListPosition, setSongListPosition] = useState<SongListPosition>(
     () => {
-      const stored = readPreference("libraryPosition");
-      return isLibraryPosition(stored) ? stored : defaultLibraryPosition;
+      const stored = readPreference("songListPosition");
+      return isSongListPosition(stored) ? stored : defaultSongListPosition;
     },
   );
   const [transportLayout, setTransportLayout] = useState<TransportLayout>(() =>
@@ -239,7 +241,7 @@ export function App({
     () => readPreference("showNowPlayingTitleArtist"),
   );
   const [debugMode, setDebugMode] = useState(() => readPreference("debugMode"));
-  const [debugInfo, setDebugInfo] = useState<TrackDebugInfo | null>(null);
+  const [debugInfo, setDebugInfo] = useState<SongDebugInfo | null>(null);
   useEffect(() => {
     const toggleDebugMode = (event: globalThis.KeyboardEvent) => {
       if (
@@ -276,8 +278,8 @@ export function App({
     url: string;
     theme: ArtworkTheme;
   } | null>(initialArtworkTheme);
-  const [libraryWidth, setLibraryWidth] = useState(() => {
-    const value = readPreference("libraryWidth");
+  const [songListWidth, setSongListWidth] = useState(() => {
+    const value = readPreference("songListWidth");
     return Number.isFinite(value) ? Math.min(720, Math.max(320, value)) : 430;
   });
   const [fullscreen, setFullscreen] = useState(false);
@@ -303,17 +305,17 @@ export function App({
   const [zoomIndicatorVisible, setZoomIndicatorVisible] = useState(false);
   const [captionDragging, setCaptionDragging] = useState(false);
   const [resizing, setResizing] = useState(false);
-  const [trackContextMenu, setTrackContextMenu] =
-    useState<TrackContextMenuState | null>(null);
+  const [songContextMenu, setSongContextMenu] =
+    useState<SongContextMenuState | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const cacheCancelButtonRef = useRef<HTMLButtonElement>(null);
   const settingsResetCancelButtonRef = useRef<HTMLButtonElement>(null);
   const captionRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLElement>(null);
-  const libraryRef = useRef<HTMLElement>(null);
+  const songListRef = useRef<HTMLElement>(null);
   const sidePanelRef = useRef<HTMLElement>(null);
-  const trackListKeyboardRef = useRef<VirtualTrackListKeyboardControls | null>(
+  const songListKeyboardRef = useRef<VirtualSongListKeyboardControls | null>(
     null,
   );
   const hideControlsTimer = useRef<number | null>(null);
@@ -324,11 +326,11 @@ export function App({
   const sidePanelResizeStart = useRef<{ x: number; width: number } | null>(
     null,
   );
-  // A bootstrap track has its media source ready, but its queue location is
-  // not known yet. Let the first library result resolve that location so the
-  // transport buttons continue from the restored track rather than index 0.
-  const trackInitialized = useRef(false);
-  const initialTrackRestore = useRef(0);
+  // A bootstrap song has its media source ready, but its queue location is
+  // not known yet. Let the first song list result resolve that location so the
+  // transport buttons continue from the restored song rather than index 0.
+  const songInitialized = useRef(false);
+  const initialSongRestore = useRef(0);
   const drag = useRef<{
     pointerId: number;
     element: HTMLDivElement;
@@ -363,24 +365,24 @@ export function App({
     [],
   );
 
-  const loadLibrary = useCallback(
+  const loadSongList = useCallback(
     async (installPath?: string) => {
-      initialTrackRestore.current += 1;
-      trackInitialized.current = false;
+      initialSongRestore.current += 1;
+      songInitialized.current = false;
       player.reset();
       setSummary(null);
       setResultTotal(0);
       setImporting(true);
       setLoadError("");
       try {
-        const savedId = readPreference("lastPlayedTrack");
-        const next = await api.loadLibrary(
+        const savedId = readPreference("lastPlayedSong");
+        const next = await api.loadSongList(
           installPath,
           typeof savedId === "string" ? savedId : undefined,
         );
         setSummary(next);
         setRevision((value) => value + 1);
-        writePreference("libraryPath", next.installPath);
+        writePreference("songListPath", next.installPath);
       } catch (reason) {
         setLoadError(reason instanceof Error ? reason.message : String(reason));
       } finally {
@@ -391,15 +393,15 @@ export function App({
   );
 
   useEffect(() => {
-    const removeProgress = api.onLibraryProgress((next) => {
+    const removeProgress = api.onSongListProgress((next) => {
       if ("summary" in next && next.summary) {
         setSummary(next.summary);
         setRevision((value) => value + 1);
       }
     });
-    if (!initialLibrary) void loadLibrary(readPreference("libraryPath"));
+    if (!initialSongList) void loadSongList(readPreference("songListPath"));
     return removeProgress;
-  }, [initialLibrary, loadLibrary]);
+  }, [initialSongList, loadSongList]);
 
   useEffect(() => {
     const removeFullscreen = api.onFullscreenChange(setFullscreen);
@@ -434,27 +436,28 @@ export function App({
   const clampSidePanelWidth = useCallback(
     (value: number): number => {
       const contentWidth = mainRef.current?.clientWidth ?? window.innerWidth;
-      const visibleLibraryWidth = isDesktop && sidebarHidden ? 0 : libraryWidth;
-      const libraryResizerWidth = isDesktop && !sidebarHidden ? 7 : 0;
+      const visibleSongListWidth =
+        isDesktop && sidebarHidden ? 0 : songListWidth;
+      const songListResizerWidth = isDesktop && !sidebarHidden ? 7 : 0;
       const max = Math.max(
         minSidePanelWidth,
         Math.min(
           maxSidePanelWidth,
-          contentWidth - 360 - 7 - libraryResizerWidth - visibleLibraryWidth,
+          contentWidth - 360 - 7 - songListResizerWidth - visibleSongListWidth,
         ),
       );
       return Math.min(max, Math.max(minSidePanelWidth, value));
     },
-    [isDesktop, libraryWidth, sidebarHidden],
+    [isDesktop, songListWidth, sidebarHidden],
   );
 
-  const clampLibraryWidth = useCallback(
+  const clampSongListWidth = useCallback(
     (value: number): number => {
       const contentWidth = mainRef.current?.clientWidth ?? window.innerWidth;
       const visibleSidePanelWidth =
         sidePanelOpen && isDesktop ? sidePanelWidth : 0;
       const sidePanelResizerWidth = sidePanelOpen && isDesktop ? 7 : 0;
-      const libraryResizerWidth = isDesktop && !sidebarHidden ? 7 : 0;
+      const songListResizerWidth = isDesktop && !sidebarHidden ? 7 : 0;
       const max = Math.max(
         320,
         Math.min(
@@ -463,7 +466,7 @@ export function App({
             360 -
             visibleSidePanelWidth -
             sidePanelResizerWidth -
-            libraryResizerWidth,
+            songListResizerWidth,
         ),
       );
       return Math.min(max, Math.max(320, value));
@@ -475,26 +478,26 @@ export function App({
     const onResize = () => {
       setIsDesktop(window.innerWidth > 760);
       if (window.innerWidth > 760) {
-        setLibraryWidth((value) => clampLibraryWidth(value));
+        setSongListWidth((value) => clampSongListWidth(value));
         setSidePanelWidth((value) => clampSidePanelWidth(value));
       }
     };
     onResize();
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, [clampLibraryWidth, clampSidePanelWidth]);
+  }, [clampSongListWidth, clampSidePanelWidth]);
 
   useEffect(() => {
     if (!resizing) return;
-    document.body.classList.add("is-resizing-library");
+    document.body.classList.add("is-resizing-song-list");
     const onMove = (event: globalThis.PointerEvent) => {
       const start = resizeStart.current;
       if (!start) return;
       const delta =
-        libraryPosition === "right"
+        songListPosition === "right"
           ? start.x - event.clientX
           : event.clientX - start.x;
-      setLibraryWidth(clampLibraryWidth(start.width + delta));
+      setSongListWidth(clampSongListWidth(start.width + delta));
     };
     const finish = () => {
       resizeStart.current = null;
@@ -505,13 +508,13 @@ export function App({
     window.addEventListener("pointercancel", finish, { once: true });
     window.addEventListener("blur", finish, { once: true });
     return () => {
-      document.body.classList.remove("is-resizing-library");
+      document.body.classList.remove("is-resizing-song-list");
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", finish);
       window.removeEventListener("pointercancel", finish);
       window.removeEventListener("blur", finish);
     };
-  }, [clampLibraryWidth, libraryPosition, resizing]);
+  }, [clampSongListWidth, songListPosition, resizing]);
 
   useEffect(() => {
     if (!sidePanelResizing) return;
@@ -520,7 +523,7 @@ export function App({
       const start = sidePanelResizeStart.current;
       if (!start) return;
       const delta =
-        libraryPosition === "right"
+        songListPosition === "right"
           ? event.clientX - start.x
           : start.x - event.clientX;
       setSidePanelWidth(clampSidePanelWidth(start.width + delta));
@@ -540,7 +543,7 @@ export function App({
       window.removeEventListener("pointercancel", finish);
       window.removeEventListener("blur", finish);
     };
-  }, [clampSidePanelWidth, libraryPosition, sidePanelResizing]);
+  }, [clampSidePanelWidth, songListPosition, sidePanelResizing]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setSearch(searchDraft), 150);
@@ -551,8 +554,8 @@ export function App({
     writePreference("favorites", [...favorites]);
   }, [favorites]);
   useEffect(
-    () => writePreference("libraryWidth", libraryWidth),
-    [libraryWidth],
+    () => writePreference("songListWidth", songListWidth),
+    [songListWidth],
   );
   useEffect(
     () => writePreference("sidebarHidden", sidebarHidden),
@@ -567,8 +570,8 @@ export function App({
     [sidePanelWidth],
   );
   useEffect(
-    () => writePreference("libraryPosition", libraryPosition),
-    [libraryPosition],
+    () => writePreference("songListPosition", songListPosition),
+    [songListPosition],
   );
   useEffect(
     () => writePreference("transportLayout", transportLayout),
@@ -581,14 +584,14 @@ export function App({
   );
   useEffect(() => writePreference("debugMode", debugMode), [debugMode]);
   useEffect(() => {
-    const trackId = player.track?.id;
-    if (!debugMode || !trackId) {
+    const songId = player.song?.id;
+    if (!debugMode || !songId) {
       setDebugInfo(null);
       return;
     }
     let cancelled = false;
     void api
-      .getTrackDebugInfo(trackId, player.videoSource)
+      .getSongDebugInfo(songId, player.videoSource)
       .then((info) => {
         if (!cancelled) setDebugInfo(info);
       })
@@ -598,7 +601,7 @@ export function App({
     return () => {
       cancelled = true;
     };
-  }, [debugMode, player.track?.id, player.videoSource]);
+  }, [debugMode, player.song?.id, player.videoSource]);
   useEffect(
     () => writePreference("showTitleUnicode", showTitleUnicode),
     [showTitleUnicode],
@@ -619,18 +622,18 @@ export function App({
   useEffect(() => writePreference("sortDescending", descending), [descending]);
 
   useEffect(() => {
-    if (!player.playing || !player.track) return;
-    const themeMatchesTrack =
-      artworkTheme && artworkTheme.url === player.track.artworkUrl
+    if (!player.playing || !player.song) return;
+    const themeMatchesSong =
+      artworkTheme && artworkTheme.url === player.song.artworkUrl
         ? artworkTheme.theme
         : null;
-    if (themeMatchesTrack) cacheLastArtworkTheme(themeMatchesTrack);
+    if (themeMatchesSong) cacheLastArtworkTheme(themeMatchesSong);
     else clearCachedLastArtworkTheme();
-    writePreference("lastPlayedTrack", player.track.id);
-  }, [artworkTheme, player.playing, player.track]);
+    writePreference("lastPlayedSong", player.song.id);
+  }, [artworkTheme, player.playing, player.song]);
 
   useEffect(() => {
-    const artworkUrl = player.track?.artworkUrl;
+    const artworkUrl = player.song?.artworkUrl;
     if (!artworkThemeEnabled || !artworkUrl) {
       setArtworkTheme(null);
       return;
@@ -654,12 +657,12 @@ export function App({
       image.onload = null;
       image.onerror = null;
     };
-  }, [artworkThemeEnabled, player.track?.artworkUrl]);
+  }, [artworkThemeEnabled, player.song?.artworkUrl]);
 
   const activeArtworkTheme =
     artworkThemeEnabled &&
     artworkTheme &&
-    artworkTheme.url === player.track?.artworkUrl
+    artworkTheme.url === player.song?.artworkUrl
       ? artworkTheme.theme
       : null;
 
@@ -741,10 +744,10 @@ export function App({
     cacheConfirmation,
     settingsResetConfirmation,
     focusSearch,
-    trackListKeyboardRef,
+    songListKeyboardRef,
   });
 
-  const query = useMemo<LibraryQuery>(
+  const query = useMemo<SongListQuery>(
     () => ({
       search,
       collection: collection || undefined,
@@ -758,9 +761,9 @@ export function App({
   const queryKey = useMemo(() => JSON.stringify(query), [query]);
   const queryKeyRef = useRef(queryKey);
   if (queryKeyRef.current !== queryKey) {
-    if (!player.track) {
-      trackInitialized.current = false;
-      initialTrackRestore.current += 1;
+    if (!player.song) {
+      songInitialized.current = false;
+      initialSongRestore.current += 1;
     }
     queryKeyRef.current = queryKey;
   }
@@ -769,32 +772,32 @@ export function App({
     [player.queueQuery, query],
   );
 
-  const cueFirstTrack = useCallback(
-    (track: Track) => {
-      if (trackInitialized.current) return;
-      const savedId = readPreference("lastPlayedTrack");
+  const cueFirstSong = useCallback(
+    (song: Song) => {
+      if (songInitialized.current) return;
+      const savedId = readPreference("lastPlayedSong");
       // Without a saved song, wait until all sorts are stable before choosing
       // the first result. A saved song can be restored as soon as its streamed
       // batch arrives, which makes uncached startup ready much sooner.
       if (typeof savedId !== "string" || !savedId) {
         if (importing) return;
-        trackInitialized.current = true;
-        player.cueTrack(track, query, 0);
+        songInitialized.current = true;
+        player.cueSong(song, query, 0);
         return;
       }
 
-      const request = ++initialTrackRestore.current;
-      const restore = api.getTrackLocation
-        ? api.getTrackLocation(savedId, query)
+      const request = ++initialSongRestore.current;
+      const restore = api.getSongLocation
+        ? api.getSongLocation(savedId, query)
         : api
-            .getTrack(savedId)
-            .then((savedTrack) =>
-              savedTrack ? { track: savedTrack, index: 0 } : null,
+            .getSong(savedId)
+            .then((savedSong) =>
+              savedSong ? { song: savedSong, index: 0 } : null,
             );
       void restore
         .then((location) => {
           if (
-            request !== initialTrackRestore.current ||
+            request !== initialSongRestore.current ||
             queryKey !== queryKeyRef.current
           )
             return;
@@ -802,66 +805,66 @@ export function App({
             // The saved song may be in a later streamed batch. Keep trying
             // until import completes before treating the saved ID as stale.
             if (importing) return;
-            removePreference("lastPlayedTrack");
-            trackInitialized.current = true;
-            player.cueTrack(track, query, 0);
+            removePreference("lastPlayedSong");
+            songInitialized.current = true;
+            player.cueSong(song, query, 0);
             return;
           }
-          trackInitialized.current = true;
-          player.cueTrack(location.track, query, location.index);
+          songInitialized.current = true;
+          player.cueSong(location.song, query, location.index);
         })
         .catch(() => {
           if (
-            request === initialTrackRestore.current &&
+            request === initialSongRestore.current &&
             queryKey === queryKeyRef.current &&
             !importing
           ) {
-            trackInitialized.current = true;
-            player.cueTrack(track, query, 0);
+            songInitialized.current = true;
+            player.cueSong(song, query, 0);
           }
         });
     },
-    [api, importing, player.cueTrack, query],
+    [api, importing, player.cueSong, query],
   );
 
-  const playTrack = useCallback(
-    (track: Track, index: number) => {
-      initialTrackRestore.current += 1;
-      trackInitialized.current = true;
-      writePreference("lastPlayedTrack", track.id);
-      player.playTrack(track, query, index);
+  const playSong = useCallback(
+    (song: Song, index: number) => {
+      initialSongRestore.current += 1;
+      songInitialized.current = true;
+      writePreference("lastPlayedSong", song.id);
+      player.playSong(song, query, index);
     },
-    [player.playTrack, query],
+    [player.playSong, query],
   );
 
-  const toggleFavorite = useCallback((track: Track) => {
+  const toggleFavorite = useCallback((song: Song) => {
     setFavorites((current) => {
       const next = new Set(current);
-      if (next.has(track.id)) next.delete(track.id);
-      else next.add(track.id);
+      if (next.has(song.id)) next.delete(song.id);
+      else next.add(song.id);
       return next;
     });
   }, []);
 
-  const openTrackContextMenu = useCallback(
-    (track: Track, x: number, y: number) => {
-      setTrackContextMenu({
-        track,
+  const openSongContextMenu = useCallback(
+    (song: Song, x: number, y: number) => {
+      setSongContextMenu({
+        song,
         x,
         y,
         info: {
-          audio: Boolean(track.audioHash),
-          background: Boolean(track.backgroundHash),
-          video: Boolean(track.videoHash),
-          listing: track.onlineId !== undefined,
+          audio: Boolean(song.audioHash),
+          background: Boolean(song.backgroundHash),
+          video: Boolean(song.videoHash),
+          listing: song.onlineId !== undefined,
         },
       });
       void api
-        .getTrackContextMenuInfo(track.id)
+        .getSongContextMenuInfo(song.id)
         .then((info) => {
           if (!info) return;
-          setTrackContextMenu((current) =>
-            current?.track.id === track.id ? { ...current, info } : current,
+          setSongContextMenu((current) =>
+            current?.song.id === song.id ? { ...current, info } : current,
           );
         })
         .catch(() => {
@@ -871,31 +874,31 @@ export function App({
     [],
   );
 
-  const closeTrackContextMenu = useCallback(() => {
-    setTrackContextMenu(null);
+  const closeSongContextMenu = useCallback(() => {
+    setSongContextMenu(null);
   }, []);
 
-  const performTrackContextMenuAction = useCallback(
-    (action: TrackContextMenuAction) => {
-      const current = trackContextMenu;
+  const performSongContextMenuAction = useCallback(
+    (action: SongContextMenuAction) => {
+      const current = songContextMenu;
       if (!current) return;
-      setTrackContextMenu(null);
+      setSongContextMenu(null);
       void api
-        .performTrackContextMenuAction(current.track.id, action)
+        .performSongContextMenuAction(current.song.id, action)
         .catch(() => {
           // Native actions are best-effort; closing the menu keeps the UI responsive.
         });
     },
-    [trackContextMenu],
+    [songContextMenu],
   );
 
-  const chooseLibrary = useCallback(async () => {
-    const path = await api.chooseLibrary();
+  const chooseSongList = useCallback(async () => {
+    const path = await api.chooseSongList();
     if (path) {
       setSidePanelOpen(false);
-      await loadLibrary(path);
+      await loadSongList(path);
     }
-  }, [loadLibrary]);
+  }, [loadSongList]);
 
   const requestCacheClear = useCallback(
     (kind: CacheKind) => {
@@ -962,14 +965,14 @@ export function App({
     setDescending(false);
     setCaptionPosition(defaultPosition);
     setSidebarHidden(false);
-    setLibraryPosition(defaultLibraryPosition);
+    setSongListPosition(defaultSongListPosition);
     setTransportLayout("controls-centered");
     setShowTitleUnicode(false);
     setShowArtistUnicode(false);
     setShowNowPlayingTitleArtist(true);
     setDebugMode(false);
     setArtworkThemeEnabled(true);
-    setLibraryWidth(430);
+    setSongListWidth(430);
     setSidePanelWidth(defaultSidePanelWidth);
     setCacheNotice(null);
     setSettingsResetConfirmation(false);
@@ -1144,12 +1147,12 @@ export function App({
   const videoActive = Boolean(
     player.playVideos &&
     player.videoUrl &&
-    player.currentTime >= Math.max(0, player.track?.videoOffset ?? 0),
+    player.currentTime >= Math.max(0, player.song?.videoOffset ?? 0),
   );
   const hasFilters = Boolean(
     search || tags.length > 0 || collection || tab === "favorites",
   );
-  const libraryHidden = sidebarHidden && isDesktop;
+  const songListHidden = sidebarHidden && isDesktop;
 
   const changeSort = (next: SortKey) => {
     setSort(next);
@@ -1176,9 +1179,9 @@ export function App({
     event.preventDefault();
     event.stopPropagation();
     searchRef.current?.blur();
-    if (event.key === "Enter") trackListKeyboardRef.current?.playSelected();
+    if (event.key === "Enter") songListKeyboardRef.current?.playSelected();
     else
-      trackListKeyboardRef.current?.moveAndPlay(
+      songListKeyboardRef.current?.moveAndPlay(
         event.key === "ArrowUp" ? -1 : 1,
       );
   };
@@ -1206,13 +1209,13 @@ export function App({
             (resizing ? "is-resizing " : "") +
             (sidePanelResizing ? "is-resizing-side-panel " : "") +
             (sidePanelOpen ? "side-panel-is-open " : "") +
-            (libraryHidden ? "sidebar-is-hidden " : "") +
-            "library-position-" +
-            libraryPosition
+            (songListHidden ? "sidebar-is-hidden " : "") +
+            "song-list-position-" +
+            songListPosition
           }
           style={
             {
-              "--library-width": cssRem(libraryWidth),
+              "--song-list-width": cssRem(songListWidth),
               "--side-panel-width": cssRem(sidePanelOpen ? sidePanelWidth : 0),
             } as CSSProperties
           }
@@ -1245,13 +1248,13 @@ export function App({
                 summary={summary}
                 importing={importing}
                 player={player}
-                chooseLibrary={chooseLibrary}
-                refreshLibrary={async () => {
+                chooseSongList={chooseSongList}
+                refreshSongList={async () => {
                   setSidePanelOpen(false);
-                  await loadLibrary(summary?.installPath);
+                  await loadSongList(summary?.installPath);
                 }}
-                libraryPosition={libraryPosition}
-                setLibraryPosition={setLibraryPosition}
+                songListPosition={songListPosition}
+                setSongListPosition={setSongListPosition}
                 transportLayout={transportLayout}
                 setTransportLayout={setTransportLayout}
                 artworkThemeEnabled={artworkThemeEnabled}
@@ -1277,38 +1280,38 @@ export function App({
           />
 
           <PanelResizers
-            libraryRef={libraryRef}
+            songListRef={songListRef}
             sidePanelRef={sidePanelRef}
             resizeStart={resizeStart}
             sidePanelResizeStart={sidePanelResizeStart}
-            libraryHidden={libraryHidden}
+            songListHidden={songListHidden}
             sidePanelOpen={sidePanelOpen}
             isDesktop={isDesktop}
-            libraryPosition={libraryPosition}
-            libraryWidth={libraryWidth}
+            songListPosition={songListPosition}
+            songListWidth={songListWidth}
             sidePanelWidth={sidePanelWidth}
             minSidePanelWidth={minSidePanelWidth}
             maxSidePanelWidth={maxSidePanelWidth}
             setResizing={setResizing}
             setSidePanelResizing={setSidePanelResizing}
-            setLibraryWidth={setLibraryWidth}
+            setSongListWidth={setSongListWidth}
             setSidePanelWidth={setSidePanelWidth}
-            clampLibraryWidth={clampLibraryWidth}
+            clampSongListWidth={clampSongListWidth}
             clampSidePanelWidth={clampSidePanelWidth}
             defaultSidePanelWidth={defaultSidePanelWidth}
           />
 
-          <LibraryPanel
+          <SongListPanel
             api={api}
-            libraryRef={libraryRef}
-            libraryHidden={libraryHidden}
+            songListRef={songListRef}
+            songListHidden={songListHidden}
             searchRef={searchRef}
             searchDraft={searchDraft}
             setSearchDraft={setSearchDraft}
             onSearchKeyDown={handleSearchKeyDown}
             importing={importing}
-            refreshLibrary={async () => {
-              await loadLibrary(summary?.installPath);
+            refreshSongList={async () => {
+              await loadSongList(summary?.installPath);
             }}
             summary={summary}
             tab={tab}
@@ -1327,23 +1330,23 @@ export function App({
             search={search}
             clearFilters={clearFilters}
             loadError={loadError}
-            chooseLibrary={chooseLibrary}
+            chooseSongList={chooseSongList}
             query={query}
             revision={revision}
-            currentTrackId={player.track?.id}
-            followCurrentTrackIndex={
+            currentSongId={player.song?.id}
+            followCurrentSongIndex={
               queueMatches ? (player.queueIndex ?? undefined) : undefined
             }
-            libraryReady={!importing}
+            songListReady={!importing}
             playing={player.playing}
             showTitleUnicode={showTitleUnicode}
             showArtistUnicode={showArtistUnicode}
-            onPlay={playTrack}
+            onPlay={playSong}
             onFavorite={toggleFavorite}
-            onContextMenu={openTrackContextMenu}
+            onContextMenu={openSongContextMenu}
             onTotal={setResultTotal}
-            onFirstTrack={cueFirstTrack}
-            keyboardControlsRef={trackListKeyboardRef}
+            onFirstSong={cueFirstSong}
+            keyboardControlsRef={songListKeyboardRef}
             resultTotal={resultTotal}
           />
         </main>
@@ -1358,7 +1361,7 @@ export function App({
         onFavorite={toggleFavorite}
         fullscreen={fullscreen}
         sidebarHidden={sidebarHidden}
-        libraryPosition={libraryPosition}
+        songListPosition={songListPosition}
         sidePanelOpen={sidePanelOpen}
         onOpenShortcuts={() => setShortcutsOpen(true)}
         onToggleSidePanel={() => {
@@ -1378,9 +1381,9 @@ export function App({
         onClearPlayerError={player.clearError}
         zoomIndicatorVisible={zoomIndicatorVisible}
         zoomPercent={zoomPercent}
-        trackContextMenu={trackContextMenu}
-        onTrackContextMenuAction={performTrackContextMenuAction}
-        onCloseTrackContextMenu={closeTrackContextMenu}
+        songContextMenu={songContextMenu}
+        onSongContextMenuAction={performSongContextMenuAction}
+        onCloseSongContextMenu={closeSongContextMenu}
         shortcutsDialogRef={dialogRef}
         shortcutsOpen={shortcutsOpen}
         setShortcutsOpen={setShortcutsOpen}
