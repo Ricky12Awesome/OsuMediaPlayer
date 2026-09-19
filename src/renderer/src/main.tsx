@@ -11,7 +11,7 @@ import {
   readCachedLastArtworkTheme,
 } from "./artwork-theme-cache";
 
-const lastPlayedSongKey = "omp-last-played-song";
+const lastPlayedSongKey = "last-played-song";
 
 async function loadArtworkTheme(url: string): Promise<ArtworkTheme | null> {
   const image = new Image();
@@ -30,7 +30,7 @@ async function bootstrap() {
   let initialSong = null;
   let initialArtworkTheme = null;
   try {
-    const installPath = localStorage.getItem("omp-song-list-path");
+    const installPath = localStorage.getItem("song-list-path");
     const savedId = localStorage.getItem(lastPlayedSongKey);
     const parsedPath = installPath
       ? (JSON.parse(installPath) as unknown)

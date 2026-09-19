@@ -80,10 +80,10 @@ const sortOptions: Array<{ value: SortKey; label: string }> = [
   { value: "tags", label: "Tags" },
 ];
 
-const showTitleUnicodeKey = "omp-show-title-unicode";
-const showArtistUnicodeKey = "omp-show-artist-unicode";
-const combinedShowUnicodeKey = "omp-show-unicode";
-const legacyShowUnicodeTitleKey = "omp-show-unicode-title";
+const showTitleUnicodeKey = "show-title-unicode";
+const showArtistUnicodeKey = "show-artist-unicode";
+const combinedShowUnicodeKey = "show-unicode";
+const legacyShowUnicodeTitleKey = "show-unicode-title";
 
 const defaultApi: PlayerAPI = {
   loadSongList: async () => {

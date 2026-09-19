@@ -10,7 +10,7 @@ import {
   visualizerProfileKey,
 } from "./visualizer-settings";
 
-const key = "omp-visualizer";
+const key = "visualizer";
 
 function normalizeVisualizerValue(name: string, value: number): number {
   return name === "rotation" ? Math.round(value * 4) / 4 : value;

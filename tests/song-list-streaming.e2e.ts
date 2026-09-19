@@ -89,7 +89,7 @@ try {
       await page.addInitScript(
         ({ installPath, closeAt }) => {
           localStorage.setItem(
-            "omp-song-list-path",
+            "song-list-path",
             JSON.stringify(installPath),
           );
           const state = window as typeof window & { streamedCounts: number[] };
