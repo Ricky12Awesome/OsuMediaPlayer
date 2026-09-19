@@ -13,6 +13,7 @@ interface PanelResizersProps {
   songListPosition: "left" | "right";
   songListWidth: number;
   sidePanelWidth: number;
+  minSongListWidth: number;
   minSidePanelWidth: number;
   maxSidePanelWidth: number;
   setResizing: Dispatch<SetStateAction<boolean>>;
@@ -35,6 +36,7 @@ export function PanelResizers({
   songListPosition,
   songListWidth,
   sidePanelWidth,
+  minSongListWidth,
   minSidePanelWidth,
   maxSidePanelWidth,
   setResizing,
@@ -92,7 +94,7 @@ export function PanelResizers({
         aria-label="Resize song list sidebar"
         aria-hidden={songListHidden}
         aria-orientation="vertical"
-        aria-valuemin={320}
+        aria-valuemin={minSongListWidth}
         aria-valuemax={720}
         aria-valuenow={Math.round(songListWidth)}
         tabIndex={songListHidden ? -1 : 0}
@@ -108,7 +110,9 @@ export function PanelResizers({
           };
           setResizing(true);
         }}
-        onDoubleClick={() => setSongListWidth(clampSongListWidth(430))}
+        onDoubleClick={() =>
+          setSongListWidth(clampSongListWidth(minSongListWidth))
+        }
         onKeyDown={(event) => {
           if (event.key === "ArrowLeft") {
             event.preventDefault();
@@ -126,7 +130,7 @@ export function PanelResizers({
             );
           } else if (event.key === "Home") {
             event.preventDefault();
-            setSongListWidth(320);
+            setSongListWidth(minSongListWidth);
           } else if (event.key === "End") {
             event.preventDefault();
             setSongListWidth(clampSongListWidth(720));

@@ -50,9 +50,10 @@ import {
 
 const defaultPosition = "top-left";
 const defaultSongListPosition = "right";
-const defaultSidePanelWidth = 320;
-const minSidePanelWidth = 280;
+const defaultSidePanelWidth = 416;
+const minSidePanelWidth = 416;
 const maxSidePanelWidth = 520;
+const minSongListWidth = 466;
 const cssRem = (pixels: number): string => `${pixels / 16}rem`;
 const positions = [
   "top-left",
@@ -280,7 +281,9 @@ export function App({
   } | null>(initialArtworkTheme);
   const [songListWidth, setSongListWidth] = useState(() => {
     const value = readPreference("songListWidth");
-    return Number.isFinite(value) ? Math.min(720, Math.max(320, value)) : 430;
+    return Number.isFinite(value)
+      ? Math.min(720, Math.max(minSongListWidth, value))
+      : minSongListWidth;
   });
   const [fullscreen, setFullscreen] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
@@ -459,7 +462,7 @@ export function App({
       const sidePanelResizerWidth = sidePanelOpen && isDesktop ? 7 : 0;
       const songListResizerWidth = isDesktop && !sidebarHidden ? 7 : 0;
       const max = Math.max(
-        320,
+        minSongListWidth,
         Math.min(
           720,
           contentWidth -
@@ -469,7 +472,7 @@ export function App({
             songListResizerWidth,
         ),
       );
-      return Math.min(max, Math.max(320, value));
+      return Math.min(max, Math.max(minSongListWidth, value));
     },
     [isDesktop, sidePanelOpen, sidePanelWidth, sidebarHidden],
   );
@@ -972,7 +975,7 @@ export function App({
     setShowNowPlayingTitleArtist(true);
     setDebugMode(false);
     setArtworkThemeEnabled(true);
-    setSongListWidth(430);
+    setSongListWidth(minSongListWidth);
     setSidePanelWidth(defaultSidePanelWidth);
     setCacheNotice(null);
     setSettingsResetConfirmation(false);
@@ -1289,6 +1292,7 @@ export function App({
             isDesktop={isDesktop}
             songListPosition={songListPosition}
             songListWidth={songListWidth}
+            minSongListWidth={minSongListWidth}
             sidePanelWidth={sidePanelWidth}
             minSidePanelWidth={minSidePanelWidth}
             maxSidePanelWidth={maxSidePanelWidth}

@@ -96,9 +96,9 @@ export const preferenceDefaults: Preferences = {
   debugMode: false,
   artworkTheme: true,
   nowPlayingPosition: "top-left",
-  songListWidth: 430,
+  songListWidth: 466,
   visualizerPanelOpen: false,
-  sidePanelWidth: 320,
+  sidePanelWidth: 416,
   playback: {
     volume: 0.75,
     muted: false,
@@ -184,12 +184,12 @@ function parseValue<K extends PreferenceKey>(
     case "songListWidth":
       return Math.min(
         720,
-        Math.max(320, parseNumber(value, fallback as number)),
+        Math.max(466, parseNumber(value, fallback as number)),
       ) as Preferences[K];
     case "sidePanelWidth":
       return Math.min(
         520,
-        Math.max(280, parseNumber(value, fallback as number)),
+        Math.max(416, parseNumber(value, fallback as number)),
       ) as Preferences[K];
     case "playback":
       return parsePlayback(value) as Preferences[K];
