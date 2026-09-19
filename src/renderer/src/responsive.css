@@ -122,6 +122,7 @@
     border-radius: 0.75rem;
     box-shadow: 12px 16px 45px #09050e66;
     transform: translate(-1.5rem);
+    min-width: 0;
   }
   .main-content.song-list-position-left .side-panel {
     inset: 0.8125rem 0.8125rem 0 auto;
@@ -134,6 +135,7 @@
   .now-playing-panel,
   .song-list-panel {
     min-height: 0;
+    min-width: 0;
     display: flex;
   }
   .now-playing-panel {
