@@ -68,7 +68,7 @@ const keys: Record<PreferenceKey, string> = {
   songListWidth: "omp-song-list-width",
   visualizerPanelOpen: "omp-visualizer-panel-open",
   sidePanelWidth: "omp-side-panel-width",
-  playback: "omp-player:settings",
+  playback: "OsuMediaPlayer:settings",
 };
 
 const positions = [
