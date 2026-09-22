@@ -37,7 +37,8 @@ export interface VisualizerSettings {
   colorMode: "theme" | "custom";
   color1: string;
   color2: string;
-  maxFps: 30 | 60;
+  /** 0 disables the animation frame-rate cap. */
+  maxFps: 0 | 30 | 60;
   resolution: 50 | 75 | 100;
   respectReducedMotion: boolean;
 }
@@ -116,6 +117,7 @@ export const visualizerOptions = {
     { value: "custom", label: "Custom gradient" },
   ],
   maxFps: [
+    { value: 0, label: "Max frame rate" },
     { value: 30, label: "30 FPS" },
     { value: 60, label: "60 FPS" },
   ],
@@ -312,14 +314,10 @@ export function applyVisualizerPreset(
   const preset = visualizerPresets[index];
   if (!preset) return settings;
   return parseVisualizerSettings({
-    ...defaultVisualizerSettings,
+    // Presets change only the values they define. Keeping the complete
+    // current object here means switching styles never discards a user's
+    // geometry, response, color, accessibility, or performance choices.
+    ...settings,
     ...preset.settings,
-    enabled: settings.enabled,
-    colorMode: settings.colorMode,
-    color1: settings.color1,
-    color2: settings.color2,
-    maxFps: settings.maxFps,
-    resolution: settings.resolution,
-    respectReducedMotion: settings.respectReducedMotion,
   });
 }

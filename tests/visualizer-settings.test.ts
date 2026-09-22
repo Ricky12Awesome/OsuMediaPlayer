@@ -38,6 +38,11 @@ test("visualizer settings recover independently from malformed persisted fields"
   assert.equal("unknownField" in settings, false);
 });
 
+test("max frame rate option disables the visualizer FPS cap", () => {
+  assert.equal(parseVisualizerSettings({ maxFps: 0 }).maxFps, 0);
+  assert.equal(parseVisualizerSettings({ maxFps: -1 }).maxFps, 60);
+});
+
 test("visualizer supports instant response and both center-offset limits", () => {
   const settings = parseVisualizerSettings({
     enabled: false,
@@ -86,7 +91,7 @@ test("missing visualizer settings return fresh defaults", () => {
   }
 });
 
-test("visualizer presets retain enabled, color, accessibility and graphics preferences", () => {
+test("visualizer presets retain every setting they do not define", () => {
   const settings = parseVisualizerSettings({
     enabled: false,
     colorMode: "custom",
@@ -101,7 +106,7 @@ test("visualizer presets retain enabled, color, accessibility and graphics prefe
   assert.equal(next.style, "line");
   assert.equal(next.linePosition, "bottom");
   assert.equal(next.centerOffset, 0);
-  assert.equal(next.rotationSpeed, 0);
+  assert.equal(next.rotationSpeed, settings.rotationSpeed);
   for (const key of [
     "enabled",
     "colorMode",
@@ -113,6 +118,9 @@ test("visualizer presets retain enabled, color, accessibility and graphics prefe
   ] as const) {
     assert.equal(next[key], settings[key]);
   }
+  assert.equal(next.gap, settings.gap);
+  assert.equal(next.centerOffset, 0);
+  assert.equal(next.boom, settings.boom);
   assert.equal(applyVisualizerPreset(settings, -1), settings);
 });
 

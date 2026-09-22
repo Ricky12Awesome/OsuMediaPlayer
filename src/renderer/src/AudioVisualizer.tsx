@@ -90,8 +90,13 @@ export function AudioVisualizer({
         return;
       const current = latest.current.settings;
       const playing = active();
-      const interval = 1000 / current.maxFps;
-      if (playing && previousTime && now - previousTime < interval - 0.5) {
+      const interval = current.maxFps > 0 ? 1000 / current.maxFps : 0;
+      if (
+        interval > 0 &&
+        playing &&
+        previousTime &&
+        now - previousTime < interval - 0.5
+      ) {
         frameId = requestAnimationFrame(draw);
         return;
       }

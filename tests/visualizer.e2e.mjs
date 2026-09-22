@@ -322,6 +322,15 @@ try {
       },
     }),
   );
+  await update({ maxFps: 0 });
+  const uncappedBefore = await page.evaluate(() => window.gpuTestStats.submits);
+  await page.waitForTimeout(1000);
+  const uncappedSubmitted =
+    (await page.evaluate(() => window.gpuTestStats.submits)) - uncappedBefore;
+  assert.ok(
+    uncappedSubmitted > submitted,
+    `Max frame rate removes the 30 FPS cap (${uncappedSubmitted} frames)`,
+  );
   await mkdir("test-results", { recursive: true });
   await page.getByRole("tab", { name: "Visualizer", exact: true }).click();
   await page.screenshot({ path: "test-results/visualizer.png" });
