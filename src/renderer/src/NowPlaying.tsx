@@ -2,8 +2,6 @@ import type { PointerEvent, RefObject } from "react";
 import { LoaderCircle, Sparkles } from "lucide-react";
 import type { SongDebugInfo } from "../../shared/types";
 import type { PlayerState } from "./usePlayer";
-import { AudioVisualizer } from "./AudioVisualizer";
-import type { VisualizerSettings } from "./visualizer-settings";
 import { displaySongArtist, displaySongTitle } from "./song-title";
 import { DebugWidget, type DebugWidgetData } from "./DebugWidget";
 
@@ -22,7 +20,6 @@ export type CaptionPosition = (typeof captionPositions)[number];
 
 export interface NowPlayingProps {
   player: PlayerState;
-  visualizer: VisualizerSettings;
   showNowPlayingTitleArtist: boolean;
   debugMode: boolean;
   debugInfo?: SongDebugInfo | null;
@@ -37,7 +34,6 @@ export interface NowPlayingProps {
 
 export function NowPlaying({
   player,
-  visualizer,
   showNowPlayingTitleArtist,
   debugMode,
   debugInfo,
@@ -125,11 +121,6 @@ export function NowPlaying({
             </span>
           </div>
         )}
-        <AudioVisualizer
-          analyser={player.analyser}
-          playing={player.playing}
-          settings={visualizer}
-        />
         {debugMode && player.song && <DebugWidget data={debugData} />}
         {showNowPlayingTitleArtist && (
           <div

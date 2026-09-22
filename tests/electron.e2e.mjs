@@ -60,7 +60,6 @@ try {
     await panelToggle.click();
   }
 
-  await page.getByRole("tab", { name: "Settings" }).click();
   const settingsControlMetrics = await page.evaluate(() => {
     const metric = (selector) => {
       const element = document.querySelector(selector);
@@ -91,76 +90,6 @@ try {
     settingsControlMetrics.picker.height,
     settingsControlMetrics.toggle.height,
   );
-
-  await page.getByRole("tab", { name: "Visualizer" }).click();
-  const visualizerMetrics = await page.evaluate(() => {
-    const readGroup = (label) => {
-      const group = document.querySelector(`[aria-label="${label}"]`);
-      const options = group?.querySelector(".settings-choice-group");
-      const text = group?.querySelector(".settings-row-label");
-      if (
-        !(group instanceof HTMLElement) ||
-        !(options instanceof HTMLElement) ||
-        !(text instanceof HTMLElement)
-      ) {
-        throw new Error(`Missing visualizer group: ${label}`);
-      }
-      const groupRect = group.getBoundingClientRect();
-      const optionRect = options.getBoundingClientRect();
-      const textRect = text.getBoundingClientRect();
-      return {
-        buttonsFit: [...options.querySelectorAll("button")].every(
-          (button) => button.scrollWidth <= button.clientWidth,
-        ),
-        rightGap: groupRect.right - optionRect.right,
-        sameLine:
-          Math.abs(
-            textRect.top +
-              textRect.height / 2 -
-              (optionRect.top + optionRect.height / 2),
-          ) < 1,
-        separated: textRect.right <= optionRect.left,
-      };
-    };
-    const heading = document.querySelector(
-      ".visualizer-settings > .settings-label",
-    );
-    const visualizerToggle = document.querySelector(
-      ".visualizer-settings .settings-switch",
-    );
-    const visualizerChoice = document.querySelector(
-      ".visualizer-settings .settings-choice-option",
-    );
-    if (
-      !(heading instanceof HTMLElement) ||
-      !(visualizerToggle instanceof HTMLElement) ||
-      !(visualizerChoice instanceof HTMLElement)
-    ) {
-      throw new Error("Missing visualizer controls");
-    }
-    return {
-      choiceHeight: visualizerChoice.getBoundingClientRect().height,
-      headingVisible: getComputedStyle(heading).display !== "none",
-      mode: readGroup("Visualizer mode"),
-      style: readGroup("Visualizer style"),
-      toggleHeight: visualizerToggle.getBoundingClientRect().height,
-    };
-  });
-  assert.equal(visualizerMetrics.headingVisible, true);
-  assert.equal(
-    visualizerMetrics.toggleHeight,
-    settingsControlMetrics.toggle.height,
-  );
-  assert.equal(
-    visualizerMetrics.choiceHeight,
-    settingsControlMetrics.choice.height,
-  );
-  for (const group of [visualizerMetrics.style, visualizerMetrics.mode]) {
-    assert.ok(Math.abs(group.rightGap) < 0.5);
-    assert.equal(group.sameLine, true);
-    assert.equal(group.separated, true);
-    assert.equal(group.buttonsFit, true);
-  }
 } finally {
   await app.close();
 }

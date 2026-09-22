@@ -25,7 +25,7 @@
   grid-template-columns:
     var(--side-panel-width) var(--side-panel-resizer-width) minmax(0, 1fr)
     0.4375rem var(--song-list-width, 29.125rem);
-  grid-template-areas: "visualizer visualizer-resizer player resizer song-list";
+  grid-template-areas: "side-panel side-panel-resizer player resizer song-list";
   flex: 1;
   gap: 0;
   min-width: 0;
@@ -46,16 +46,16 @@
     grid-template-columns:
       var(--song-list-width, 29.125rem) 0.4375rem minmax(0, 1fr)
       var(--side-panel-resizer-width) var(--side-panel-width);
-    grid-template-areas: "song-list resizer player visualizer-resizer visualizer";
+    grid-template-areas: "song-list resizer player side-panel-resizer side-panel";
   }
   .now-playing-panel {
     grid-area: player;
   }
   .side-panel {
-    grid-area: visualizer;
+    grid-area: side-panel;
   }
   .side-panel-resizer {
-    grid-area: visualizer-resizer;
+    grid-area: side-panel-resizer;
   }
   .song-list-resizer {
     grid-area: resizer;
@@ -83,13 +83,13 @@
     grid-template-columns:
       var(--side-panel-width)
       var(--side-panel-resizer-width) minmax(0, 1fr) 0 0;
-    grid-template-areas: "visualizer visualizer-resizer player resizer song-list";
+    grid-template-areas: "side-panel side-panel-resizer player resizer song-list";
   }
   .main-content.song-list-position-left.sidebar-is-hidden {
     grid-template-columns:
       0 0 minmax(0, 1fr) var(--side-panel-resizer-width)
       var(--side-panel-width);
-    grid-template-areas: "song-list resizer player visualizer-resizer visualizer";
+    grid-template-areas: "song-list resizer player side-panel-resizer side-panel";
   }
   .main-content.sidebar-is-hidden .song-list-resizer,
   .main-content.sidebar-is-hidden .song-list-panel {
@@ -170,9 +170,6 @@
   margin: 0.125rem 0 0;
   font-size: 1.25rem;
   font-weight: 900;
-}
-.side-panel-tabs {
-  margin-top: 0.875rem;
 }
 .side-panel-content {
   min-height: 0;

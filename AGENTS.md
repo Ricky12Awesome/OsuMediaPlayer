@@ -37,17 +37,17 @@ Keep these boundaries intact. Renderer code must not import Electron, Node files
 
 - Preserve the existing paged and virtualized song list. Keep result sizes, concurrent requests, page caches, and overscan bounded instead of putting the whole song list in the DOM.
 - Avoid duplicate IPC calls and repeated full-song-list work. Reuse query, sort, facet, artwork, and video caches where they already apply, and invalidate them when their source data changes.
-- Keep React state out of high-frequency loops. Use refs and one scheduled frame for playback or visualizer work; clean up `requestAnimationFrame`, observers, media listeners, and abort controllers.
+- Keep React state out of high-frequency loops. Use refs and one scheduled frame for playback work; clean up `requestAnimationFrame`, observers, media listeners, and abort controllers.
 - Treat CSS compositing as a limited resource. Prefer short `transform` and `opacity` transitions. Avoid animating layout, large blurred surfaces, persistent `will-change`, heavy shadows, or always-running animations without evidence that they help. Respect reduced-motion behavior.
 - Avoid reading whole media files into memory. Use the existing streaming and range-serving paths.
-- Profile before changing a performance-sensitive path. Check scrolling, artwork/theme changes, playback, video startup, and visualizer rendering in Electron/Chromium DevTools when relevant.
+- Profile before changing a performance-sensitive path. Check scrolling, artwork/theme changes, playback, and video startup in Electron/Chromium DevTools when relevant.
 
 ## Code style and organization
 
 - TypeScript is strict and uses ES modules. Keep the existing two-space indentation, semicolons, double quotes, trailing commas, and casing conventions.
 - Use Prettier rather than hand-formatting: `npm run format`.
 - Keep feature CSS beside its renderer feature and use the existing styling approach. A small feature should not introduce another styling system.
-- Reuse the shared renderer control classes in `controls.css` for buttons, tabs, popovers, and option rows, and the shared settings classes in `settings.css` for settings and visualizer controls. Keep feature CSS focused on positioning or behavior that is genuinely unique so equivalent controls do not drift apart.
+- Reuse the shared renderer control classes in `controls.css` for buttons, tabs, popovers, and option rows, and the shared settings classes in `settings.css` for settings controls. Keep feature CSS focused on positioning or behavior that is genuinely unique so equivalent controls do not drift apart.
 - Use scalable CSS units intentionally:
   - Use `rem` for most typography, spacing, radii, control sizes, and fixed layout constraints that should scale with the interface.
   - Keep normal text, controls, and metadata at `1rem` or larger. Use sub-`1rem` text sparingly for clearly secondary microcopy or compact badges, and verify that it remains legible.

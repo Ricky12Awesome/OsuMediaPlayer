@@ -31,7 +31,7 @@ export interface Preferences {
     | "bottom-left"
     | "left-center";
   songListWidth: number;
-  visualizerPanelOpen: boolean;
+  sidePanelOpen: boolean;
   sidePanelWidth: number;
   playback: {
     volume: number;
@@ -66,7 +66,7 @@ const keys: Record<PreferenceKey, string> = {
   artworkTheme: "artwork-theme",
   nowPlayingPosition: "now-playing-position",
   songListWidth: "song-list-width",
-  visualizerPanelOpen: "visualizer-panel-open",
+  sidePanelOpen: "side-panel-open",
   sidePanelWidth: "side-panel-width",
   playback: "playback-settings",
 };
@@ -97,7 +97,7 @@ export const preferenceDefaults: Preferences = {
   artworkTheme: true,
   nowPlayingPosition: "top-left",
   songListWidth: 466,
-  visualizerPanelOpen: false,
+  sidePanelOpen: false,
   sidePanelWidth: 416,
   playback: {
     volume: 0.75,
@@ -163,7 +163,7 @@ function parseValue<K extends PreferenceKey>(
     case "showNowPlayingTitleArtist":
     case "debugMode":
     case "artworkTheme":
-    case "visualizerPanelOpen":
+    case "sidePanelOpen":
       return parseBoolean(value, fallback as boolean) as Preferences[K];
     case "songListPosition":
       return (

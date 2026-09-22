@@ -219,9 +219,9 @@ export function AppOverlays({
                   Reset settings to defaults?
                 </h2>
                 <p id="settings-reset-confirmation-description">
-                  Playback, layout, appearance, sorting, and visualizer
-                  preferences will be restored. Your song list folder,
-                  favorites, and cached files will be kept.
+                  Playback, layout, appearance, and sorting preferences will be
+                  restored. Your song list folder, favorites, and cached files
+                  will be kept.
                 </p>
               </div>
             </div>

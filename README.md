@@ -12,7 +12,6 @@ This project is still in early stages and will have bugs
 - Search (collections, tags, etc)
 - Shuffle and Repeat
 - Fullscreen mode
-- Audio Visualizer (WIP, will probably be rewritten by hand)
 - Caching
 
 ## Planned Features
@@ -21,7 +20,6 @@ these are features I want to add in the future
 - UI Improvements
 - App Icon
 - Optimization (its good now, but need testing to make sure its actually good)
-- Custom Audio Visualizers (API)
 - Storyboards (might be difficult to do)
 
 ## Development
