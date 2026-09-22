@@ -100,7 +100,7 @@ fn lineDistance(position: vec2f) -> vec2f {
   if (placement == 0 || placement == 2) { baseline = margin + baseline - crossDimension * 0.5; }
   if (placement == 1 || placement == 3) { baseline = crossDimension - margin + baseline - crossDimension * 0.5; }
   let direction = select(1.0, -1.0, placement == 1 || placement == 3 || placement == 4);
-  let span = dimension * 0.88 * u.placement.w * u.motion.z;
+  let span = dimension * u.placement.w * u.motion.z;
   let along = select(position.x, position.y, vertical) - center + span * 0.5;
   let across = (select(position.y, position.x, vertical) - baseline) * direction;
   let slot = span / u.geometry.x;
