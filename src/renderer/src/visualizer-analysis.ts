@@ -7,8 +7,7 @@ export interface VisualizerAnalysisSettings {
   responsivenessMs: number;
   sensitivity: number;
   fftSize: number;
-  minFrequency: number;
-  maxFrequency: number;
+  frequencyRanges: { min: number; max: number }[];
   frequencyScale: "log" | "linear";
   mirror: boolean;
   reverse: boolean;
@@ -108,6 +107,56 @@ export function mapFrequencyBands(
     for (let bin = start; bin < end; bin++) sum += frequency[bin] ** 2;
     output[i] = Math.sqrt(sum / (end - start)) / 255;
   }
+}
+
+export function mapFrequencyRanges(
+  frequency: Uint8Array<ArrayBuffer>,
+  sampleRate: number,
+  fftSize: number,
+  count: number,
+  ranges: { min: number; max: number }[],
+  scale: "log" | "linear",
+  output: Float32Array<ArrayBuffer>,
+): void {
+  if (!count || !ranges.length) {
+    output.fill(0, 0, count);
+    return;
+  }
+  const base = Math.floor(count / ranges.length);
+  const extra = count % ranges.length;
+  if (base === 0) {
+    // When more ranges than bars are configured, spread the available bars
+    // across the entire ordered list rather than dropping the upper ranges.
+    for (let index = 0; index < count; index++) {
+      const range = ranges[Math.floor((index * ranges.length) / count)];
+      mapFrequencyBands(
+        frequency,
+        sampleRate,
+        fftSize,
+        1,
+        range.min,
+        range.max,
+        scale,
+        output.subarray(index, index + 1),
+      );
+    }
+    return;
+  }
+  let offset = 0;
+  ranges.forEach((range, index) => {
+    const bars = base + (index < extra ? 1 : 0);
+    mapFrequencyBands(
+      frequency,
+      sampleRate,
+      fftSize,
+      bars,
+      range.min,
+      range.max,
+      scale,
+      output.subarray(offset, offset + bars),
+    );
+    offset += bars;
+  });
 }
 
 /** CPU analysis keeps all buffers bounded and reuses them on every frame. */
@@ -211,13 +260,12 @@ export class VisualizerAnalysis {
 
     const bandCount = settings.mirror ? Math.ceil(count / 2) : count;
     if (settings.mode === "spectrum") {
-      mapFrequencyBands(
+      mapFrequencyRanges(
         this.frequency,
         sampleRate,
         fftSize,
         bandCount,
-        settings.minFrequency,
-        settings.maxFrequency,
+        settings.frequencyRanges,
         settings.frequencyScale,
         this.bands,
       );

@@ -161,6 +161,27 @@ try {
     ),
     15,
   );
+  const minFrequencySlider = page.getByRole("slider", {
+    name: "Range 1 lowest frequency slider",
+  });
+  await minFrequencySlider.scrollIntoViewIfNeeded();
+  const sliderBox = await minFrequencySlider.boundingBox();
+  assert.ok(sliderBox);
+  await page.mouse.move(sliderBox.x + 4, sliderBox.y + sliderBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(
+    sliderBox.x + sliderBox.width * 0.12,
+    sliderBox.y + sliderBox.height / 2,
+    { steps: 5 },
+  );
+  await page.mouse.up();
+  const draggedFrequency = await page.evaluate(
+    () => window.visualizerTest.settings().frequencyRanges[0].min,
+  );
+  assert.ok(
+    draggedFrequency > 30,
+    `Frequency sliders support pointer dragging (value ${draggedFrequency}, input ${JSON.stringify(await minFrequencySlider.evaluate((element) => ({ value: element.value, min: element.min, max: element.max })))} at ${JSON.stringify(sliderBox)})`,
+  );
   await page.reload();
   await page.waitForFunction(() => !!window.visualizerTest);
   assert.equal(
@@ -169,6 +190,13 @@ try {
     ),
     15,
     "Configuration survives a reload",
+  );
+  assert.equal(
+    await page.evaluate(
+      () => window.visualizerTest.settings().frequencyRanges[0].min,
+    ),
+    draggedFrequency,
+    "Custom frequency ranges survive a reload",
   );
   await page
     .getByTestId("visualizer-status")
@@ -187,6 +215,7 @@ try {
     colorMode: "custom",
     color1: "#ff0000",
     color2: "#ff0000",
+    frequencyRanges: [{ min: 30, max: 16000 }],
   });
 
   await page.evaluate(() => window.visualizerTest.play(0.03));
@@ -235,8 +264,7 @@ try {
   await update({
     style: "ring",
     mode: "spectrum",
-    minFrequency: 80,
-    maxFrequency: 400,
+    frequencyRanges: [{ min: 80, max: 400 }],
     barCount: 64,
     sensitivity: 5,
     centerOffset: 50,

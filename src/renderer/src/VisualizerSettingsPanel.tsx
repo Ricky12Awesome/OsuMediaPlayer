@@ -8,6 +8,7 @@ import {
   visualizerOptions,
   visualizerPresets,
   visualizerRanges,
+  type FrequencyRange,
   type VisualizerRangeKey,
   type VisualizerSettings,
   type VisualizerStatus,
@@ -101,6 +102,127 @@ function NumberControl({
   );
 }
 
+function FrequencyRangeField({
+  label,
+  value,
+  min,
+  max,
+  onCommit,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  onCommit: (value: number) => boolean;
+}) {
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => setDraft(String(value)), [value]);
+  const commit = (candidate: number) => {
+    const next = Math.min(max, Math.max(min, candidate));
+    if (onCommit(next)) setDraft(String(next));
+    else setDraft(String(value));
+  };
+  return (
+    <div className="visualizer-frequency-endpoint">
+      <label>
+        <span>{label}</span>
+        <input
+          className="settings-number-input"
+          type="number"
+          min={min}
+          max={max}
+          step={1}
+          aria-label={label}
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={() => {
+            const candidate = Number(draft);
+            if (Number.isFinite(candidate)) commit(candidate);
+            else setDraft(String(value));
+          }}
+        />
+      </label>
+      <input
+        className="settings-range-input"
+        type="range"
+        min={min}
+        max={max}
+        step={1}
+        value={value}
+        aria-label={`${label} slider`}
+        aria-valuetext={`${value} Hz`}
+        onChange={(event) => commit(Number(event.target.value))}
+      />
+    </div>
+  );
+}
+
+function FrequencyRangesControl({
+  ranges,
+  onChange,
+}: {
+  ranges: FrequencyRange[];
+  onChange: (ranges: FrequencyRange[]) => void;
+}) {
+  const updateRange = (index: number, patch: Partial<FrequencyRange>) => {
+    const next = ranges.map((range, rangeIndex) =>
+      rangeIndex === index ? { ...range, ...patch } : range,
+    );
+    if (next[index].min >= next[index].max) return false;
+    onChange(next);
+    return true;
+  };
+  return (
+    <div className="visualizer-frequency-ranges">
+      <div className="settings-label">Frequency ranges (Hz)</div>
+      {ranges.map((range, index) => (
+        <div className="visualizer-frequency-range" key={index}>
+          <div className="visualizer-frequency-range-header">
+            <span>Range {index + 1}</span>
+            <button
+              className="secondary-button"
+              type="button"
+              aria-label={`Remove frequency range ${index + 1}`}
+              disabled={ranges.length === 1}
+              onClick={() => onChange(ranges.filter((_, i) => i !== index))}
+            >
+              Remove
+            </button>
+          </div>
+          <div className="visualizer-frequency-range-endpoints">
+            <FrequencyRangeField
+              label={`Range ${index + 1} lowest frequency`}
+              value={range.min}
+              min={20}
+              max={range.max - 1}
+              onCommit={(min) => updateRange(index, { min })}
+            />
+            <FrequencyRangeField
+              label={`Range ${index + 1} highest frequency`}
+              value={range.max}
+              min={range.min + 1}
+              max={22050}
+              onCommit={(max) => updateRange(index, { max })}
+            />
+          </div>
+        </div>
+      ))}
+      <button
+        className="secondary-button"
+        type="button"
+        onClick={() => {
+          const last = ranges.at(-1);
+          const min = last && last.max < 22049 ? last.max + 1 : 20;
+          const max = min === 20 ? 1000 : Math.min(22050, min + 5000);
+          onChange([...ranges, { min, max }]);
+        }}
+      >
+        Add frequency range
+      </button>
+    </div>
+  );
+}
+
 export function VisualizerSettingsPanel({
   settings,
   onChange,
@@ -109,12 +231,6 @@ export function VisualizerSettingsPanel({
 }: VisualizerSettingsPanelProps) {
   const id = useId();
   const update = (patch: Partial<VisualizerSettings>) => {
-    if (
-      patch.maxFrequency !== undefined &&
-      patch.maxFrequency <= settings.minFrequency
-    ) {
-      patch.minFrequency = Math.max(20, patch.maxFrequency - 1);
-    }
     onChange(parseVisualizerSettings({ ...settings, ...patch }));
   };
   const number = (field: VisualizerRangeKey, hint?: string) => (
@@ -260,8 +376,10 @@ export function VisualizerSettingsPanel({
         {settings.mode === "spectrum" && (
           <>
             {choice("frequencyScale", "Frequency spacing")}
-            {number("minFrequency")}
-            {number("maxFrequency")}
+            <FrequencyRangesControl
+              ranges={settings.frequencyRanges}
+              onChange={(frequencyRanges) => update({ frequencyRanges })}
+            />
           </>
         )}
       </details>

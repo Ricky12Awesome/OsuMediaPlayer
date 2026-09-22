@@ -25,8 +25,7 @@ export interface VisualizerSettings {
   rotation: number;
   sensitivity: number;
   fftSize: 256 | 512 | 1024 | 2048 | 4096 | 8192;
-  minFrequency: number;
-  maxFrequency: number;
+  frequencyRanges: FrequencyRange[];
   frequencyScale: "log" | "linear";
   mirror: boolean;
   reverse: boolean;
@@ -42,6 +41,11 @@ export interface VisualizerSettings {
   maxFps: 0 | 30 | 60;
   resolution: 50 | 75 | 100;
   respectReducedMotion: boolean;
+}
+
+export interface FrequencyRange {
+  min: number;
+  max: number;
 }
 
 export type VisualizerStatus =
@@ -68,8 +72,7 @@ export const defaultVisualizerSettings: VisualizerSettings = {
   rotation: 0,
   sensitivity: 1.5,
   fftSize: 2048,
-  minFrequency: 30,
-  maxFrequency: 16000,
+  frequencyRanges: [{ min: 30, max: 16000 }],
   frequencyScale: "log",
   mirror: false,
   reverse: false,
@@ -189,20 +192,6 @@ export const visualizerRanges = {
   },
   rotation: { min: 0, max: 360, step: 1, label: "Starting angle", unit: "°" },
   sensitivity: { min: 0.1, max: 5, step: 0.1, label: "Sensitivity", unit: "×" },
-  minFrequency: {
-    min: 20,
-    max: 20000,
-    step: 1,
-    label: "Lowest frequency",
-    unit: "Hz",
-  },
-  maxFrequency: {
-    min: 20,
-    max: 22050,
-    step: 1,
-    label: "Highest frequency",
-    unit: "Hz",
-  },
   boom: { min: 0, max: 100, step: 1, label: "Boom / size pulse", unit: "%" },
   bassImpact: { min: 0, max: 100, step: 1, label: "Bass impact", unit: "%" },
   beatImpact: { min: 0, max: 100, step: 1, label: "Beat highlight", unit: "%" },
@@ -227,9 +216,6 @@ export function parseVisualizerSettings(value: unknown): VisualizerSettings {
     }
   }
   parsed.barCount = Math.round(parsed.barCount);
-  if (parsed.maxFrequency <= parsed.minFrequency) {
-    parsed.maxFrequency = parsed.minFrequency + 1;
-  }
   for (const key of [
     "enabled",
     "mirror",
@@ -247,6 +233,36 @@ export function parseVisualizerSettings(value: unknown): VisualizerSettings {
     }
   }
   if (record.style === "line-ripple") parsed.style = "wire-line";
+  const legacyRanges = [
+    {
+      min:
+        record.minFrequency ?? defaultVisualizerSettings.frequencyRanges[0].min,
+      max:
+        record.maxFrequency ?? defaultVisualizerSettings.frequencyRanges[0].max,
+    },
+  ];
+  const rangeCandidates = Array.isArray(record.frequencyRanges)
+    ? record.frequencyRanges
+    : legacyRanges;
+  const ranges = rangeCandidates
+    .flatMap((candidate): FrequencyRange[] => {
+      if (!candidate || typeof candidate !== "object") return [];
+      const range = candidate as Record<string, unknown>;
+      if (
+        typeof range.min !== "number" ||
+        !Number.isFinite(range.min) ||
+        typeof range.max !== "number" ||
+        !Number.isFinite(range.max)
+      )
+        return [];
+      const min = Math.min(22050, Math.max(20, range.min));
+      const max = Math.min(22050, Math.max(20, range.max));
+      return min < max ? [{ min, max }] : [];
+    })
+    .sort((a, b) => a.min - b.min);
+  parsed.frequencyRanges = ranges.length
+    ? ranges
+    : defaultVisualizerSettings.frequencyRanges.map((range) => ({ ...range }));
   for (const key of ["color1", "color2"] as const) {
     const candidate = record[key];
     if (typeof candidate === "string" && /^#[0-9a-f]{6}$/i.test(candidate)) {

@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   DurationTransitions,
   mapFrequencyBands,
+  mapFrequencyRanges,
   VisualizerAnalysis,
   type VisualizerAnalysisSettings,
 } from "../src/renderer/src/visualizer-analysis";
@@ -13,8 +14,7 @@ const settings: VisualizerAnalysisSettings = {
   responsivenessMs: 0,
   sensitivity: 1,
   fftSize: 2048,
-  minFrequency: 30,
-  maxFrequency: 16000,
+  frequencyRanges: [{ min: 30, max: 16000 }],
   frequencyScale: "log",
   mirror: false,
   reverse: false,
@@ -73,6 +73,40 @@ test("frequency bands respect linear/log spacing, requested range, and Nyquist",
   assert.equal(output[0], 0);
   mapFrequencyBands(bins, 10240, 1024, 4, 2000, 90000, "log", output);
   assert.deepEqual(Array.from(output), [0, 0, 0, 0]);
+  assert.ok(output.every(Number.isFinite));
+});
+
+test("custom frequency ranges skip gaps and preserve each selected interval", () => {
+  const frequency = new Uint8Array(1024);
+  frequency.fill(255, 1, 5);
+  frequency.fill(128, 213, 257);
+  const output = new Float32Array(8);
+  mapFrequencyRanges(
+    frequency,
+    48000,
+    2048,
+    8,
+    [
+      { min: 20, max: 100 },
+      { min: 5000, max: 6000 },
+    ],
+    "linear",
+    output,
+  );
+  assert.ok(output.slice(0, 4).every((value) => value > 0.6));
+  assert.ok(output.slice(4).every((value) => value > 0.4 && value < 0.6));
+  mapFrequencyRanges(
+    frequency,
+    48000,
+    2048,
+    8,
+    Array.from({ length: 12 }, (_, index) => ({
+      min: 100 + index * 100,
+      max: 150 + index * 100,
+    })),
+    "linear",
+    output,
+  );
   assert.ok(output.every(Number.isFinite));
 });
 

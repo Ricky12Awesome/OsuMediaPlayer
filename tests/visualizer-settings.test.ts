@@ -86,21 +86,47 @@ test("visualizer supports instant response and both center-offset limits", () =>
   );
 });
 
-test("visualizer frequency windows are nonempty after validation", () => {
-  for (const [minimum, maximum] of [
-    [20000, 20],
-    [22050, 22050],
-    [0, 0],
-    [100, 100],
-  ]) {
-    const settings = parseVisualizerSettings({
-      minFrequency: minimum,
-      maxFrequency: maximum,
-    });
-    assert.ok(settings.minFrequency >= 20);
-    assert.ok(settings.minFrequency < settings.maxFrequency);
-    assert.ok(settings.maxFrequency <= 22050);
-  }
+test("custom frequency ranges are validated and migrate old windows", () => {
+  assert.deepEqual(
+    parseVisualizerSettings({
+      frequencyRanges: [
+        { min: 15000, max: 20000 },
+        { min: 5000, max: 10000 },
+        { min: 20, max: 1000 },
+      ],
+    }).frequencyRanges,
+    [
+      { min: 20, max: 1000 },
+      { min: 5000, max: 10000 },
+      { min: 15000, max: 20000 },
+    ],
+  );
+  assert.deepEqual(
+    parseVisualizerSettings({
+      frequencyRanges: [
+        { min: -10, max: 30 },
+        { min: 50, max: 50000 },
+      ],
+    }).frequencyRanges,
+    [
+      { min: 20, max: 30 },
+      { min: 50, max: 22050 },
+    ],
+  );
+  assert.equal(
+    parseVisualizerSettings({
+      frequencyRanges: [
+        { min: 20, max: 1000 },
+        { min: 500, max: 1500 },
+      ],
+    }).frequencyRanges.length,
+    2,
+  );
+  assert.deepEqual(
+    parseVisualizerSettings({ minFrequency: 80, maxFrequency: 400 })
+      .frequencyRanges,
+    [{ min: 80, max: 400 }],
+  );
 });
 
 test("missing visualizer settings return fresh defaults", () => {
