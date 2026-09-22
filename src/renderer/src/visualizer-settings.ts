@@ -1,6 +1,6 @@
 export interface VisualizerSettings {
   enabled: boolean;
-  style: "circle" | "ring" | "line";
+  style: "circle" | "ring" | "line" | "wire-line" | "ripple-line";
   mode: "spectrum" | "waveform" | "energy";
   linePosition:
     | "top"
@@ -89,6 +89,8 @@ export const visualizerOptions = {
     { value: "circle", label: "Circle bars" },
     { value: "ring", label: "Ripple ring" },
     { value: "line", label: "Line bars" },
+    { value: "wire-line", label: "Wire line" },
+    { value: "ripple-line", label: "Ripple line" },
   ],
   mode: [
     { value: "spectrum", label: "FFT spectrum" },
@@ -235,6 +237,7 @@ export function parseVisualizerSettings(value: unknown): VisualizerSettings {
       Object.assign(parsed, { [key]: candidate });
     }
   }
+  if (record.style === "line-ripple") parsed.style = "wire-line";
   for (const key of ["color1", "color2"] as const) {
     const candidate = record[key];
     if (typeof candidate === "string" && /^#[0-9a-f]{6}$/i.test(candidate)) {

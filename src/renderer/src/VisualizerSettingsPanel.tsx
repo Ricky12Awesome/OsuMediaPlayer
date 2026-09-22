@@ -189,7 +189,10 @@ export function VisualizerSettingsPanel({
       <details className="settings-block visualizer-section" open>
         <summary className="settings-label">STYLE & GEOMETRY</summary>
         {choice("style", "Visualizer style")}
-        {settings.style === "line" && choice("linePosition", "Line placement")}
+        {(settings.style === "line" ||
+          settings.style === "wire-line" ||
+          settings.style === "ripple-line") &&
+          choice("linePosition", "Line placement")}
         {number("barCount")}
         {number("barWidth", "Width within each bar's available space.")}
         {number(
@@ -202,20 +205,29 @@ export function VisualizerSettingsPanel({
           "Moves this percentage of each bar opposite its growth direction. 50% balances both sides; circles shift toward their center.",
         )}
         {settings.style !== "line" &&
+          settings.style !== "wire-line" &&
+          settings.style !== "ripple-line" &&
           number("radius", "Percentage of the shorter canvas side.")}
-        {number("lineThickness")}
+        {number(
+          "lineThickness",
+          settings.style === "wire-line"
+            ? "Wire line uses a slightly thicker stroke."
+            : undefined,
+        )}
         {number("scale")}
         {number("positionX")}
         {number("positionY")}
-        {settings.style !== "line" && (
-          <>
-            {number("rotation")}
-            {number(
-              "rotationSpeed",
-              "Negative values rotate in the opposite direction.",
-            )}
-          </>
-        )}
+        {settings.style !== "line" &&
+          settings.style !== "wire-line" &&
+          settings.style !== "ripple-line" && (
+            <>
+              {number("rotation")}
+              {number(
+                "rotationSpeed",
+                "Negative values rotate in the opposite direction.",
+              )}
+            </>
+          )}
         {toggle("mirror", "Mirror frequency layout")}
         {toggle("reverse", "Reverse frequency order")}
       </details>

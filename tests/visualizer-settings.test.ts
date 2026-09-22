@@ -47,6 +47,17 @@ test("visualizer radius can be reduced to one percent", () => {
   assert.equal(parseVisualizerSettings({ radius: 1 }).radius, 1);
 });
 
+test("wire line and ripple line are supported visualizer styles", () => {
+  assert.equal(
+    parseVisualizerSettings({ style: "line-ripple" }).style,
+    "wire-line",
+  );
+  assert.equal(
+    parseVisualizerSettings({ style: "ripple-line" }).style,
+    "ripple-line",
+  );
+});
+
 test("visualizer supports instant response and both center-offset limits", () => {
   const settings = parseVisualizerSettings({
     enabled: false,

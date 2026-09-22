@@ -288,6 +288,21 @@ try {
       `${linePosition} renders actual energy data`,
     );
   }
+  await update({ style: "line", mode: "waveform" });
+  assert.ok(
+    (await snapshot()).visible > 0,
+    "Waveform analysis renders on the regular line style",
+  );
+  await update({ style: "wire-line", mode: "spectrum" });
+  assert.ok(
+    (await snapshot()).visible > 0,
+    "The Wire line style renders a waveform trace",
+  );
+  await update({ style: "ripple-line", mode: "spectrum" });
+  assert.ok(
+    (await snapshot()).visible > 0,
+    "The Ripple line style renders a spectrum contour",
+  );
 
   await update({
     style: "circle",

@@ -107,10 +107,25 @@ fn lineDistance(position: vec2f) -> vec2f {
   let coordinate = along / slot;
   let index = i32(floor(coordinate));
   let width = max(0.5, slot * u.geometry.y - u.geometry.w);
-  let amplitude = sampleAt(clamp(index, 0, i32(u.geometry.x) - 1)).x * u.geometry.z * u.motion.z;
+  let sampleIndex = clamp(index, 0, i32(u.geometry.x) - 1);
+  let amplitude = sampleAt(sampleIndex).x * u.geometry.z * u.motion.z;
   let local = vec2f(along - (f32(index) + 0.5) * slot, across - (0.5 - u.motion.y) * amplitude);
   var distance = boxDistance(local, vec2f(width, u.appearance.x + amplitude) * 0.5);
-  if (u.kind.z == 1) {
+  if (u.kind.x == 4) {
+    let t = clamp(coordinate - 0.5, 0, u.geometry.x - 1);
+    let first = i32(floor(t));
+    let smoothBand = cubic(
+      sampleAt(max(0, first - 1)).x,
+      sampleAt(first).x,
+      sampleAt(min(i32(u.geometry.x) - 1, first + 1)).x,
+      sampleAt(min(i32(u.geometry.x) - 1, first + 2)).x,
+      fract(t),
+    );
+    let ripple = clamp(smoothBand, 0, 1) * u.geometry.z * u.motion.z;
+    let low = -ripple * u.motion.y;
+    let high = ripple * (1 - u.motion.y);
+    distance = max(low - across, across - high) - u.appearance.x * 0.5;
+  } else if (u.kind.z == 1 || u.kind.x == 3) {
     let t = clamp(coordinate - 0.5, 0, u.geometry.x - 1);
     let first = i32(floor(t));
     let second = min(first + 1, i32(u.geometry.x) - 1);
@@ -128,7 +143,7 @@ fn lineDistance(position: vec2f) -> vec2f {
   var distance: f32;
   // A cyclic gradient joins cleanly at the circular seam.
   var gradient = 0.5 - 0.5 * cos(angle);
-  if (u.kind.x == 2) {
+  if (u.kind.x >= 2) {
     let line = lineDistance(position);
     distance = line.x;
     gradient = line.y;

@@ -165,7 +165,7 @@ export async function createVisualizerRenderer(
         );
         data.set(
           [
-            settings.lineThickness,
+            settings.lineThickness * (settings.style === "wire-line" ? 1.5 : 1),
             settings.glow / 100,
             settings.opacity / 100,
             pulse * 0.65,
@@ -174,7 +174,9 @@ export async function createVisualizerRenderer(
         );
         data.set(
           [
-            ["circle", "ring", "line"].indexOf(settings.style),
+            ["circle", "ring", "line", "wire-line", "ripple-line"].indexOf(
+              settings.style,
+            ),
             [
               "top",
               "bottom",
