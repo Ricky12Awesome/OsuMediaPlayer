@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { _electron as electron } from "playwright";
 
 // Keep the packaged-app smoke and shared-control geometry checks independent
@@ -6,8 +9,9 @@ import { _electron as electron } from "playwright";
 const electronEnv = { ...process.env, ELECTRON_RENDERER_URL: "" };
 delete electronEnv.ELECTRON_RUN_AS_NODE;
 
+const userData = await mkdtemp(join(tmpdir(), "osu-media-player-e2e-"));
 const app = await electron.launch({
-  args: [".", "--no-sandbox"],
+  args: [".", "--no-sandbox", `--user-data-dir=${userData}`],
   env: electronEnv,
 });
 
@@ -90,6 +94,44 @@ try {
     settingsControlMetrics.picker.height,
     settingsControlMetrics.toggle.height,
   );
+  await page.getByRole("tab", { name: "Visualizer", exact: true }).click();
+  const response = page.getByRole("spinbutton", {
+    name: "Response time (ms)",
+    exact: true,
+  });
+  await response.fill("15");
+  await response.press("Enter");
+  assert.equal(
+    await page.evaluate(
+      () =>
+        JSON.parse(localStorage.getItem("visualizer-settings"))
+          .responsivenessMs,
+    ),
+    15,
+  );
+  const canvas = page.locator(".artwork-stage .audio-visualizer");
+  assert.equal(await canvas.count(), 1);
+  assert.equal(
+    await canvas.evaluate((element) => getComputedStyle(element).pointerEvents),
+    "none",
+  );
+  await page
+    .getByRole("button", { name: "Enable visualizer", exact: true })
+    .click();
+  assert.equal(await canvas.count(), 0);
+  await page
+    .getByRole("button", { name: "Enable visualizer", exact: true })
+    .click();
+  assert.equal(await canvas.count(), 1);
+  await page.getByRole("tab", { name: "Visualizer", exact: true }).focus();
+  await page.keyboard.press("ArrowLeft");
+  assert.equal(
+    await page
+      .getByRole("tab", { name: "General", exact: true })
+      .getAttribute("aria-selected"),
+    "true",
+  );
 } finally {
   await app.close();
+  await rm(userData, { recursive: true, force: true });
 }

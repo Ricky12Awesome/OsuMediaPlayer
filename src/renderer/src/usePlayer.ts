@@ -31,6 +31,7 @@ import {
 import { displaySongArtist, displaySongTitle } from "./song-title";
 import { usePlayerVideo } from "./usePlayerVideo";
 import { readPreference, writePreference } from "./preferences";
+import { PlayerAudioAnalysis } from "./visualizer-audio";
 
 function readSettings() {
   return readPreference("playback");
@@ -85,6 +86,8 @@ export interface PlayerState {
   next: () => Promise<void>;
   previous: () => Promise<void>;
   jumpRandom: (direction: 1 | -1) => Promise<void>;
+  audioRef: RefObject<HTMLAudioElement | null>;
+  getAudioAnalyser: () => AnalyserNode | null;
   videoRef: RefObject<HTMLVideoElement | null>;
   videoUrl: string | null;
   videoSource: VideoSource;
@@ -103,8 +106,17 @@ export function usePlayer(
   showArtistUnicode = false,
 ): PlayerState {
   const [audio] = useState(() => {
-    return new Audio();
+    const element = new Audio();
+    element.crossOrigin = "anonymous";
+    return element;
   });
+  const audioRef = useRef<HTMLAudioElement | null>(audio);
+  const [audioAnalysis] = useState(() => new PlayerAudioAnalysis(audio));
+  const getAudioAnalyser = useCallback(
+    () => audioAnalysis.getAnalyser(),
+    [audioAnalysis],
+  );
+  useEffect(() => audioAnalysis.mount(), [audioAnalysis]);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [settings] = useState(readSettings);
   const [song, setSong] = useState<Song | null>(initialSong);
@@ -237,6 +249,7 @@ export function usePlayer(
     async (id: number) => {
       try {
         if (id !== generation.current || !mounted.current) return;
+        audioAnalysis.resume();
         await audio.play();
         if (id === generation.current && mounted.current) {
           syncVideo(true);
@@ -254,7 +267,7 @@ export function usePlayer(
         setError(playbackError(reason));
       }
     },
-    [audio, syncVideo],
+    [audio, audioAnalysis, syncVideo],
   );
 
   const loadSong = useCallback(
@@ -847,6 +860,8 @@ export function usePlayer(
     next,
     previous,
     jumpRandom,
+    audioRef,
+    getAudioAnalyser,
     videoRef,
     videoUrl,
     videoSource,

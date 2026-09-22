@@ -5,6 +5,11 @@ import {
   type VideoEncodingQuality,
   type VideoMaxFps,
 } from "../../shared/types";
+import {
+  defaultVisualizerSettings,
+  parseVisualizerSettings,
+  type VisualizerSettings,
+} from "./visualizer-settings";
 
 /** Values persisted by the renderer. Keep this map in sync with the UI defaults. */
 export interface Preferences {
@@ -33,6 +38,7 @@ export interface Preferences {
   songListWidth: number;
   sidePanelOpen: boolean;
   sidePanelWidth: number;
+  visualizer: VisualizerSettings;
   playback: {
     volume: number;
     muted: boolean;
@@ -68,6 +74,7 @@ const keys: Record<PreferenceKey, string> = {
   songListWidth: "song-list-width",
   sidePanelOpen: "side-panel-open",
   sidePanelWidth: "side-panel-width",
+  visualizer: "visualizer-settings",
   playback: "playback-settings",
 };
 
@@ -99,6 +106,7 @@ export const preferenceDefaults: Preferences = {
   songListWidth: 466,
   sidePanelOpen: false,
   sidePanelWidth: 416,
+  visualizer: defaultVisualizerSettings,
   playback: {
     volume: 0.75,
     muted: false,
@@ -193,6 +201,8 @@ function parseValue<K extends PreferenceKey>(
       ) as Preferences[K];
     case "playback":
       return parsePlayback(value) as Preferences[K];
+    case "visualizer":
+      return parseVisualizerSettings(value) as Preferences[K];
   }
 }
 

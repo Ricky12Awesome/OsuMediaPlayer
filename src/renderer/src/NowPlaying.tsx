@@ -4,6 +4,11 @@ import type { SongDebugInfo } from "../../shared/types";
 import type { PlayerState } from "./usePlayer";
 import { displaySongArtist, displaySongTitle } from "./song-title";
 import { DebugWidget, type DebugWidgetData } from "./DebugWidget";
+import { AudioVisualizer } from "./AudioVisualizer";
+import type {
+  VisualizerSettings,
+  VisualizerStatus,
+} from "./visualizer-settings";
 
 export const captionPositions = [
   "top-left",
@@ -20,6 +25,9 @@ export type CaptionPosition = (typeof captionPositions)[number];
 
 export interface NowPlayingProps {
   player: PlayerState;
+  visualizerSettings: VisualizerSettings;
+  onVisualizerStatus: (status: VisualizerStatus, detail?: string) => void;
+  visualizerThemeKey?: unknown;
   showNowPlayingTitleArtist: boolean;
   debugMode: boolean;
   debugInfo?: SongDebugInfo | null;
@@ -34,6 +42,9 @@ export interface NowPlayingProps {
 
 export function NowPlaying({
   player,
+  visualizerSettings,
+  onVisualizerStatus,
+  visualizerThemeKey,
   showNowPlayingTitleArtist,
   debugMode,
   debugInfo,
@@ -109,6 +120,13 @@ export function NowPlaying({
           />
         )}
         <div className="artwork-grain" />
+        <AudioVisualizer
+          audioRef={player.audioRef}
+          getAudioAnalyser={player.getAudioAnalyser}
+          settings={visualizerSettings}
+          onStatus={onVisualizerStatus}
+          themeKey={visualizerThemeKey}
+        />
         {player.videoEncoding && (
           <div className="video-encoding-indicator" role="status">
             <LoaderCircle className="spin" size={14} />

@@ -39,6 +39,11 @@ import { useKeyboardShortcuts } from "./useKeyboardShortcuts";
 import { AppOverlays, type SongContextMenuState } from "./AppOverlays";
 import { PlayerToolsPanel } from "./PlayerToolsPanel";
 import { PanelResizers } from "./PanelResizers";
+import { VisualizerSettingsPanel } from "./VisualizerSettingsPanel";
+import {
+  defaultVisualizerSettings,
+  type VisualizerStatus,
+} from "./visualizer-settings";
 import {
   readPreference,
   removePreference,
@@ -239,6 +244,19 @@ export function App({
     () => readPreference("showNowPlayingTitleArtist"),
   );
   const [debugMode, setDebugMode] = useState(() => readPreference("debugMode"));
+  const [visualizerSettings, setVisualizerSettings] = useState(() =>
+    readPreference("visualizer"),
+  );
+  const [visualizerStatus, setVisualizerStatus] = useState<{
+    status: VisualizerStatus;
+    detail?: string;
+  }>({ status: "loading" });
+  const updateVisualizerStatus = useCallback(
+    (status: VisualizerStatus, detail?: string) => {
+      setVisualizerStatus({ status, detail });
+    },
+    [],
+  );
   const [debugInfo, setDebugInfo] = useState<SongDebugInfo | null>(null);
   useEffect(() => {
     const toggleDebugMode = (event: globalThis.KeyboardEvent) => {
@@ -581,6 +599,10 @@ export function App({
     [showNowPlayingTitleArtist],
   );
   useEffect(() => writePreference("debugMode", debugMode), [debugMode]);
+  useEffect(
+    () => writePreference("visualizer", visualizerSettings),
+    [visualizerSettings],
+  );
   useEffect(() => {
     const songId = player.song?.id;
     if (!debugMode || !songId) {
@@ -966,6 +988,7 @@ export function App({
     setShowNowPlayingTitleArtist(true);
     setDebugMode(false);
     setArtworkThemeEnabled(true);
+    setVisualizerSettings({ ...defaultVisualizerSettings });
     setSongListWidth(minSongListWidth);
     setSidePanelWidth(defaultSidePanelWidth);
     setCacheNotice(null);
@@ -1215,6 +1238,9 @@ export function App({
         >
           <NowPlaying
             player={player}
+            visualizerSettings={visualizerSettings}
+            onVisualizerStatus={updateVisualizerStatus}
+            visualizerThemeKey={activeArtworkTheme}
             showNowPlayingTitleArtist={showNowPlayingTitleArtist}
             debugMode={debugMode}
             debugInfo={debugInfo}
@@ -1231,6 +1257,14 @@ export function App({
             panelRef={sidePanelRef}
             open={sidePanelOpen}
             onClose={() => setSidePanelOpen(false)}
+            visualizerContent={
+              <VisualizerSettingsPanel
+                settings={visualizerSettings}
+                onChange={setVisualizerSettings}
+                status={visualizerStatus.status}
+                statusDetail={visualizerStatus.detail}
+              />
+            }
             settingsContent={
               <SettingsPanel
                 summary={summary}
