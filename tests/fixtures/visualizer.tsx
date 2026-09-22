@@ -38,6 +38,7 @@ declare global {
       theme: (color: string) => void;
       snapshot: () => Promise<FrameMetrics>;
       analyserPeak: () => number;
+      analyserFrequencyPeak: () => { bin: number; value: number; hz: number };
       unmount: () => void;
     };
   }
@@ -176,6 +177,21 @@ function Fixture() {
         (peak, sample) => Math.max(peak, Math.abs(sample)),
         0,
       );
+    },
+    analyserFrequencyPeak: () => {
+      const analyser = getAudioAnalyser();
+      if (!analyser) return { bin: -1, value: 0, hz: 0 };
+      const bins = new Uint8Array(analyser.frequencyBinCount);
+      analyser.getByteFrequencyData(bins);
+      let peak = 0;
+      for (let index = 1; index < bins.length; index++) {
+        if (bins[index] > bins[peak]) peak = index;
+      }
+      return {
+        bin: peak,
+        value: bins[peak],
+        hz: (peak * analyser.context.sampleRate) / analyser.fftSize,
+      };
     },
     unmount: () => {
       root.unmount();

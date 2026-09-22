@@ -1,6 +1,6 @@
 export interface VisualizerSettings {
   enabled: boolean;
-  style: "circle" | "ring" | "line" | "double-ring";
+  style: "circle" | "ring" | "line";
   mode: "spectrum" | "waveform" | "energy";
   linePosition:
     | "top"
@@ -89,7 +89,6 @@ export const visualizerOptions = {
     { value: "circle", label: "Circle bars" },
     { value: "ring", label: "Ripple ring" },
     { value: "line", label: "Line bars" },
-    { value: "double-ring", label: "Double ring" },
   ],
   mode: [
     { value: "spectrum", label: "FFT spectrum" },
@@ -147,7 +146,7 @@ export const visualizerRanges = {
     label: "Center offset",
     unit: "%",
   },
-  radius: { min: 5, max: 45, step: 1, label: "Radius", unit: "%" },
+  radius: { min: 1, max: 45, step: 1, label: "Radius", unit: "%" },
   lineThickness: {
     min: 0.5,
     max: 12,
@@ -296,7 +295,7 @@ export const visualizerPresets = [
   {
     label: "Pulse",
     settings: {
-      style: "double-ring",
+      style: "ring",
       mode: "energy",
       barCount: 48,
       boom: 65,

@@ -43,6 +43,10 @@ test("max frame rate option disables the visualizer FPS cap", () => {
   assert.equal(parseVisualizerSettings({ maxFps: -1 }).maxFps, 60);
 });
 
+test("visualizer radius can be reduced to one percent", () => {
+  assert.equal(parseVisualizerSettings({ radius: 1 }).radius, 1);
+});
+
 test("visualizer supports instant response and both center-offset limits", () => {
   const settings = parseVisualizerSettings({
     enabled: false,
@@ -137,7 +141,7 @@ test("visualizer preferences persist and recover from old or corrupted storage",
   });
   assert.deepEqual(preferences.get("visualizer"), defaultVisualizerSettings);
   const settings = parseVisualizerSettings({
-    style: "double-ring",
+    style: "ring",
     responsivenessMs: 15,
     centerOffset: 100,
   });

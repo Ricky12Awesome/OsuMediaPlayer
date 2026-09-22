@@ -174,7 +174,7 @@ export async function createVisualizerRenderer(
         );
         data.set(
           [
-            ["circle", "ring", "line", "double-ring"].indexOf(settings.style),
+            ["circle", "ring", "line"].indexOf(settings.style),
             [
               "top",
               "bottom",

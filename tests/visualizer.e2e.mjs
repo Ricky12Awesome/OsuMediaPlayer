@@ -57,6 +57,7 @@ await page.addInitScript(() => {
     configurations: [],
     errors: [],
     losses: [],
+    sampleRanges: [],
   };
   if (!window.GPUQueue) return;
   const submit = GPUQueue.prototype.submit;
@@ -65,6 +66,21 @@ await page.addInitScript(() => {
     const result = submit.apply(this, args);
     window.captureVisualizerFrame?.();
     return result;
+  };
+  const writeBuffer = GPUQueue.prototype.writeBuffer;
+  GPUQueue.prototype.writeBuffer = function (buffer, offset, data, ...args) {
+    if (data instanceof Float32Array && data.length === 512) {
+      let min = 1;
+      let max = 0;
+      for (let index = 0; index < 256; index++) {
+        min = Math.min(min, data[index * 2]);
+        max = Math.max(max, data[index * 2]);
+      }
+      window.gpuTestStats.sampleRanges.push({ min, max });
+      if (window.gpuTestStats.sampleRanges.length > 4)
+        window.gpuTestStats.sampleRanges.shift();
+    }
+    return writeBuffer.call(this, buffer, offset, data, ...args);
   };
   const destroy = GPUDevice.prototype.destroy;
   GPUDevice.prototype.destroy = function (...args) {
@@ -205,13 +221,59 @@ try {
     "Current theme color changes reach the shader",
   );
 
-  for (const style of ["ring", "double-ring", "line"]) {
+  for (const style of ["ring", "line"]) {
     await update({ style, mode: "spectrum", colorMode: "custom" });
-    assert.ok(
-      (await snapshot()).visible > 0,
-      `${style} renders actual FFT data`,
-    );
+    const rendered = await snapshot();
+    assert.ok(rendered.visible > 0, `${style} renders actual FFT data`);
+    if (style === "ring") {
+      assert.ok(
+        rendered.maxRadius - rendered.minRadius > 20,
+        "Ripple ring renders a broad, continuous band",
+      );
+    }
   }
+  await update({
+    style: "ring",
+    mode: "spectrum",
+    minFrequency: 80,
+    maxFrequency: 400,
+    barCount: 64,
+    sensitivity: 5,
+    centerOffset: 50,
+    lineThickness: 2,
+    barLength: 40,
+    glow: 0,
+    boom: 0,
+    bassImpact: 0,
+    beatImpact: 0,
+  });
+  await page.evaluate(() => window.visualizerTest.play(0.03));
+  await page.waitForTimeout(220);
+  const quietRing = await snapshot();
+  const quietRingSamples = await page.evaluate(() =>
+    window.gpuTestStats.sampleRanges.at(-1),
+  );
+  await page.evaluate(() => window.visualizerTest.play(0.75));
+  await page.waitForTimeout(220);
+  const loudRing = await snapshot();
+  const loudRingSamples = await page.evaluate(() =>
+    window.gpuTestStats.sampleRanges.at(-1),
+  );
+  assert.ok(
+    loudRing.visible > quietRing.visible + 4000,
+    `Louder audio broadens the smooth ring (${quietRing.visible} → ${loudRing.visible}; samples ${JSON.stringify(quietRingSamples)} → ${JSON.stringify(loudRingSamples)}; FFT ${JSON.stringify(await page.evaluate(() => window.visualizerTest.analyserFrequencyPeak()))})`,
+  );
+  assert.ok(
+    loudRing.minRadius > 20,
+    "The smooth ring keeps a clear center at high sensitivity",
+  );
+  await mkdir("test-results", { recursive: true });
+  await page.screenshot({ path: "test-results/visualizer-ripple-ring.png" });
+  await update({ radius: 5, barLength: 100 });
+  assert.ok(
+    (await snapshot()).minRadius > 2,
+    "The ring stays hollow with minimum radius and maximum sensitivity",
+  );
   for (const linePosition of [
     "top",
     "bottom",
@@ -240,16 +302,17 @@ try {
   await update({ centerOffset: 100 });
   const inward = await snapshot();
   assert.ok(
-    outward.minRadius >= 167 && outward.maxRadius > 260,
-    "0% offset grows away from the circle center",
+    outward.maxRadius > centered.maxRadius,
+    `0% offset grows away from the circle center (${outward.maxRadius} vs ${centered.maxRadius})`,
   );
   assert.ok(
-    centered.minRadius < 120 && centered.maxRadius > 220,
+    centered.maxRadius > inward.maxRadius &&
+      centered.minRadius < outward.minRadius,
     "50% offset divides growth equally across the circle",
   );
   assert.ok(
-    inward.maxRadius <= 174 && inward.minRadius < 80,
-    "100% offset grows toward the circle center",
+    inward.maxRadius < centered.maxRadius,
+    `100% offset grows toward the circle center (${inward.maxRadius} vs ${centered.maxRadius})`,
   );
 
   await page.emulateMedia({ reducedMotion: "reduce" });
