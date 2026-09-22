@@ -96,7 +96,7 @@ fn lineDistance(position: vec2f) -> vec3f {
   let center = select(u.placement.x, u.placement.y, vertical);
   var baseline = select(u.placement.y, u.placement.x, vertical);
   // Edge placements point into the artwork; center offset can move them outward.
-  let margin = max(8, crossDimension * 0.06);
+  let margin = u.appearance.x * 0.5 + u.geometry.z * u.motion.z * u.motion.y;
   if (placement == 0 || placement == 2) { baseline = margin + baseline - crossDimension * 0.5; }
   if (placement == 1 || placement == 3) { baseline = crossDimension - margin + baseline - crossDimension * 0.5; }
   let direction = select(1.0, -1.0, placement == 1 || placement == 3 || placement == 4);
