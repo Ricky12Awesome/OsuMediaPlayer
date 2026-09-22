@@ -191,8 +191,15 @@ export function VisualizerSettingsPanel({
         {choice("style", "Visualizer style")}
         {(settings.style === "line" ||
           settings.style === "wire-line" ||
-          settings.style === "ripple-line") &&
-          choice("linePosition", "Line placement")}
+          settings.style === "ripple-line") && (
+          <>
+            {choice("linePosition", "Line placement")}
+            {number(
+              "linePadding",
+              "Inset each end of the line by this percentage of its width or height.",
+            )}
+          </>
+        )}
         {number("barCount")}
         {number("barWidth", "Width within each bar's available space.")}
         {number(

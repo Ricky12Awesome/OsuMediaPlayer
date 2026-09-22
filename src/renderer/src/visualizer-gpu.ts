@@ -159,7 +159,7 @@ export async function createVisualizerRenderer(
             angle + (settings.rotation * Math.PI) / 180,
             settings.centerOffset / 100,
             scale,
-            0,
+            settings.linePadding / 100,
           ],
           12,
         );

@@ -9,6 +9,7 @@ export interface VisualizerSettings {
     | "right"
     | "middle-horizontal"
     | "middle-vertical";
+  linePadding: number;
   barCount: number;
   responsivenessMs: number;
   barWidth: number;
@@ -51,6 +52,7 @@ export const defaultVisualizerSettings: VisualizerSettings = {
   style: "circle",
   mode: "spectrum",
   linePosition: "bottom",
+  linePadding: 0,
   barCount: 64,
   responsivenessMs: 80,
   barWidth: 75,
@@ -141,6 +143,13 @@ export const visualizerRanges = {
   barWidth: { min: 10, max: 100, step: 1, label: "Bar width", unit: "%" },
   barLength: { min: 0, max: 100, step: 1, label: "Bar length", unit: "%" },
   gap: { min: 0, max: 40, step: 0.5, label: "Gap", unit: "px" },
+  linePadding: {
+    min: 0,
+    max: 40,
+    step: 1,
+    label: "Line padding",
+    unit: "%",
+  },
   centerOffset: {
     min: 0,
     max: 100,

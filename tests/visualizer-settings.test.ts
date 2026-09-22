@@ -58,6 +58,11 @@ test("wire line and ripple line are supported visualizer styles", () => {
   );
 });
 
+test("line padding is persisted and clamped", () => {
+  assert.equal(parseVisualizerSettings({ linePadding: 24 }).linePadding, 24);
+  assert.equal(parseVisualizerSettings({ linePadding: 100 }).linePadding, 40);
+});
+
 test("visualizer supports instant response and both center-offset limits", () => {
   const settings = parseVisualizerSettings({
     enabled: false,

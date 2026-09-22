@@ -2,7 +2,7 @@ struct Uniforms {
   viewport: vec4f, // CSS size, backing texture size
   geometry: vec4f, // count, width fraction, length, gap
   placement: vec4f, // center, radius, scale
-  motion: vec4f, // rotation, center offset, bass scale, reserved
+  motion: vec4f, // rotation, center offset, bass scale, line end padding
   appearance: vec4f, // thickness, glow, opacity, highlight
   kind: vec4f, // style, line placement, signal mode, reserved
   color1: vec4f,
@@ -88,7 +88,7 @@ fn ringDistance(point: vec2f, angle: f32, radius: f32) -> f32 {
   return max(radialDistance - outerRadius, innerRadius - radialDistance);
 }
 
-fn lineDistance(position: vec2f) -> vec2f {
+fn lineDistance(position: vec2f) -> vec3f {
   let placement = i32(u.kind.y);
   let vertical = placement == 2 || placement == 3 || placement == 5;
   let dimension = select(u.viewport.x, u.viewport.y, vertical);
@@ -100,7 +100,7 @@ fn lineDistance(position: vec2f) -> vec2f {
   if (placement == 0 || placement == 2) { baseline = margin + baseline - crossDimension * 0.5; }
   if (placement == 1 || placement == 3) { baseline = crossDimension - margin + baseline - crossDimension * 0.5; }
   let direction = select(1.0, -1.0, placement == 1 || placement == 3 || placement == 4);
-  let span = dimension * u.placement.w * u.motion.z;
+  let span = dimension * (1 - 2 * u.motion.w) * u.placement.w * u.motion.z;
   let along = select(position.x, position.y, vertical) - center + span * 0.5;
   let across = (select(position.y, position.x, vertical) - baseline) * direction;
   let slot = span / u.geometry.x;
@@ -132,8 +132,11 @@ fn lineDistance(position: vec2f) -> vec2f {
     let wave = mix(sampleAt(first).y, sampleAt(second).y, fract(t)) * u.geometry.z * u.motion.z * 0.5;
     distance = abs(across - wave) - u.appearance.x * 0.5;
   }
-  distance = max(distance, max(-along, along - span));
-  return vec2f(distance, clamp(along / span, 0, 1));
+  let endDistance = max(-along, along - span);
+  distance = max(distance, endDistance);
+  let aa = max(0.5, u.viewport.x / u.viewport.z);
+  let endpointMask = 1 - smoothstep(0, aa, endDistance);
+  return vec3f(distance, clamp(along / span, 0, 1), endpointMask);
 }
 
 @fragment fn fragmentMain(@builtin(position) fragment: vec4f) -> @location(0) vec4f {
@@ -141,12 +144,14 @@ fn lineDistance(position: vec2f) -> vec2f {
   let point = (position - u.placement.xy) / (u.placement.w * u.motion.z);
   let angle = atan2(point.y, point.x) - u.motion.x;
   var distance: f32;
+  var endpointMask = 1.0;
   // A cyclic gradient joins cleanly at the circular seam.
   var gradient = 0.5 - 0.5 * cos(angle);
   if (u.kind.x >= 2) {
     let line = lineDistance(position);
     distance = line.x;
     gradient = line.y;
+    endpointMask = line.z;
   } else {
     if (u.kind.x == 0) {
       distance = radialBars(point, angle, u.placement.z);
@@ -159,7 +164,7 @@ fn lineDistance(position: vec2f) -> vec2f {
   let body = 1 - smoothstep(-aa, aa, distance);
   let haloWidth = 1 + u.appearance.y * 14;
   let halo = exp(-max(0, distance) / haloWidth) * u.appearance.y * 0.35;
-  let alpha = clamp(max(body, halo) * u.appearance.z, 0, 1);
+  let alpha = clamp(max(body, halo) * u.appearance.z * endpointMask, 0, 1);
   let color = mix(mix(u.color1.rgb, u.color2.rgb, gradient), vec3f(1), u.appearance.w);
   // The canvas is premultiplied. Empty pixels carry zero RGB and zero alpha.
   return vec4f(color * alpha, alpha);
