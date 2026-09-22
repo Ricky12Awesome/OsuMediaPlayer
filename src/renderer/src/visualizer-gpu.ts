@@ -127,14 +127,15 @@ export async function createVisualizerRenderer(
       render(settings, frame, angle, colors, reducedMotion) {
         if (disposed) return;
         const size = Math.min(width, height);
+        const bassPulse = Math.max(frame.bass, frame.beat);
         const pulse = reducedMotion
           ? 0
           : Math.min(
               1,
-              (frame.bass * settings.bassImpact) / 100 +
+              (bassPulse * settings.bassImpact) / 100 +
                 (frame.beat * settings.beatImpact) / 100,
             );
-        const scale = 1 + ((pulse * settings.boom) / 100) * 0.45;
+        const scale = 1 + ((pulse * settings.boom) / 100) * 0.9;
         data.set([width, height, canvas.width, canvas.height], 0);
         data.set(
           [
@@ -168,7 +169,7 @@ export async function createVisualizerRenderer(
             settings.lineThickness * (settings.style === "wire-line" ? 1.5 : 1),
             settings.glow / 100,
             settings.opacity / 100,
-            pulse * 0.65,
+            pulse * 0.95,
           ],
           16,
         );
@@ -193,7 +194,28 @@ export async function createVisualizerRenderer(
         data.set(colors[0], 24);
         data.set(colors[1], 28);
         for (let i = 0; i < frame.count; i++) {
-          sampleData[i * 2] = frame.values[i];
+          let value = frame.values[i];
+          if (
+            settings.mode === "spectrum" &&
+            frame.beat > 0 &&
+            settings.bassImpact > 0
+          ) {
+            const bandCount = settings.mirror
+              ? Math.ceil(frame.count / 2)
+              : frame.count;
+            let band = settings.mirror ? Math.min(i, frame.count - 1 - i) : i;
+            if (settings.reverse) band = bandCount - 1 - band;
+            const bassWeight = Math.max(
+              0,
+              1 - band / Math.max(1, bandCount * 0.3),
+            );
+            value = Math.min(
+              1,
+              value *
+                (1 + (frame.beat * settings.bassImpact * bassWeight * 2) / 100),
+            );
+          }
+          sampleData[i * 2] = value;
           sampleData[i * 2 + 1] = frame.waveform[i];
         }
         device.queue.writeBuffer(uniforms!, 0, data);

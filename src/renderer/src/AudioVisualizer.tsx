@@ -18,6 +18,8 @@ interface AudioVisualizerProps {
   settings: VisualizerSettings;
   onStatus: (status: VisualizerStatus, detail?: string) => void;
   themeKey?: unknown;
+  trackBpm?: number;
+  trackKey?: string;
 }
 
 export function AudioVisualizer({
@@ -26,11 +28,19 @@ export function AudioVisualizer({
   settings,
   onStatus,
   themeKey,
+  trackBpm,
+  trackKey,
 }: AudioVisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const colorRef = useRef<HTMLSpanElement>(null);
-  const latest = useRef({ settings, getAudioAnalyser, onStatus });
-  latest.current = { settings, getAudioAnalyser, onStatus };
+  const latest = useRef({
+    settings,
+    getAudioAnalyser,
+    onStatus,
+    trackBpm,
+    trackKey,
+  });
+  latest.current = { settings, getAudioAnalyser, onStatus, trackBpm, trackKey };
   const refresh = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -103,7 +113,15 @@ export function AudioVisualizer({
       try {
         const analyser = latest.current.getAudioAnalyser();
         if (analyser) {
-          const result = analysis.update(analyser, current, now, playing);
+          const result = analysis.update(
+            analyser,
+            current,
+            now,
+            playing,
+            latest.current.trackKey,
+            latest.current.trackBpm,
+            audio.currentTime * 1000,
+          );
           const reduced =
             current.respectReducedMotion && motionPreference.matches;
           if (playing && previousTime && !reduced)

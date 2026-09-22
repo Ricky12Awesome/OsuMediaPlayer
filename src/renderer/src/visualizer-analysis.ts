@@ -6,6 +6,8 @@ export interface VisualizerAnalysisSettings {
   barCount: number;
   responsivenessMs: number;
   sensitivity: number;
+  beatSensitivity: number;
+  beatMode: "detected" | "bpm";
   fftSize: number;
   frequencyRanges: { min: number; max: number }[];
   frequencyScale: "log" | "linear";
@@ -166,6 +168,7 @@ export class VisualizerAnalysis {
   private frequency = this.frequencyBuffer.subarray(0, 1024);
   private time = this.timeBuffer.subarray(0, 2048);
   private readonly bands = new Float32Array(MAX_VISUALIZER_BARS);
+  private readonly previousBeatBands = new Float32Array(8);
   private readonly targets = new Float32Array(MAX_VISUALIZER_BARS);
   private readonly waveTargets = new Float32Array(MAX_VISUALIZER_BARS);
   private readonly transitions = new DurationTransitions(MAX_VISUALIZER_BARS);
@@ -182,9 +185,15 @@ export class VisualizerAnalysis {
   };
   private previousMs: number | null = null;
   private lastBeat = -Infinity;
+  private beatDurationMs = 300;
+  private playbackStartMs: number | null = null;
   private bassAverage = 0;
+  private beatFluxAverage = 0;
   private previousBass = 0;
   private previousMode: VisualizerAnalysisSettings["mode"] | null = null;
+  private previousBeatMode: VisualizerAnalysisSettings["beatMode"] | null =
+    null;
+  private previousTrackKey: string | undefined;
 
   reset(): void {
     this.transitions.reset();
@@ -194,8 +203,12 @@ export class VisualizerAnalysis {
     this.frame.beat = 0;
     this.previousMs = null;
     this.lastBeat = -Infinity;
+    this.beatDurationMs = 300;
+    this.playbackStartMs = null;
     this.bassAverage = 0;
+    this.beatFluxAverage = 0;
     this.previousBass = 0;
+    this.previousBeatBands.fill(0);
   }
 
   update(
@@ -203,12 +216,30 @@ export class VisualizerAnalysis {
     settings: VisualizerAnalysisSettings,
     nowMs: number,
     playing: boolean,
+    trackKey?: string,
+    trackBpm?: number,
+    playbackMs = nowMs,
   ): VisualizerFrame {
     const count = Math.round(clamp(settings.barCount, 8, MAX_VISUALIZER_BARS));
-    if (count !== this.frame.count || settings.mode !== this.previousMode) {
+    if (
+      count !== this.frame.count ||
+      settings.mode !== this.previousMode ||
+      settings.beatMode !== this.previousBeatMode
+    ) {
       this.reset();
       this.frame.count = count;
       this.previousMode = settings.mode;
+      this.previousBeatMode = settings.beatMode;
+    }
+    if (trackKey !== this.previousTrackKey) {
+      this.playbackStartMs = 0;
+      this.lastBeat = -Infinity;
+      this.beatDurationMs = 300;
+      this.bassAverage = 0;
+      this.beatFluxAverage = 0;
+      this.previousBass = 0;
+      this.previousBeatBands.fill(0);
+      this.previousTrackKey = trackKey;
     }
     if (!playing) {
       this.reset();
@@ -247,16 +278,72 @@ export class VisualizerAnalysis {
     );
     const bass = this.bands[0];
     this.frame.bass = clamp(bass * sensitivity);
+    const beatSensitivity = clamp(settings.beatSensitivity / 100);
+    const minimumBass = 0.01 + (1 - beatSensitivity) * 0.12;
+    const minimumRise = 0.002 + (1 - beatSensitivity) * 0.03;
+    const relativeRise = 1.01 + (1 - beatSensitivity) * 0.25;
+    const refractoryMs = 55 + (1 - beatSensitivity) * 100;
+    let beatFlux = 0;
+    for (let band = 0; band < this.previousBeatBands.length; band++) {
+      const startHz = 30 * Math.pow(2500 / 30, band / 8);
+      const endHz = 30 * Math.pow(2500 / 30, (band + 1) / 8);
+      const start = Math.min(
+        this.frequency.length - 1,
+        Math.floor((startHz * fftSize) / sampleRate),
+      );
+      const end = Math.min(
+        this.frequency.length,
+        Math.max(start + 1, Math.ceil((endHz * fftSize) / sampleRate)),
+      );
+      let energy = 0;
+      for (let bin = start; bin < end; bin++)
+        energy += this.frequency[bin] ** 2;
+      const level = Math.sqrt(energy / (end - start)) / 255;
+      beatFlux += Math.max(0, level - this.previousBeatBands[band]);
+      this.previousBeatBands[band] = level;
+    }
+    beatFlux /= this.previousBeatBands.length;
+    const fluxThreshold = 0.002 + (1 - beatSensitivity) * 0.045;
+    const fluxOnset =
+      beatFlux > fluxThreshold && beatFlux > this.beatFluxAverage * 1.12;
+    const bassOnset =
+      bass > minimumBass &&
+      bass - this.previousBass > minimumRise &&
+      bass > this.bassAverage * relativeRise;
     if (
-      bass > 0.15 &&
-      bass - this.previousBass > 0.04 &&
-      bass > this.bassAverage * 1.2 &&
-      nowMs - this.lastBeat >= 140
-    )
+      settings.beatMode === "detected" &&
+      beatSensitivity > 0 &&
+      (bassOnset || fluxOnset) &&
+      nowMs - this.lastBeat >= refractoryMs
+    ) {
+      if (this.lastBeat > -Infinity) {
+        const interval = nowMs - this.lastBeat;
+        if (interval >= 180 && interval <= 1200)
+          this.beatDurationMs = clamp(interval * 0.85, 200, 500);
+      }
       this.lastBeat = nowMs;
+    }
     this.bassAverage += (bass - this.bassAverage) * Math.min(1, elapsed / 500);
+    this.beatFluxAverage +=
+      (beatFlux - this.beatFluxAverage) * Math.min(1, elapsed / 650);
     this.previousBass = bass;
-    this.frame.beat = clamp(1 - (nowMs - this.lastBeat) / 300);
+    if (settings.beatMode === "bpm") {
+      this.playbackStartMs ??= 0;
+      if (trackBpm !== undefined && Number.isFinite(trackBpm) && trackBpm > 0) {
+        const interval = 60000 / clamp(trackBpm, 30, 300);
+        const phase =
+          (((playbackMs - this.playbackStartMs) % interval) + interval) %
+          interval;
+        const pulseDuration = interval * 0.3;
+        this.frame.beat = clamp(1 - phase / pulseDuration);
+      } else {
+        this.frame.beat = 0;
+      }
+    } else {
+      this.frame.beat =
+        clamp(1 - (nowMs - this.lastBeat) / this.beatDurationMs) *
+        beatSensitivity;
+    }
 
     const bandCount = settings.mirror ? Math.ceil(count / 2) : count;
     if (settings.mode === "spectrum") {

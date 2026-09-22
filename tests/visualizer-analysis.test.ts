@@ -13,6 +13,8 @@ const settings: VisualizerAnalysisSettings = {
   barCount: 8,
   responsivenessMs: 0,
   sensitivity: 1,
+  beatSensitivity: 100,
+  beatMode: "detected",
   fftSize: 2048,
   frequencyRanges: [{ min: 30, max: 16000 }],
   frequencyScale: "log",
@@ -195,14 +197,119 @@ test("bass pulses react to onsets, decay, and respect their cooldown", () => {
   analysis.update(fixture.analyser, settings, 50, true);
   fixture.frequency.fill(255, 1, 8);
   analysis.update(fixture.analyser, settings, 80, true);
-  assert.equal(frame.beat, 0.8);
-  analysis.update(fixture.analyser, settings, 320, true);
+  assert.equal(frame.beat, 1);
+  assert.ok(frame.beat > 0);
+  analysis.update(fixture.analyser, settings, 400, true);
   assert.equal(frame.beat, 0);
   fixture.frequency.fill(0);
-  analysis.update(fixture.analyser, settings, 340, true);
+  analysis.update(fixture.analyser, settings, 420, true);
   fixture.frequency.fill(255, 1, 8);
-  analysis.update(fixture.analyser, settings, 370, true);
+  analysis.update(fixture.analyser, settings, 450, true);
   assert.equal(frame.beat, 1);
+});
+
+test("beat detection catches quieter hits at a faster tempo", () => {
+  const fixture = analyserFixture();
+  const analysis = new VisualizerAnalysis();
+  analysis.update(fixture.analyser, settings, 0, true);
+  fixture.frequency.fill(30, 1, 8);
+  const firstHit = analysis.update(fixture.analyser, settings, 20, true);
+  assert.equal(firstHit.beat, 1);
+  fixture.frequency.fill(0);
+  analysis.update(fixture.analyser, settings, 100, true);
+  fixture.frequency.fill(30, 1, 8);
+  assert.equal(analysis.update(fixture.analyser, settings, 120, true).beat, 1);
+  fixture.frequency.fill(0);
+  analysis.update(fixture.analyser, settings, 400, true);
+  fixture.frequency.fill(30, 1, 8);
+  assert.equal(analysis.update(fixture.analyser, settings, 620, true).beat, 1);
+  assert.ok(analysis.update(fixture.analyser, settings, 980, true).beat > 0);
+});
+
+test("beat detection reacts to a transient outside the bass band", () => {
+  const fixture = analyserFixture();
+  const analysis = new VisualizerAnalysis();
+  analysis.update(fixture.analyser, settings, 0, true);
+  fixture.frequency.fill(180, 40, 45);
+  assert.equal(analysis.update(fixture.analyser, settings, 20, true).beat, 1);
+});
+
+test("beat sensitivity can disable onset detection", () => {
+  const fixture = analyserFixture();
+  fixture.frequency.fill(255, 1, 8);
+  const analysis = new VisualizerAnalysis();
+  const frame = analysis.update(
+    fixture.analyser,
+    { ...settings, beatSensitivity: 0 },
+    20,
+    true,
+  );
+  assert.equal(frame.beat, 0);
+});
+
+test("beat sensitivity changes the strength of detected pulses", () => {
+  const fixture = analyserFixture();
+  fixture.frequency.fill(255, 1, 8);
+  const analysis = new VisualizerAnalysis();
+  const frame = analysis.update(
+    fixture.analyser,
+    { ...settings, beatSensitivity: 50 },
+    20,
+    true,
+  );
+  assert.equal(frame.beat, 0.5);
+});
+
+test("BPM mode stays inactive without track BPM metadata", () => {
+  const fixture = analyserFixture();
+  const analysis = new VisualizerAnalysis();
+  const bpmSettings = { ...settings, beatMode: "bpm" as const };
+  assert.equal(
+    analysis.update(fixture.analyser, bpmSettings, 1000, true).beat,
+    0,
+  );
+});
+
+test("BPM mode follows current track metadata and media position", () => {
+  const fixture = analyserFixture();
+  const analysis = new VisualizerAnalysis();
+  const bpmSettings = { ...settings, beatMode: "bpm" as const };
+  assert.equal(
+    analysis.update(
+      fixture.analyser,
+      bpmSettings,
+      1000,
+      true,
+      "track-a",
+      120,
+      0,
+    ).beat,
+    1,
+  );
+  assert.equal(
+    analysis.update(
+      fixture.analyser,
+      bpmSettings,
+      1250,
+      true,
+      "track-a",
+      120,
+      250,
+    ).beat,
+    0,
+  );
+  assert.equal(
+    analysis.update(
+      fixture.analyser,
+      bpmSettings,
+      2000,
+      true,
+      "track-b",
+      120,
+      0,
+    ).beat,
+    1,
+  );
 });
 
 test("analysis bounds FFT/bars and disables the analyser's implicit smoothing", () => {

@@ -392,6 +392,12 @@ export function VisualizerSettingsPanel({
         )}
         {number("bassImpact", "Adds emphasis when low frequencies are strong.")}
         {number("beatImpact", "Highlights sudden increases in audio energy.")}
+        {choice("beatMode", "Beat response")}
+        {settings.beatMode === "detected" &&
+          number(
+            "beatSensitivity",
+            "Higher values detect quieter hits and faster repeated beats.",
+          )}
         {number("glow")}
       </details>
 
