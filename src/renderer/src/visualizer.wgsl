@@ -55,25 +55,33 @@ fn cubic(a: f32, b: f32, c: f32, d: f32, t: f32) -> f32 {
   return 0.5 * ((2 * b) + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
 }
 
+fn ringSample(index: i32) -> f32 {
+  // Blend nearby FFT bands before interpolation so narrow peaks form round,
+  // connected shoulders instead of isolated needle-like bumps.
+  return (sampleAt(index - 2).x + 2 * sampleAt(index - 1).x +
+    3 * sampleAt(index).x + 2 * sampleAt(index + 1).x +
+    sampleAt(index + 2).x) / 9;
+}
+
 fn ringDistance(point: vec2f, angle: f32, radius: f32) -> f32 {
   let coordinate = angle / TAU * u.geometry.x;
   let index = i32(floor(coordinate));
   let fraction = fract(coordinate);
   let amplitude = clamp(cubic(
-    sampleAt(index - 1).x,
-    sampleAt(index).x,
-    sampleAt(index + 1).x,
-    sampleAt(index + 2).x,
+    ringSample(index - 1),
+    ringSample(index),
+    ringSample(index + 1),
+    ringSample(index + 2),
     fraction,
   ), 0, 1) * u.geometry.z;
   // Keep the center open and deform both edges of a solid annulus. At 50%
   // offset, each bump grows halfway outward and halfway inward. A small base
   // thickness makes the quiet ring visible; bar length controls wave height.
   let baseThickness = min(max(u.appearance.x * 0.35, u.geometry.z * 0.02), radius * 0.1);
-  // Ring bumps use a gentler portion of bar length than the bar styles. This
-  // keeps them broad and rounded without letting loud or highly sensitive
-  // audio fill the center hole.
-  let bump = min(amplitude * 0.2, radius * 0.5);
+  // Match the radial bars' full audio travel while joining adjacent samples
+  // into one rounded contour. The cap prevents the inner edge crossing the
+  // center when the response is set to 100% inward.
+  let bump = min(amplitude, radius * 0.9);
   let outerRadius = radius + baseThickness * 0.5 + bump * (1 - u.motion.y);
   let innerRadius = max(baseThickness * 0.5, radius - baseThickness * 0.5 - bump * u.motion.y);
   let radialDistance = length(point);
