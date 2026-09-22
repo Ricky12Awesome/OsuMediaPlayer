@@ -2,11 +2,9 @@ import { useEffect, useId, useState } from "react";
 import { AudioLines, RotateCcw } from "lucide-react";
 import { SettingsPicker } from "./SettingsPicker";
 import {
-  applyVisualizerPreset,
   defaultVisualizerSettings,
   parseVisualizerSettings,
   visualizerOptions,
-  visualizerPresets,
   visualizerRanges,
   type FrequencyRange,
   type VisualizerRangeKey,
@@ -34,12 +32,10 @@ function NumberControl({
   field,
   value,
   onChange,
-  hint,
 }: {
   field: VisualizerRangeKey;
   value: number;
   onChange: (value: number) => void;
-  hint?: string;
 }) {
   const id = useId();
   const range = visualizerRanges[field];
@@ -69,7 +65,6 @@ function NumberControl({
           max={range.max}
           step={range.step}
           value={draft}
-          aria-describedby={hint ? `${id}-hint` : undefined}
           onChange={(event) => setDraft(event.target.value)}
           onBlur={commit}
           onKeyDown={(event) => {
@@ -90,14 +85,8 @@ function NumberControl({
         value={value}
         aria-label={`${range.label} slider`}
         aria-valuetext={`${value}${range.unit ? ` ${range.unit}` : ""}`}
-        aria-describedby={hint ? `${id}-hint` : undefined}
         onChange={(event) => onChange(Number(event.target.value))}
       />
-      {hint && (
-        <p className="settings-hint" id={`${id}-hint`}>
-          {hint}
-        </p>
-      )}
     </div>
   );
 }
@@ -233,13 +222,12 @@ export function VisualizerSettingsPanel({
   const update = (patch: Partial<VisualizerSettings>) => {
     onChange(parseVisualizerSettings({ ...settings, ...patch }));
   };
-  const number = (field: VisualizerRangeKey, hint?: string) => (
+  const number = (field: VisualizerRangeKey) => (
     <NumberControl
       key={field}
       field={field}
       value={settings[field]}
       onChange={(value) => update({ [field]: value })}
-      hint={hint}
     />
   );
   const choice = (field: keyof typeof visualizerOptions, label: string) => (
@@ -282,24 +270,6 @@ export function VisualizerSettingsPanel({
           {statusLabels[settings.enabled ? status : "off"]}
           {settings.enabled && statusDetail ? `. ${statusDetail}` : ""}
         </p>
-        <p className="settings-hint">
-          Reacts to the playing audio over your artwork or video.
-        </p>
-        <div
-          className="settings-actions visualizer-presets"
-          aria-label="Visualizer presets"
-        >
-          {visualizerPresets.map((preset, index) => (
-            <button
-              key={preset.label}
-              type="button"
-              className="secondary-button"
-              onClick={() => onChange(applyVisualizerPreset(settings, index))}
-            >
-              {preset.label}
-            </button>
-          ))}
-        </div>
       </div>
 
       <details className="settings-block visualizer-section" open>
@@ -310,33 +280,19 @@ export function VisualizerSettingsPanel({
           settings.style === "ripple-line") && (
           <>
             {choice("linePosition", "Line placement")}
-            {number(
-              "linePadding",
-              "Inset each end of the line by this percentage of its width or height.",
-            )}
+            {number("linePadding")}
           </>
         )}
         {number("barCount")}
-        {number("barWidth", "Width within each bar's available space.")}
-        {number(
-          "barLength",
-          "Maximum response length as a percentage of the shorter canvas side.",
-        )}
+        {number("barWidth")}
+        {number("barLength")}
         {number("gap")}
-        {number(
-          "centerOffset",
-          "Moves this percentage of each bar opposite its growth direction. 50% balances both sides; circles shift toward their center.",
-        )}
+        {number("centerOffset")}
         {settings.style !== "line" &&
           settings.style !== "wire-line" &&
           settings.style !== "ripple-line" &&
-          number("radius", "Percentage of the shorter canvas side.")}
-        {number(
-          "lineThickness",
-          settings.style === "wire-line"
-            ? "Wire line uses a slightly thicker stroke."
-            : undefined,
-        )}
+          number("radius")}
+        {number("lineThickness")}
         {number("scale")}
         {number("positionX")}
         {number("positionY")}
@@ -345,10 +301,7 @@ export function VisualizerSettingsPanel({
           settings.style !== "ripple-line" && (
             <>
               {number("rotation")}
-              {number(
-                "rotationSpeed",
-                "Negative values rotate in the opposite direction.",
-              )}
+              {number("rotationSpeed")}
             </>
           )}
         {toggle("mirror", "Mirror frequency layout")}
@@ -358,21 +311,9 @@ export function VisualizerSettingsPanel({
       <details className="settings-block visualizer-section" open>
         <summary className="settings-label">AUDIO RESPONSE</summary>
         {choice("mode", "Analysis mode")}
-        {number(
-          "responsivenessMs",
-          "Time to reach each new target, both up and down. 0 ms responds instantly.",
-        )}
+        {number("responsivenessMs")}
         {number("sensitivity")}
         {choice("fftSize", "FFT size")}
-        <p className="settings-hint">
-          Larger FFT sizes separate nearby frequencies with a longer audio
-          window.
-        </p>
-        {settings.mode === "energy" && (
-          <p className="settings-hint">
-            All bars pulse together with the audio's overall loudness.
-          </p>
-        )}
         {settings.mode === "spectrum" && (
           <>
             {choice("frequencyScale", "Frequency spacing")}
@@ -386,18 +327,11 @@ export function VisualizerSettingsPanel({
 
       <details className="settings-block visualizer-section">
         <summary className="settings-label">MOTION & EFFECTS</summary>
-        {number(
-          "boom",
-          "Pulses the visualizer's size with the music. 0% disables the pulse.",
-        )}
-        {number("bassImpact", "Adds emphasis when low frequencies are strong.")}
-        {number("beatImpact", "Highlights sudden increases in audio energy.")}
+        {number("boom")}
+        {number("bassImpact")}
+        {number("beatImpact")}
         {choice("beatMode", "Beat response")}
-        {settings.beatMode === "detected" &&
-          number(
-            "beatSensitivity",
-            "Higher values detect quieter hits and faster repeated beats.",
-          )}
+        {settings.beatMode === "detected" && number("beatSensitivity")}
         {number("glow")}
       </details>
 
@@ -428,11 +362,7 @@ export function VisualizerSettingsPanel({
         </summary>
         {choice("maxFps", "Frame rate")}
         {choice("resolution", "Render resolution")}
-        <p className="settings-hint">Lower values reduce graphics usage.</p>
         {toggle("respectReducedMotion", "Respect reduced motion")}
-        <p className="settings-hint">
-          Uses calmer motion when your system requests reduced motion.
-        </p>
       </details>
 
       <div className="settings-block settings-actions">
