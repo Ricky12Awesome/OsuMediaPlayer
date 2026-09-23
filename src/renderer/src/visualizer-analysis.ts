@@ -185,11 +185,21 @@ export class VisualizerAnalysis {
   };
   private previousMs: number | null = null;
   private lastBeat = -Infinity;
-  private beatDurationMs = 300;
+  private beatDurationMs = 140;
   private playbackStartMs: number | null = null;
   private bassAverage = 0;
   private beatFluxAverage = 0;
   private previousBass = 0;
+  private previousEnergy = 0;
+  private readonly highHistory = new Float32Array(3);
+  private readonly highHistoryTimes = new Float64Array(3);
+  private highHistoryIndex = 0;
+  private lowEnergyPeak = 0;
+  private bassDipArmed = true;
+  private lastBassDipMs = -Infinity;
+  private bassDipPeriodMs: number | null = null;
+  private bassDipRun = 0;
+  private nextBassPulseMs = Infinity;
   private previousMode: VisualizerAnalysisSettings["mode"] | null = null;
   private previousBeatMode: VisualizerAnalysisSettings["beatMode"] | null =
     null;
@@ -203,11 +213,21 @@ export class VisualizerAnalysis {
     this.frame.beat = 0;
     this.previousMs = null;
     this.lastBeat = -Infinity;
-    this.beatDurationMs = 300;
+    this.beatDurationMs = 140;
     this.playbackStartMs = null;
     this.bassAverage = 0;
     this.beatFluxAverage = 0;
     this.previousBass = 0;
+    this.previousEnergy = 0;
+    this.highHistory.fill(0);
+    this.highHistoryTimes.fill(-Infinity);
+    this.highHistoryIndex = 0;
+    this.lowEnergyPeak = 0;
+    this.bassDipArmed = true;
+    this.lastBassDipMs = -Infinity;
+    this.bassDipPeriodMs = null;
+    this.bassDipRun = 0;
+    this.nextBassPulseMs = Infinity;
     this.previousBeatBands.fill(0);
   }
 
@@ -234,10 +254,20 @@ export class VisualizerAnalysis {
     if (trackKey !== this.previousTrackKey) {
       this.playbackStartMs = 0;
       this.lastBeat = -Infinity;
-      this.beatDurationMs = 300;
+      this.beatDurationMs = 140;
       this.bassAverage = 0;
       this.beatFluxAverage = 0;
       this.previousBass = 0;
+      this.previousEnergy = 0;
+      this.highHistory.fill(0);
+      this.highHistoryTimes.fill(-Infinity);
+      this.highHistoryIndex = 0;
+      this.lowEnergyPeak = 0;
+      this.bassDipArmed = true;
+      this.lastBassDipMs = -Infinity;
+      this.bassDipPeriodMs = null;
+      this.bassDipRun = 0;
+      this.nextBassPulseMs = Infinity;
       this.previousBeatBands.fill(0);
       this.previousTrackKey = trackKey;
     }
@@ -255,6 +285,7 @@ export class VisualizerAnalysis {
       this.reset();
     }
     analyser.smoothingTimeConstant = 0;
+    analyser.maxDecibels = 0;
     analyser.getByteFrequencyData(this.frequency);
     analyser.getFloatTimeDomainData(this.time);
 
@@ -263,9 +294,25 @@ export class VisualizerAnalysis {
     this.previousMs = nowMs;
     const sensitivity = clamp(settings.sensitivity, 0.1, 5);
     const sampleRate = analyser.context.sampleRate;
+    const lowPassAlpha = (2 * Math.PI * 180) / (sampleRate + 2 * Math.PI * 180);
+    let lowSample = 0;
+    let lowSum = 0;
+    let highSum = 0;
     let sum = 0;
-    for (let i = 0; i < this.time.length; i++) sum += this.time[i] ** 2;
+    for (let i = 0; i < this.time.length; i++) {
+      const sample = this.time[i];
+      sum += sample ** 2;
+      lowSample += lowPassAlpha * (sample - lowSample);
+      lowSum += lowSample ** 2;
+      highSum += (sample - lowSample) ** 2;
+    }
     this.frame.energy = clamp(Math.sqrt(sum / this.time.length) * sensitivity);
+    const lowEnergy = Math.sqrt(lowSum / this.time.length);
+    const highEnergy = Math.sqrt(highSum / this.time.length);
+    this.lowEnergyPeak = Math.max(
+      lowEnergy,
+      this.lowEnergyPeak * Math.exp(-elapsed / 650),
+    );
     mapFrequencyBands(
       this.frequency,
       sampleRate,
@@ -279,10 +326,10 @@ export class VisualizerAnalysis {
     const bass = this.bands[0];
     this.frame.bass = clamp(bass * sensitivity);
     const beatSensitivity = clamp(settings.beatSensitivity / 100);
-    const minimumBass = 0.01 + (1 - beatSensitivity) * 0.12;
-    const minimumRise = 0.002 + (1 - beatSensitivity) * 0.03;
-    const relativeRise = 1.01 + (1 - beatSensitivity) * 0.25;
-    const refractoryMs = 55 + (1 - beatSensitivity) * 100;
+    const minimumBass = 0.1 + (1 - beatSensitivity) * 0.15;
+    const minimumRise = 0.025 + (1 - beatSensitivity) * 0.04;
+    const relativeRise = 1.03 + (1 - beatSensitivity) * 0.15;
+    const refractoryMs = 100 + (1 - beatSensitivity) * 100;
     let beatFlux = 0;
     for (let band = 0; band < this.previousBeatBands.length; band++) {
       const startHz = 30 * Math.pow(2500 / 30, band / 8);
@@ -303,23 +350,104 @@ export class VisualizerAnalysis {
       this.previousBeatBands[band] = level;
     }
     beatFlux /= this.previousBeatBands.length;
-    const fluxThreshold = 0.002 + (1 - beatSensitivity) * 0.045;
+    const fluxThreshold = 0.015 + (1 - beatSensitivity) * 0.05;
     const fluxOnset =
-      beatFlux > fluxThreshold && beatFlux > this.beatFluxAverage * 1.12;
+      beatFlux > fluxThreshold &&
+      beatFlux > this.beatFluxAverage * 1.5 &&
+      this.frame.energy > 0.08 + (1 - beatSensitivity) * 0.27 &&
+      this.frame.energy - this.previousEnergy >
+        0.02 + (1 - beatSensitivity) * 0.05;
     const bassOnset =
       bass > minimumBass &&
       bass - this.previousBass > minimumRise &&
       bass > this.bassAverage * relativeRise;
+    const minimumLowPeak = 0.08 + (1 - beatSensitivity) * 0.25;
+    const dipRatio = 0.8 - (1 - beatSensitivity) * 0.25;
+    const lowRatio = lowEnergy / Math.max(this.lowEnergyPeak, 0.0001);
+    // Sidechain-heavy tracks mark kicks by briefly ducking the bass.
+    if (lowRatio > dipRatio + 0.1) this.bassDipArmed = true;
+    const bassDip =
+      this.bassDipArmed &&
+      this.lowEnergyPeak > minimumLowPeak &&
+      lowRatio < dipRatio;
+    if (bassDip) {
+      this.bassDipArmed = false;
+      const interval = nowMs - this.lastBassDipMs;
+      if (interval >= 220 && interval <= 1200) {
+        const steps = this.bassDipPeriodMs
+          ? Math.max(1, Math.round(interval / this.bassDipPeriodMs))
+          : 1;
+        const candidate = interval / steps;
+        if (
+          candidate >= 220 &&
+          candidate <= 550 &&
+          (!this.bassDipPeriodMs ||
+            Math.abs(candidate - this.bassDipPeriodMs) <
+              this.bassDipPeriodMs * 0.3)
+        ) {
+          this.bassDipPeriodMs = this.bassDipPeriodMs
+            ? this.bassDipPeriodMs * 0.7 + candidate * 0.3
+            : candidate;
+          this.bassDipRun = Math.min(4, this.bassDipRun + 1);
+        } else {
+          this.bassDipPeriodMs = null;
+          this.bassDipRun = 1;
+        }
+      } else if (interval > 1200) {
+        this.bassDipPeriodMs = null;
+        this.bassDipRun = 1;
+      }
+      if (interval >= 220) {
+        this.lastBassDipMs = nowMs;
+        this.nextBassPulseMs = this.bassDipPeriodMs
+          ? nowMs + this.bassDipPeriodMs
+          : Infinity;
+      }
+    }
+    const bassRhythmActive =
+      this.bassDipRun >= 3 &&
+      this.bassDipPeriodMs !== null &&
+      nowMs - this.lastBassDipMs < this.bassDipPeriodMs * 6 &&
+      lowEnergy > minimumLowPeak * 0.5;
+    // Bridge missed dips briefly, then return to audio onset detection.
+    const timedBassPulse =
+      bassRhythmActive &&
+      !bassDip &&
+      nowMs >= this.nextBassPulseMs &&
+      nowMs - this.lastBeat >= refractoryMs &&
+      this.lowEnergyPeak > minimumLowPeak;
+    if (timedBassPulse) this.nextBassPulseMs += this.bassDipPeriodMs!;
+    const distanceToBassBeat = Math.min(
+      Math.abs(nowMs - this.nextBassPulseMs),
+      Math.abs(nowMs - (this.nextBassPulseMs - (this.bassDipPeriodMs ?? 0))),
+    );
+    let recentHighMinimum = highEnergy;
+    for (let i = 0; i < this.highHistory.length; i++) {
+      if (nowMs - this.highHistoryTimes[i] <= 90) {
+        recentHighMinimum = Math.min(recentHighMinimum, this.highHistory[i]);
+      }
+    }
+    const offbeatOnset =
+      bassRhythmActive &&
+      !bassDip &&
+      !timedBassPulse &&
+      distanceToBassBeat > 75 &&
+      highEnergy > 0.1 &&
+      lowEnergy > minimumLowPeak &&
+      highEnergy - recentHighMinimum > 0.022 + (1 - beatSensitivity) * 0.06;
     if (
       settings.beatMode === "detected" &&
       beatSensitivity > 0 &&
-      (bassOnset || fluxOnset) &&
-      nowMs - this.lastBeat >= refractoryMs
+      (bassDip ||
+        timedBassPulse ||
+        offbeatOnset ||
+        (!bassRhythmActive && (bassOnset || fluxOnset))) &&
+      nowMs - this.lastBeat >= (offbeatOnset ? 75 : refractoryMs)
     ) {
       if (this.lastBeat > -Infinity) {
         const interval = nowMs - this.lastBeat;
-        if (interval >= 180 && interval <= 1200)
-          this.beatDurationMs = clamp(interval * 0.85, 200, 500);
+        if (interval >= 75 && interval <= 1200)
+          this.beatDurationMs = clamp(interval * 0.6, 60, 180);
       }
       this.lastBeat = nowMs;
     }
@@ -327,6 +455,11 @@ export class VisualizerAnalysis {
     this.beatFluxAverage +=
       (beatFlux - this.beatFluxAverage) * Math.min(1, elapsed / 650);
     this.previousBass = bass;
+    this.previousEnergy = this.frame.energy;
+    this.highHistory[this.highHistoryIndex] = highEnergy;
+    this.highHistoryTimes[this.highHistoryIndex] = nowMs;
+    this.highHistoryIndex =
+      (this.highHistoryIndex + 1) % this.highHistory.length;
     if (settings.beatMode === "bpm") {
       this.playbackStartMs ??= 0;
       if (trackBpm !== undefined && Number.isFinite(trackBpm) && trackBpm > 0) {

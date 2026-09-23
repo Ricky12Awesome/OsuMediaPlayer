@@ -101,15 +101,6 @@ export function AudioVisualizer({
       const current = latest.current.settings;
       const playing = active();
       const interval = current.maxFps > 0 ? 1000 / current.maxFps : 0;
-      if (
-        interval > 0 &&
-        playing &&
-        previousTime &&
-        now - previousTime < interval - 0.5
-      ) {
-        frameId = requestAnimationFrame(draw);
-        return;
-      }
       try {
         const analyser = latest.current.getAudioAnalyser();
         if (analyser) {
@@ -122,6 +113,15 @@ export function AudioVisualizer({
             latest.current.trackBpm,
             audio.currentTime * 1000,
           );
+          if (
+            interval > 0 &&
+            playing &&
+            previousTime &&
+            now - previousTime < interval - 0.5
+          ) {
+            frameId = requestAnimationFrame(draw);
+            return;
+          }
           const reduced =
             current.respectReducedMotion && motionPreference.matches;
           if (playing && previousTime && !reduced)

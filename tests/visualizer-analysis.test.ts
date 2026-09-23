@@ -197,8 +197,7 @@ test("bass pulses react to onsets, decay, and respect their cooldown", () => {
   analysis.update(fixture.analyser, settings, 50, true);
   fixture.frequency.fill(255, 1, 8);
   analysis.update(fixture.analyser, settings, 80, true);
-  assert.equal(frame.beat, 1);
-  assert.ok(frame.beat > 0);
+  assert.ok(frame.beat > 0 && frame.beat < 1);
   analysis.update(fixture.analyser, settings, 400, true);
   assert.equal(frame.beat, 0);
   fixture.frequency.fill(0);
@@ -219,19 +218,120 @@ test("beat detection catches quieter hits at a faster tempo", () => {
   analysis.update(fixture.analyser, settings, 100, true);
   fixture.frequency.fill(30, 1, 8);
   assert.equal(analysis.update(fixture.analyser, settings, 120, true).beat, 1);
+  assert.equal(analysis.update(fixture.analyser, settings, 190, true).beat, 0);
   fixture.frequency.fill(0);
   analysis.update(fixture.analyser, settings, 400, true);
   fixture.frequency.fill(30, 1, 8);
   assert.equal(analysis.update(fixture.analyser, settings, 620, true).beat, 1);
-  assert.ok(analysis.update(fixture.analyser, settings, 980, true).beat > 0);
+  assert.equal(analysis.update(fixture.analyser, settings, 980, true).beat, 0);
 });
 
 test("beat detection reacts to a transient outside the bass band", () => {
   const fixture = analyserFixture();
   const analysis = new VisualizerAnalysis();
   analysis.update(fixture.analyser, settings, 0, true);
+  fixture.waveform.fill(0.5);
   fixture.frequency.fill(180, 40, 45);
   assert.equal(analysis.update(fixture.analyser, settings, 20, true).beat, 1);
+});
+
+test("quiet spectral noise does not mask two nearby bass thumps", () => {
+  const fixture = analyserFixture();
+  const analysis = new VisualizerAnalysis();
+  analysis.update(fixture.analyser, settings, 0, true);
+  fixture.frequency.fill(80, 40, 45);
+  fixture.waveform.fill(0.02);
+  assert.equal(analysis.update(fixture.analyser, settings, 20, true).beat, 0);
+  fixture.frequency.fill(140, 1, 8);
+  fixture.waveform.fill(0.4);
+  assert.equal(analysis.update(fixture.analyser, settings, 80, true).beat, 1);
+  fixture.frequency.fill(90, 1, 8);
+  fixture.waveform.fill(0.2);
+  assert.ok(analysis.update(fixture.analyser, settings, 170, true).beat < 1);
+  fixture.frequency.fill(190, 1, 8);
+  fixture.waveform.fill(0.4);
+  assert.equal(analysis.update(fixture.analyser, settings, 260, true).beat, 1);
+});
+
+test("repeated bass dips retrigger pulses over sustained loud audio", () => {
+  const fixture = analyserFixture();
+  const analysis = new VisualizerAnalysis();
+  const fillBass = (amplitude: number) => {
+    for (let i = 0; i < fixture.waveform.length; i++) {
+      fixture.waveform[i] =
+        amplitude * Math.sin((2 * Math.PI * 80 * i) / 48000);
+    }
+  };
+  fillBass(0.7);
+  assert.equal(analysis.update(fixture.analyser, settings, 0, true).beat, 0);
+  fillBass(0.32);
+  assert.equal(analysis.update(fixture.analyser, settings, 250, true).beat, 1);
+  assert.ok(analysis.update(fixture.analyser, settings, 270, true).beat < 1);
+  fillBass(0.7);
+  analysis.update(fixture.analyser, settings, 410, true);
+  fillBass(0.32);
+  assert.equal(analysis.update(fixture.analyser, settings, 580, true).beat, 1);
+});
+
+test("a steady run of thumps stays in time through several missed dips", () => {
+  const fixture = analyserFixture();
+  const analysis = new VisualizerAnalysis();
+  const strong = new Float32Array(fixture.waveform.length);
+  const ducked = new Float32Array(fixture.waveform.length);
+  for (let i = 0; i < strong.length; i++) {
+    const sample = Math.sin((2 * Math.PI * 80 * i) / 48000);
+    strong[i] = sample * 0.7;
+    ducked[i] = sample * 0.28;
+  }
+  const pulseTimes: number[] = [];
+  for (let frameIndex = 0; frameIndex < 690; frameIndex++) {
+    const now = (frameIndex * 1000) / 30;
+    const beatIndex = Math.round((now - 250) / (1000 / 3));
+    const nearBeat =
+      beatIndex >= 0 &&
+      beatIndex < 65 &&
+      (beatIndex < 30 || beatIndex > 32) &&
+      Math.abs(now - (250 + (beatIndex * 1000) / 3)) < 20;
+    fixture.waveform.set(nearBeat ? ducked : strong);
+    if (analysis.update(fixture.analyser, settings, now, true).beat === 1) {
+      pulseTimes.push(now);
+    }
+  }
+  assert.ok(pulseTimes.length >= 64, `Only ${pulseTimes.length} pulses`);
+  for (const missed of [30, 31, 32]) {
+    assert.ok(
+      pulseTimes.some(
+        (time) => Math.abs(time - (250 + (missed * 1000) / 3)) < 60,
+      ),
+      `The rhythm should bridge thump ${missed}`,
+    );
+  }
+});
+
+test("a locked bass rhythm still reacts to an offbeat thump", () => {
+  const fixture = analyserFixture();
+  const analysis = new VisualizerAnalysis();
+  const fillSound = (bass: number, accent = 0) => {
+    for (let i = 0; i < fixture.waveform.length; i++) {
+      fixture.waveform[i] =
+        bass * Math.sin((2 * Math.PI * 80 * i) / 48000) +
+        accent * Math.sin((2 * Math.PI * 1000 * i) / 48000);
+    }
+  };
+  fillSound(0.7);
+  analysis.update(fixture.analyser, settings, 0, true);
+  for (const dip of [250, 583, 916]) {
+    fillSound(0.28);
+    assert.equal(
+      analysis.update(fixture.analyser, settings, dip, true).beat,
+      1,
+    );
+    fillSound(0.7);
+    analysis.update(fixture.analyser, settings, dip + 50, true);
+  }
+  analysis.update(fixture.analyser, settings, 1066, true);
+  fillSound(0.7, 0.2);
+  assert.equal(analysis.update(fixture.analyser, settings, 1100, true).beat, 1);
 });
 
 test("beat sensitivity can disable onset detection", () => {
@@ -324,6 +424,7 @@ test("analysis bounds FFT/bars and disables the analyser's implicit smoothing", 
   );
   assert.equal(fixture.analyser.fftSize, 8192);
   assert.equal(fixture.analyser.smoothingTimeConstant, 0);
+  assert.equal(fixture.analyser.maxDecibels, 0);
   assert.equal(frame.count, 256);
   assert.equal(frame.values.length, 256);
   assert.ok(frame.values.every((value) => value === 0));

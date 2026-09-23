@@ -127,7 +127,7 @@ export async function createVisualizerRenderer(
       render(settings, frame, angle, colors, reducedMotion) {
         if (disposed) return;
         const size = Math.min(width, height);
-        const bassPulse = Math.max(frame.bass, frame.beat);
+        const bassPulse = Math.max(frame.bass * 0.25, frame.beat);
         const pulse = reducedMotion
           ? 0
           : Math.min(
