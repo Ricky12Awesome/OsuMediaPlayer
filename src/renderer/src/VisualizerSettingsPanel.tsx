@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useState, type CSSProperties } from "react";
 import { AudioLines, RotateCcw } from "lucide-react";
 import { SettingsPicker } from "./SettingsPicker";
 import {
@@ -27,6 +27,14 @@ const statusLabels: Record<VisualizerStatus, string> = {
   unsupported: "WebGPU is unavailable on this device",
   error: "Visualizer could not start",
 };
+
+function rangeProgressStyle(value: number, min: number, max: number) {
+  const progress = Math.min(
+    100,
+    Math.max(0, ((value - min) / (max - min)) * 100),
+  );
+  return { "--range-progress": `${progress}%` } as CSSProperties;
+}
 
 function NumberControl({
   field,
@@ -78,6 +86,7 @@ function NumberControl({
       </div>
       <input
         className="settings-range-input"
+        style={rangeProgressStyle(value, range.min, range.max)}
         type="range"
         min={range.min}
         max={range.max}
@@ -133,6 +142,7 @@ function FrequencyRangeField({
       </label>
       <input
         className="settings-range-input"
+        style={rangeProgressStyle(value, min, max)}
         type="range"
         min={min}
         max={max}

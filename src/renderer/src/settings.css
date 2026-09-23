@@ -98,12 +98,85 @@
   outline-offset: 2px;
 }
 .settings-range-input {
+  appearance: none;
   display: block;
   width: 100%;
   min-height: 1.5rem;
+  height: 1.5rem;
   margin: 0.3125rem 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--pink) 0%,
+    var(--pink) var(--range-progress, 0%),
+    var(--range-song) var(--range-progress, 0%),
+    var(--range-song) 100%
+  );
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 100% 0.3125rem;
   accent-color: var(--pink);
   cursor: pointer;
+}
+.settings-range-input::-webkit-slider-runnable-track {
+  height: 0.3125rem;
+  border-radius: inherit;
+  background: transparent;
+}
+.settings-range-input::-webkit-slider-thumb {
+  appearance: none;
+  width: 1rem;
+  height: 1rem;
+  margin-top: -0.34375rem;
+  border: 2px solid var(--panel-deep);
+  border-radius: 50%;
+  background: var(--pink-pale);
+  box-shadow:
+    0 0 0 2px rgb(var(--pink-rgb) / 0.2),
+    0 1px 4px #0008;
+  transition:
+    background 0.15s,
+    box-shadow 0.15s,
+    transform 0.15s;
+}
+.settings-range-input::-moz-range-track {
+  height: 0.3125rem;
+  border-radius: inherit;
+  background: transparent;
+}
+.settings-range-input::-moz-range-progress {
+  height: 0.3125rem;
+  border-radius: inherit;
+  background: transparent;
+}
+.settings-range-input::-moz-range-thumb {
+  width: 0.75rem;
+  height: 0.75rem;
+  border: 2px solid var(--panel-deep);
+  border-radius: 50%;
+  background: var(--pink-pale);
+  box-shadow:
+    0 0 0 2px rgb(var(--pink-rgb) / 0.2),
+    0 1px 4px #0008;
+  transition:
+    background 0.15s,
+    box-shadow 0.15s,
+    transform 0.15s;
+}
+.settings-range-input:hover::-webkit-slider-thumb,
+.settings-range-input:active::-webkit-slider-thumb,
+.settings-range-input:hover::-moz-range-thumb,
+.settings-range-input:active::-moz-range-thumb {
+  background: var(--pink-foreground);
+  box-shadow:
+    0 0 0 3px rgb(var(--pink-rgb) / 0.24),
+    0 1px 5px #0009;
+}
+.settings-range-input:active::-webkit-slider-thumb,
+.settings-range-input:active::-moz-range-thumb {
+  transform: scale(1.12);
 }
 .settings-range-input:focus-visible,
 .settings-color-input:focus-visible {
