@@ -273,6 +273,25 @@ test("repeated bass dips retrigger pulses over sustained loud audio", () => {
   assert.equal(analysis.update(fixture.analyser, settings, 580, true).beat, 1);
 });
 
+test("bass dips rearm after a partial recovery at fast tempo", () => {
+  const fixture = analyserFixture();
+  const analysis = new VisualizerAnalysis();
+  const fillBass = (amplitude: number) => {
+    for (let i = 0; i < fixture.waveform.length; i++) {
+      fixture.waveform[i] =
+        amplitude * Math.sin((2 * Math.PI * 80 * i) / 48000);
+    }
+  };
+  fillBass(0.7);
+  analysis.update(fixture.analyser, settings, 0, true);
+  fillBass(0.28);
+  assert.equal(analysis.update(fixture.analyser, settings, 250, true).beat, 1);
+  fillBass(0.56);
+  analysis.update(fixture.analyser, settings, 300, true);
+  fillBass(0.28);
+  assert.equal(analysis.update(fixture.analyser, settings, 450, true).beat, 1);
+});
+
 test("a steady run of thumps stays in time through several missed dips", () => {
   const fixture = analyserFixture();
   const analysis = new VisualizerAnalysis();
@@ -304,6 +323,45 @@ test("a steady run of thumps stays in time through several missed dips", () => {
         (time) => Math.abs(time - (250 + (missed * 1000) / 3)) < 60,
       ),
       `The rhythm should bridge thump ${missed}`,
+    );
+  }
+});
+
+test("bass pulses follow a faster section and return to the original tempo", () => {
+  const fixture = analyserFixture();
+  const analysis = new VisualizerAnalysis();
+  const strong = new Float32Array(fixture.waveform.length);
+  const ducked = new Float32Array(fixture.waveform.length);
+  for (let i = 0; i < strong.length; i++) {
+    const sample = Math.sin((2 * Math.PI * 80 * i) / 48000);
+    strong[i] = sample * 0.7;
+    ducked[i] = sample * 0.28;
+  }
+  const beatTimes = [250];
+  for (const [count, interval] of [
+    [8, 333],
+    [16, 200],
+    [8, 333],
+  ]) {
+    for (let i = 0; i < count; i++) {
+      beatTimes.push(beatTimes[beatTimes.length - 1] + interval);
+    }
+  }
+  const pulses: number[] = [];
+  for (let frameIndex = 0; frameIndex < 700; frameIndex++) {
+    const now = (frameIndex * 1000) / 60;
+    const nearBeat = beatTimes.some(
+      (time, index) => index !== 17 && Math.abs(now - time) < 18,
+    );
+    fixture.waveform.set(nearBeat ? ducked : strong);
+    if (analysis.update(fixture.analyser, settings, now, true).beat === 1) {
+      pulses.push(now);
+    }
+  }
+  for (const time of beatTimes) {
+    assert.ok(
+      pulses.some((pulse) => Math.abs(pulse - time) < 55),
+      `Missing pulse near ${time} ms`,
     );
   }
 });

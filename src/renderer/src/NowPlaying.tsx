@@ -141,7 +141,13 @@ export function NowPlaying({
             </span>
           </div>
         )}
-        {debugMode && player.song && <DebugWidget data={debugData} />}
+        {debugMode && player.song && (
+          <DebugWidget
+            key={player.song.id}
+            data={debugData}
+            audioRef={player.audioRef}
+          />
+        )}
         {showNowPlayingTitleArtist && (
           <div
             className={

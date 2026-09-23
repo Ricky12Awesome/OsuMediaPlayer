@@ -90,6 +90,8 @@
   backdrop-filter: blur(8px);
 }
 .debug-widget {
+  display: flex;
+  flex-direction: column;
   z-index: 5;
   color: #fff;
   background: rgb(0 0 0 / 93%);
@@ -99,8 +101,7 @@
   max-width: calc(100% - 1.75rem);
   max-height: calc(100% - 1.75rem);
   padding: 0.4375rem 0.5625rem;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: hidden;
   font-family: monospace;
   font-size: 1rem;
   line-height: 1.35;
@@ -108,6 +109,10 @@
   bottom: 0.875rem;
   left: 0.875rem;
   box-shadow: 0 6px 24px rgb(0 0 0 / 35%);
+}
+.debug-widget-metadata {
+  min-height: 0;
+  overflow: auto;
 }
 .debug-widget-row {
   align-items: baseline;
@@ -166,6 +171,43 @@
 }
 .debug-widget-value.debug-value-source-hls {
   color: #fff04a;
+}
+.debug-widget-timestamps {
+  border-top: 1px solid rgb(255 255 255 / 16%);
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  min-height: 0;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+}
+.debug-widget-timestamps-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+.debug-widget-timestamp-action {
+  background: rgb(255 255 255 / 10%);
+  border: 1px solid rgb(255 255 255 / 20%);
+  border-radius: 0.25rem;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: 0.25rem 0.5rem;
+}
+.debug-widget-timestamp-action:hover,
+.debug-widget-timestamp-action:focus-visible {
+  background: rgb(255 255 255 / 20%);
+}
+.debug-widget-timestamp-action:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+.debug-widget-timestamp-list {
+  max-height: 12rem;
+  margin: 0 0 0.5rem;
+  overflow-y: auto;
+  padding-left: 2rem;
 }
 .is-favorite {
   color: var(--pink) !important;

@@ -365,7 +365,7 @@ export class VisualizerAnalysis {
     const dipRatio = 0.8 - (1 - beatSensitivity) * 0.25;
     const lowRatio = lowEnergy / Math.max(this.lowEnergyPeak, 0.0001);
     // Sidechain-heavy tracks mark kicks by briefly ducking the bass.
-    if (lowRatio > dipRatio + 0.1) this.bassDipArmed = true;
+    if (lowRatio > dipRatio + 0.05) this.bassDipArmed = true;
     const bassDip =
       this.bassDipArmed &&
       this.lowEnergyPeak > minimumLowPeak &&
@@ -373,13 +373,13 @@ export class VisualizerAnalysis {
     if (bassDip) {
       this.bassDipArmed = false;
       const interval = nowMs - this.lastBassDipMs;
-      if (interval >= 220 && interval <= 1200) {
+      if (interval >= 170 && interval <= 1200) {
         const steps = this.bassDipPeriodMs
           ? Math.max(1, Math.round(interval / this.bassDipPeriodMs))
           : 1;
         const candidate = interval / steps;
         if (
-          candidate >= 220 &&
+          candidate >= 170 &&
           candidate <= 550 &&
           (!this.bassDipPeriodMs ||
             Math.abs(candidate - this.bassDipPeriodMs) <
@@ -397,7 +397,7 @@ export class VisualizerAnalysis {
         this.bassDipPeriodMs = null;
         this.bassDipRun = 1;
       }
-      if (interval >= 220) {
+      if (interval >= 170) {
         this.lastBassDipMs = nowMs;
         this.nextBassPulseMs = this.bassDipPeriodMs
           ? nowMs + this.bassDipPeriodMs
