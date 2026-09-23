@@ -330,8 +330,6 @@ export function VisualizerSettingsPanel({
         {number("boom")}
         {number("bassImpact")}
         {number("beatImpact")}
-        {choice("beatMode", "Beat response")}
-        {settings.beatMode === "detected" && number("beatSensitivity")}
         {number("glow")}
       </details>
 

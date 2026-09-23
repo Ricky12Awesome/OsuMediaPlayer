@@ -126,7 +126,6 @@ export function NowPlaying({
           settings={visualizerSettings}
           onStatus={onVisualizerStatus}
           themeKey={visualizerThemeKey}
-          trackBpm={player.song?.bpm}
           trackKey={player.song?.id}
         />
         {player.videoEncoding && (

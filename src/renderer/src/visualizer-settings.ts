@@ -32,8 +32,6 @@ export interface VisualizerSettings {
   boom: number;
   bassImpact: number;
   beatImpact: number;
-  beatSensitivity: number;
-  beatMode: "detected" | "bpm";
   glow: number;
   opacity: number;
   colorMode: "theme" | "custom";
@@ -81,8 +79,6 @@ export const defaultVisualizerSettings: VisualizerSettings = {
   boom: 25,
   bassImpact: 50,
   beatImpact: 40,
-  beatSensitivity: 85,
-  beatMode: "detected",
   glow: 25,
   opacity: 85,
   colorMode: "theme",
@@ -117,10 +113,6 @@ export const visualizerOptions = {
   frequencyScale: [
     { value: "log", label: "Logarithmic" },
     { value: "linear", label: "Linear" },
-  ],
-  beatMode: [
-    { value: "detected", label: "Audio detection" },
-    { value: "bpm", label: "BPM" },
   ],
   fftSize: [256, 512, 1024, 2048, 4096, 8192].map((value) => ({
     value,
@@ -203,13 +195,6 @@ export const visualizerRanges = {
   boom: { min: 0, max: 100, step: 1, label: "Boom / size pulse", unit: "%" },
   bassImpact: { min: 0, max: 100, step: 1, label: "Bass impact", unit: "%" },
   beatImpact: { min: 0, max: 100, step: 1, label: "Beat highlight", unit: "%" },
-  beatSensitivity: {
-    min: 0,
-    max: 100,
-    step: 1,
-    label: "Beat sensitivity",
-    unit: "%",
-  },
   glow: { min: 0, max: 100, step: 1, label: "Glow", unit: "%" },
   opacity: { min: 0, max: 100, step: 1, label: "Opacity", unit: "%" },
 } as const;

@@ -43,25 +43,6 @@ test("max frame rate option disables the visualizer FPS cap", () => {
   assert.equal(parseVisualizerSettings({ maxFps: -1 }).maxFps, 60);
 });
 
-test("beat sensitivity is adjustable and bounded", () => {
-  assert.equal(
-    parseVisualizerSettings({ beatSensitivity: 0 }).beatSensitivity,
-    0,
-  );
-  assert.equal(
-    parseVisualizerSettings({ beatSensitivity: 120 }).beatSensitivity,
-    100,
-  );
-});
-
-test("BPM beat response persists without a manual tempo", () => {
-  assert.equal(
-    parseVisualizerSettings({ beatMode: "bpm", bpm: 128 }).beatMode,
-    "bpm",
-  );
-  assert.equal("bpm" in parseVisualizerSettings({ beatMode: "bpm" }), false);
-});
-
 test("visualizer radius can be reduced to one percent", () => {
   assert.equal(parseVisualizerSettings({ radius: 1 }).radius, 1);
 });

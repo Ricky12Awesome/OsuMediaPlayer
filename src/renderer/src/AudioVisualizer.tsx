@@ -18,7 +18,6 @@ interface AudioVisualizerProps {
   settings: VisualizerSettings;
   onStatus: (status: VisualizerStatus, detail?: string) => void;
   themeKey?: unknown;
-  trackBpm?: number;
   trackKey?: string;
 }
 
@@ -28,7 +27,6 @@ export function AudioVisualizer({
   settings,
   onStatus,
   themeKey,
-  trackBpm,
   trackKey,
 }: AudioVisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -37,10 +35,9 @@ export function AudioVisualizer({
     settings,
     getAudioAnalyser,
     onStatus,
-    trackBpm,
     trackKey,
   });
-  latest.current = { settings, getAudioAnalyser, onStatus, trackBpm, trackKey };
+  latest.current = { settings, getAudioAnalyser, onStatus, trackKey };
   const refresh = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -110,8 +107,6 @@ export function AudioVisualizer({
             now,
             playing,
             latest.current.trackKey,
-            latest.current.trackBpm,
-            audio.currentTime * 1000,
           );
           if (
             interval > 0 &&
