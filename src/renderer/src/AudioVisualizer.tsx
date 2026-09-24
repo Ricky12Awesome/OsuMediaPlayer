@@ -242,26 +242,30 @@ export function AudioVisualizer({
     latest.current.onStatus("loading");
     canvas.style.visibility = "hidden";
     updateColors();
-    void createVisualizerRenderer(canvas, fail, controller.signal)
-      .then((created) => {
-        if (cancelled || failed) {
-          created.dispose();
-          return;
-        }
-        renderer = created;
-        latest.current.onStatus("ready");
-        schedule();
-      })
-      .catch((error: unknown) => {
-        if (cancelled) return;
-        failed = true;
-        latest.current.onStatus(
-          error instanceof WebGPUUnavailableError ? "unsupported" : "error",
-          error instanceof WebGPUUnavailableError
-            ? "WebGPU is unavailable on this device. Audio and video playback still work."
-            : "The visualizer could not start. Toggle it off and on to retry.",
-        );
-      });
+    // StrictMode cleans up the first effect before this microtask runs.
+    queueMicrotask(() => {
+      if (cancelled) return;
+      void createVisualizerRenderer(canvas, fail, controller.signal)
+        .then((created) => {
+          if (cancelled || failed) {
+            created.dispose();
+            return;
+          }
+          renderer = created;
+          latest.current.onStatus("ready");
+          schedule();
+        })
+        .catch((error: unknown) => {
+          if (cancelled) return;
+          failed = true;
+          latest.current.onStatus(
+            error instanceof WebGPUUnavailableError ? "unsupported" : "error",
+            error instanceof WebGPUUnavailableError
+              ? "WebGPU is unavailable on this device. Audio and video playback still work."
+              : "The visualizer could not start. Toggle it off and on to retry.",
+          );
+        });
+    });
     const cleanup = () => {
       cancelled = true;
       controller.abort();

@@ -52,6 +52,7 @@ page.on("console", (message) => {
 });
 await page.addInitScript(() => {
   window.gpuTestStats = {
+    adapterRequests: 0,
     submits: 0,
     destroys: 0,
     configurations: [],
@@ -60,7 +61,12 @@ await page.addInitScript(() => {
     sampleRanges: [],
     colors: [],
   };
-  if (!window.GPUQueue) return;
+  if (!window.GPU || !window.GPUQueue) return;
+  const requestAdapter = GPU.prototype.requestAdapter;
+  GPU.prototype.requestAdapter = function (...args) {
+    window.gpuTestStats.adapterRequests++;
+    return requestAdapter.apply(this, args);
+  };
   const submit = GPUQueue.prototype.submit;
   GPUQueue.prototype.submit = function (...args) {
     window.gpuTestStats.submits++;
@@ -133,14 +139,25 @@ try {
   const port = server.httpServer.address().port;
   await page.goto(`http://127.0.0.1:${port}/__visualizer-test`);
   await page.waitForFunction(() => !!window.visualizerTest);
-  assert.ok(
-    await page.evaluate(async () => !!(await navigator.gpu?.requestAdapter())),
-    "A WebGPU adapter is required; set PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH to a compatible Chromium if needed",
-  );
   await page
     .getByTestId("visualizer-status")
-    .filter({ hasText: /^ready/ })
+    .filter({ hasText: /^(ready|unsupported|error)/ })
     .waitFor({ timeout: 10000 });
+  assert.match(
+    (await page.getByTestId("visualizer-status").textContent()) ?? "",
+    /^ready/,
+    "A working WebGPU adapter is required; set PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH to a compatible Chromium if needed",
+  );
+  assert.equal(
+    await page.evaluate(() => window.gpuTestStats.destroys),
+    0,
+    "StrictMode startup must not create and destroy an extra GPU device",
+  );
+  assert.equal(
+    await page.evaluate(() => window.gpuTestStats.adapterRequests),
+    1,
+    "StrictMode startup requests one adapter for the visualizer",
+  );
   assert.ok(
     (await page.evaluate(() => window.gpuTestStats.configurations)).every(
       (mode) => mode === "premultiplied",
