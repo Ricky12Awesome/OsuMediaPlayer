@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { _electron as electron } from "playwright";
-import { startElectronBootstrap } from "./fixtures/electron-bootstrap.mjs";
+import { chromium } from "playwright";
+import Realm from "realm";
+import { loadSongListFromRealm } from "../src/main/song-list/index.ts";
+import { startBrowserFixtureServer } from "./fixtures/browser-server.mjs";
 
 const mediaTypes = {
   mp3: "audio/mpeg",
@@ -19,30 +20,72 @@ const installPath = resolve("tests/environment");
 const manifest = JSON.parse(
   await readFile(join(installPath, "manifest.json"), "utf8"),
 );
-const userData = await mkdtemp(join(tmpdir(), "osu-media-player-e2e-"));
-let bootstrap;
-let app;
+let index;
+let server;
+let browser;
 try {
-  bootstrap = await startElectronBootstrap();
-  const electronEnv = {
-    ...process.env,
-    ELECTRON_RENDERER_URL: bootstrap.url,
-  };
-  delete electronEnv.ELECTRON_RUN_AS_NODE;
-  app = await electron.launch({
-    args: [".", "--no-sandbox", `--user-data-dir=${userData}`],
-    env: electronEnv,
+  index = await loadSongListFromRealm(installPath);
+  server = await startBrowserFixtureServer(index);
+  const assetUrl = (hash) => `${server.url}__fixture_asset/${hash}`;
+  const browserSong = (song) =>
+    song && {
+      ...song,
+      audioUrl: assetUrl(song.audioHash),
+      artworkUrl: song.backgroundHash
+        ? assetUrl(song.backgroundHash)
+        : undefined,
+      videoUrl: song.videoHash ? assetUrl(song.videoHash) : undefined,
+    };
+  browser = await chromium.launch({
+    ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
+      ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH }
+      : {}),
+    headless: true,
+    args: ["--no-sandbox"],
   });
-  const page = await app.firstWindow();
-  await page.addInitScript((path) => {
-    localStorage.setItem("song-list-path", JSON.stringify(path));
-  }, installPath);
-  await app.evaluate(
-    ({ BrowserWindow }, filename) => {
-      void BrowserWindow.getAllWindows()[0].loadFile(filename);
-    },
-    join(process.cwd(), "dist/index.html"),
+  const page = await browser.newPage({
+    viewport: { width: 1440, height: 920 },
+  });
+  await page.exposeFunction("__fixtureQuerySongList", (query) => {
+    const result = index.query(query);
+    return { ...result, items: result.items.map(browserSong) };
+  });
+  await page.exposeFunction("__fixtureGetSong", (id) =>
+    browserSong(index.getSong(id)),
   );
+  await page.addInitScript(
+    ({ path, summary, platform }) => {
+      localStorage.setItem("song-list-path", JSON.stringify(path));
+      const noListener = () => () => {};
+      window.playerAPI = {
+        loadSongList: async (requestedPath) => {
+          if (requestedPath !== path)
+            throw new Error("Unexpected song list path");
+          return summary;
+        },
+        querySongList: (query) => window.__fixtureQuerySongList(query),
+        getSong: (id) => window.__fixtureGetSong(id),
+        getSongDebugInfo: async () => null,
+        prepareVideo: async () => null,
+        cancelVideoEncoding: async () => {},
+        completeVideoStream: async () => {},
+        getCacheUsage: async () => ({ index: 0, video: 0 }),
+        clearCache: async () => {},
+        chooseSongList: async () => null,
+        onSongListProgress: noListener,
+        onMediaAction: noListener,
+        onVideoEncodingChange: noListener,
+        onFullscreenChange: noListener,
+        onZoomChange: noListener,
+        getSongContextMenuInfo: async () => null,
+        performSongContextMenuAction: async () => {},
+        windowControl: () => {},
+        platform,
+      };
+    },
+    { path: installPath, summary: index.summary, platform: process.platform },
+  );
+  await page.goto(server.url);
   await page.waitForSelector(".app-shell");
   await page.waitForFunction(
     (count) =>
@@ -68,7 +111,7 @@ try {
     for (const asset of [expected.audio, expected.background, expected.video]) {
       if (!asset) continue;
       const response = await page.evaluate(async (hash) => {
-        const result = await fetch(`omp://asset/${hash}`, {
+        const result = await fetch(`/__fixture_asset/${hash}`, {
           headers: { Range: "bytes=0-31" },
         });
         return {
@@ -216,7 +259,8 @@ try {
     "true",
   );
 } finally {
-  await app?.close();
-  await bootstrap?.close();
-  await rm(userData, { recursive: true, force: true });
+  await browser?.close();
+  await server?.close();
+  index?.close();
+  Realm.shutdown();
 }
