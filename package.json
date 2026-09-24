@@ -9,6 +9,7 @@
   "main": "dist-electron/main.cjs",
   "scripts": {
     "dev": "node scripts/dev.mjs",
+    "dev:test": "node --import tsx scripts/dev-test.mjs",
     "build": "npm run typecheck && vite build && node scripts/build-electron.mjs",
     "typecheck": "tsc --noEmit",
     "test": "npm run test:environment && node --import tsx --test tests/*.test.ts",
