@@ -220,7 +220,10 @@ function createWindow(): void {
       backgroundThrottling: false,
     },
   });
-  if (offscreenTest) window.setContentSize(1440, 920);
+  if (offscreenTest) {
+    window.setContentSize(1440, 920);
+    window.webContents.setAudioMuted(true);
+  }
   if (!offscreenTest)
     window.once("ready-to-show", () => {
       windowReadyToShow = true;

@@ -49,10 +49,11 @@ try {
       return {
         offscreen: window.webContents.isOffscreen(),
         visible: window.isVisible(),
+        audioMuted: window.webContents.isAudioMuted(),
         userData: app.getPath("userData"),
       };
     }),
-    { offscreen: true, visible: false, userData },
+    { offscreen: true, visible: false, audioMuted: true, userData },
   );
   assert.equal(await page.evaluate(() => typeof window.require), "undefined");
   await page.waitForSelector(".app-shell");
@@ -282,6 +283,18 @@ try {
       .getByRole("tab", { name: "General", exact: true })
       .getAttribute("aria-selected"),
     "true",
+  );
+  await page.getByRole("button", { name: "Play", exact: true }).click();
+  await page.getByRole("button", { name: "Pause", exact: true }).waitFor();
+  await page.waitForFunction(
+    () => Number(document.querySelector('input[aria-label="Seek"]')?.value) > 0,
+  );
+  assert.equal(await page.getByRole("button", { name: "Mute" }).count(), 1);
+  assert.equal(
+    await app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0].webContents.isAudioMuted(),
+    ),
+    true,
   );
 } finally {
   await app?.close();
