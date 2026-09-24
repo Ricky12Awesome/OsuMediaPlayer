@@ -1,6 +1,23 @@
-import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
-import { AudioLines, RotateCcw } from "lucide-react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
+import { createPortal } from "react-dom";
+import { AudioLines, ChevronDown, RotateCcw } from "lucide-react";
 import { SettingsPicker } from "./SettingsPicker";
+import {
+  hexToHsv,
+  hsvToHex,
+  normalizeHexColor,
+  previewVisualizerColor,
+  type VisualizerColorField,
+} from "./visualizer-color";
 import {
   defaultVisualizerSettings,
   parseVisualizerSettings,
@@ -15,7 +32,7 @@ import "./visualizer-settings.css";
 
 export interface VisualizerSettingsPanelProps {
   settings: VisualizerSettings;
-  onChange: (settings: VisualizerSettings) => void;
+  onChange: Dispatch<SetStateAction<VisualizerSettings>>;
   status: VisualizerStatus;
   statusDetail?: string;
 }
@@ -108,53 +125,256 @@ function ColorControl({
   onChange,
 }: {
   id: string;
-  field: "color1" | "color2";
+  field: VisualizerColorField;
   label: string;
   value: string;
   onChange: (value: string) => void;
 }) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popupRef = useRef<HTMLDivElement>(null);
   const onChangeRef = useRef(onChange);
-  const committedRef = useRef(value);
+  const persistedRef = useRef(value);
+  const draftRef = useRef(value);
+  const hexRef = useRef(value);
+  const hsvRef = useRef(hexToHsv(value));
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const [hexText, setHexText] = useState(value);
+  const [hsv, setHsv] = useState(() => hexToHsv(value));
+  const [position, setPosition] = useState({ left: 0, top: 0, width: 272 });
   onChangeRef.current = onChange;
+  persistedRef.current = value;
+  const portalTarget = triggerRef.current?.closest("dialog") ?? document.body;
 
-  const commit = () => {
-    const next = inputRef.current?.value;
-    if (!next || next === committedRef.current) return;
-    committedRef.current = next;
-    onChangeRef.current(next);
-    inputRef.current?.blur();
+  const preview = (next: string, nextHsv = hexToHsv(next)) => {
+    draftRef.current = next;
+    hexRef.current = next;
+    hsvRef.current = nextHsv;
+    setDraft(next);
+    setHexText(next);
+    setHsv(nextHsv);
+    previewVisualizerColor(field, next);
+  };
+
+  const apply = (focus = true) => {
+    const next = normalizeHexColor(hexRef.current) ?? draftRef.current;
+    if (next !== persistedRef.current) {
+      persistedRef.current = next;
+      onChangeRef.current(next);
+    }
+    setOpen(false);
+    if (focus) triggerRef.current?.focus();
+  };
+
+  const cancel = () => {
+    preview(persistedRef.current);
+    setOpen(false);
+    triggerRef.current?.focus();
   };
 
   useEffect(() => {
-    const input = inputRef.current;
-    if (!input) return;
-    // Native change fires when the picker is dismissed. React's onChange
-    // follows every input event and would rerender the whole player on drag.
-    input.addEventListener("change", commit);
-    return () => input.removeEventListener("change", commit);
-  }, []);
+    draftRef.current = value;
+    hexRef.current = value;
+    hsvRef.current = hexToHsv(value);
+    setDraft(value);
+    setHexText(value);
+    setHsv(hsvRef.current);
+  }, [value]);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const updatePosition = () => {
+      const trigger = triggerRef.current?.getBoundingClientRect();
+      const popup = popupRef.current;
+      if (!trigger || !popup) return;
+      const width = Math.min(272, window.innerWidth - 24);
+      const height = popup.offsetHeight;
+      const below = window.innerHeight - trigger.bottom - 12;
+      const above = trigger.top - 12;
+      setPosition({
+        width,
+        left: Math.max(
+          12,
+          Math.min(trigger.right - width, window.innerWidth - width - 12),
+        ),
+        top:
+          below < height && above > below
+            ? Math.max(12, trigger.top - height - 6)
+            : Math.min(trigger.bottom + 6, window.innerHeight - height - 12),
+      });
+    };
+    updatePosition();
+    popupRef.current
+      ?.querySelector<HTMLInputElement>("input[type=range]")
+      ?.focus({
+        preventScroll: true,
+      });
+    window.addEventListener("resize", updatePosition);
+    document.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      document.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [open]);
 
   useEffect(() => {
-    committedRef.current = value;
-    if (inputRef.current && inputRef.current.value !== value)
-      inputRef.current.value = value;
-  }, [value]);
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (
+        !popupRef.current?.contains(target) &&
+        !triggerRef.current?.contains(target)
+      )
+        apply(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      cancel();
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  const changeHsv = (patch: Partial<typeof hsv>) => {
+    const next = { ...hsvRef.current, ...patch };
+    preview(hsvToHex(next.hue, next.saturation, next.brightness), next);
+  };
 
   return (
     <div className="settings-row">
-      <label className="settings-row-label" htmlFor={id}>
-        {label}
-      </label>
-      <input
-        ref={inputRef}
-        id={id}
-        className="settings-color-input"
-        type="color"
-        data-visualizer-color={field}
-        defaultValue={value}
-        onBlur={commit}
-      />
+      <span className="settings-row-label">{label}</span>
+      <button
+        ref={triggerRef}
+        type="button"
+        className="settings-color-input visualizer-color-trigger"
+        aria-label={label}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={open ? `${id}-picker` : undefined}
+        onClick={() => (open ? apply() : setOpen(true))}
+      >
+        <span
+          className="visualizer-color-swatch"
+          style={{ background: value }}
+        />
+        <ChevronDown size={14} aria-hidden="true" />
+      </button>
+      {open &&
+        createPortal(
+          <div
+            ref={popupRef}
+            id={`${id}-picker`}
+            className="control-popover visualizer-color-popup"
+            role="dialog"
+            aria-label={`${label} picker`}
+            style={
+              {
+                ...position,
+                "--picker-hue": `${Math.round(hsv.hue)}`,
+                "--picker-full-color": hsvToHex(hsv.hue, hsv.saturation, 100),
+              } as CSSProperties
+            }
+          >
+            <div className="visualizer-color-header">
+              <span>{label}</span>
+              <span
+                className="visualizer-color-preview"
+                style={{ background: draft }}
+              />
+            </div>
+            <label className="visualizer-color-control">
+              <span>Hue</span>
+              <input
+                className="settings-range-input visualizer-hue-range"
+                type="range"
+                min={0}
+                max={359}
+                value={Math.round(hsv.hue)}
+                aria-label={`${label} hue`}
+                onChange={(event) =>
+                  changeHsv({ hue: Number(event.target.value) })
+                }
+              />
+            </label>
+            <label className="visualizer-color-control">
+              <span>Saturation</span>
+              <input
+                className="settings-range-input visualizer-saturation-range"
+                type="range"
+                min={0}
+                max={100}
+                value={Math.round(hsv.saturation)}
+                aria-label={`${label} saturation`}
+                onChange={(event) =>
+                  changeHsv({ saturation: Number(event.target.value) })
+                }
+              />
+            </label>
+            <label className="visualizer-color-control">
+              <span>Brightness</span>
+              <input
+                className="settings-range-input visualizer-brightness-range"
+                type="range"
+                min={0}
+                max={100}
+                value={Math.round(hsv.brightness)}
+                aria-label={`${label} brightness`}
+                onChange={(event) =>
+                  changeHsv({ brightness: Number(event.target.value) })
+                }
+              />
+            </label>
+            <label className="visualizer-color-control">
+              <span>Hex color</span>
+              <input
+                className="settings-number-input visualizer-color-hex"
+                type="text"
+                maxLength={7}
+                value={hexText}
+                aria-label={`${label} hex color`}
+                onChange={(event) => {
+                  const text = event.target.value;
+                  hexRef.current = text;
+                  setHexText(text);
+                  const next = normalizeHexColor(text);
+                  if (next) preview(next);
+                }}
+                onBlur={() => {
+                  if (!normalizeHexColor(hexRef.current)) {
+                    hexRef.current = draftRef.current;
+                    setHexText(draftRef.current);
+                  }
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") apply();
+                }}
+              />
+            </label>
+            <div className="visualizer-color-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={cancel}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => apply()}
+              >
+                Apply
+              </button>
+            </div>
+          </div>,
+          portalTarget,
+        )}
     </div>
   );
 }
@@ -289,7 +509,7 @@ export function VisualizerSettingsPanel({
 }: VisualizerSettingsPanelProps) {
   const id = useId();
   const update = (patch: Partial<VisualizerSettings>) => {
-    onChange(parseVisualizerSettings({ ...settings, ...patch }));
+    onChange((current) => parseVisualizerSettings({ ...current, ...patch }));
   };
   const number = (field: VisualizerRangeKey) => (
     <NumberControl

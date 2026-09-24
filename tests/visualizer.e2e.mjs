@@ -151,24 +151,44 @@ try {
 
   await page.getByRole("tab", { name: "Visualizer", exact: true }).click();
   await update({ colorMode: "custom" });
-  const colorInput = page.getByLabel("Color 1", { exact: true });
+  await page.getByText("COLOR & OPACITY", { exact: true }).click();
+  const colorButton = page.getByRole("button", {
+    name: "Color 1",
+    exact: true,
+  });
   const originalColor = await page.evaluate(
     () => window.visualizerTest.settings().color1,
   );
-  await colorInput.evaluate((input) => {
-    for (const color of ["#112233", "#223344", "#334455"]) {
-      input.value = color;
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    }
-  });
+  await colorButton.click();
+  await page.getByRole("dialog", { name: "Color 1 picker" }).waitFor();
+  const originalHex = await page
+    .getByRole("textbox", { name: "Color 1 hex color" })
+    .inputValue();
+  await page.getByRole("slider", { name: "Color 1 hue" }).focus();
+  await page.getByRole("slider", { name: "Color 1 hue" }).press("ArrowRight");
+  assert.notEqual(
+    await page.getByRole("textbox", { name: "Color 1 hex color" }).inputValue(),
+    originalHex,
+    "Hue slider updates the color draft",
+  );
+  await page
+    .getByRole("textbox", { name: "Color 1 hex color" })
+    .fill("#112233");
   assert.equal(
     await page.evaluate(() => window.visualizerTest.settings().color1),
     originalColor,
-    "Dragging the native color picker does not rerender the player",
+    "Editing a color does not rerender the player",
   );
-  await colorInput.evaluate((input) =>
-    input.dispatchEvent(new Event("change", { bubbles: true })),
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  assert.equal(
+    await page.evaluate(() => window.visualizerTest.settings().color1),
+    originalColor,
   );
+  await colorButton.click();
+  await page
+    .getByRole("textbox", { name: "Color 1 hex color" })
+    .fill("#334455");
+  await page.getByRole("button", { name: "Apply", exact: true }).click();
   await page.waitForFunction(
     () => window.visualizerTest.settings().color1 === "#334455",
   );
@@ -489,14 +509,13 @@ try {
   await page.getByRole("tab", { name: "Visualizer", exact: true }).click();
   await update({ colorMode: "custom" });
   await page.getByText("COLOR & OPACITY", { exact: true }).click();
-  await page.getByLabel("Color 1", { exact: true }).focus();
+  await page.getByRole("button", { name: "Color 1", exact: true }).click();
   const committedColor = await page.evaluate(
     () => window.visualizerTest.settings().color1,
   );
-  await page.getByLabel("Color 1", { exact: true }).evaluate((input) => {
-    input.value = "#00ff00";
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  });
+  await page
+    .getByRole("textbox", { name: "Color 1 hex color" })
+    .fill("#00ff00");
   await snapshot();
   assert.equal(
     await page.evaluate(() => window.visualizerTest.settings().color1),
@@ -508,6 +527,8 @@ try {
     [0, 1, 0],
     "Color preview reaches the GPU without a React update",
   );
+  await mkdir("test-results", { recursive: true });
+  await page.screenshot({ path: "test-results/visualizer-color-picker.png" });
   const choosingBefore = await page.evaluate(() => window.gpuTestStats.submits);
   await page.waitForTimeout(1000);
   const choosingSubmitted =
@@ -516,10 +537,7 @@ try {
     choosingSubmitted > submitted,
     `Dragging the color picker keeps the visualizer responsive (${choosingSubmitted} frames)`,
   );
-  await page
-    .getByLabel("Color 1", { exact: true })
-    .evaluate((input) => input.blur());
-  await mkdir("test-results", { recursive: true });
+  await page.getByRole("button", { name: "Apply", exact: true }).click();
   await page.getByRole("tab", { name: "Visualizer", exact: true }).click();
   await page.screenshot({ path: "test-results/visualizer.png" });
 

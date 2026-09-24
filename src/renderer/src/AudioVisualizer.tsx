@@ -1,5 +1,6 @@
 import { useEffect, useRef, type RefObject } from "react";
 import { VisualizerAnalysis } from "./visualizer-analysis";
+import { VISUALIZER_COLOR_PREVIEW_EVENT } from "./visualizer-color";
 import {
   createVisualizerRenderer,
   WebGPUUnavailableError,
@@ -183,16 +184,17 @@ export function AudioVisualizer({
       schedule();
     };
     const previewColor = (event: Event) => {
-      const input = event.target;
+      if (!(event instanceof CustomEvent)) return;
+      const detail = event.detail as { field?: unknown; value?: unknown };
       if (
-        !(input instanceof HTMLInputElement) ||
         latest.current.settings.colorMode !== "custom" ||
-        !/^#[0-9a-f]{6}$/i.test(input.value)
+        typeof detail.value !== "string" ||
+        !/^#[0-9a-f]{6}$/i.test(detail.value)
       )
         return;
-      const field = input.dataset.visualizerColor;
+      const field = detail.field;
       if (field !== "color1" && field !== "color2") return;
-      colors[field === "color1" ? 0 : 1] = hexColor(input.value);
+      colors[field === "color1" ? 0 : 1] = hexColor(detail.value);
       colorPreviewPending = true;
       schedule();
     };
@@ -209,13 +211,6 @@ export function AudioVisualizer({
     const visibility = () => {
       if (document.hidden) stop();
       else reset();
-    };
-    const colorBlur = (event: FocusEvent) => {
-      if (
-        event.target instanceof HTMLInputElement &&
-        event.target.dataset.visualizerColor
-      )
-        updateColors();
     };
     const resize = new ResizeObserver(([entry]) => {
       width = entry.contentRect.width;
@@ -242,8 +237,7 @@ export function AudioVisualizer({
     for (const [event, handler] of events)
       audio.addEventListener(event, handler);
     document.addEventListener("visibilitychange", visibility);
-    document.addEventListener("input", previewColor, true);
-    document.addEventListener("focusout", colorBlur);
+    document.addEventListener(VISUALIZER_COLOR_PREVIEW_EVENT, previewColor);
     motionPreference.addEventListener("change", reset);
     latest.current.onStatus("loading");
     canvas.style.visibility = "hidden";
@@ -276,8 +270,10 @@ export function AudioVisualizer({
       resize.disconnect();
       intersection.disconnect();
       document.removeEventListener("visibilitychange", visibility);
-      document.removeEventListener("input", previewColor, true);
-      document.removeEventListener("focusout", colorBlur);
+      document.removeEventListener(
+        VISUALIZER_COLOR_PREVIEW_EVENT,
+        previewColor,
+      );
       motionPreference.removeEventListener("change", reset);
       for (const [event, handler] of events)
         audio.removeEventListener(event, handler);
