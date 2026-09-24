@@ -2,10 +2,13 @@ import type { PointerEvent, RefObject } from "react";
 import { LoaderCircle, Sparkles } from "lucide-react";
 import type { SongDebugInfo } from "../../shared/types";
 import type { PlayerState } from "./usePlayer";
-import { AudioVisualizer } from "./AudioVisualizer";
-import type { VisualizerSettings } from "./visualizer-settings";
 import { displaySongArtist, displaySongTitle } from "./song-title";
 import { DebugWidget, type DebugWidgetData } from "./DebugWidget";
+import { AudioVisualizer } from "./AudioVisualizer";
+import type {
+  VisualizerSettings,
+  VisualizerStatus,
+} from "./visualizer-settings";
 
 export const captionPositions = [
   "top-left",
@@ -22,7 +25,9 @@ export type CaptionPosition = (typeof captionPositions)[number];
 
 export interface NowPlayingProps {
   player: PlayerState;
-  visualizer: VisualizerSettings;
+  visualizerSettings: VisualizerSettings;
+  onVisualizerStatus: (status: VisualizerStatus, detail?: string) => void;
+  visualizerThemeKey?: unknown;
   showNowPlayingTitleArtist: boolean;
   debugMode: boolean;
   debugInfo?: SongDebugInfo | null;
@@ -37,7 +42,9 @@ export interface NowPlayingProps {
 
 export function NowPlaying({
   player,
-  visualizer,
+  visualizerSettings,
+  onVisualizerStatus,
+  visualizerThemeKey,
   showNowPlayingTitleArtist,
   debugMode,
   debugInfo,
@@ -113,6 +120,14 @@ export function NowPlaying({
           />
         )}
         <div className="artwork-grain" />
+        <AudioVisualizer
+          audioRef={player.audioRef}
+          getAudioAnalyser={player.getAudioAnalyser}
+          settings={visualizerSettings}
+          onStatus={onVisualizerStatus}
+          themeKey={visualizerThemeKey}
+          trackKey={player.song?.id}
+        />
         {player.videoEncoding && (
           <div className="video-encoding-indicator" role="status">
             <LoaderCircle className="spin" size={14} />
@@ -125,12 +140,13 @@ export function NowPlaying({
             </span>
           </div>
         )}
-        <AudioVisualizer
-          analyser={player.analyser}
-          playing={player.playing}
-          settings={visualizer}
-        />
-        {debugMode && player.song && <DebugWidget data={debugData} />}
+        {debugMode && player.song && (
+          <DebugWidget
+            key={player.song.id}
+            data={debugData}
+            audioRef={player.audioRef}
+          />
+        )}
         {showNowPlayingTitleArtist && (
           <div
             className={

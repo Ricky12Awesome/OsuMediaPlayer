@@ -16,7 +16,6 @@ import type {
 } from "../../shared/types";
 import type { PlayerState } from "./usePlayer";
 import { SettingsPicker } from "./SettingsPicker";
-import type { VisualizerSettings } from "./visualizer-settings";
 
 const videoCodecOptions = [
   { value: "auto", label: "Auto (best available)" },
@@ -67,8 +66,6 @@ export interface SettingsPanelProps {
   setShowTitleUnicode: Dispatch<SetStateAction<boolean>>;
   showArtistUnicode: boolean;
   setShowArtistUnicode: Dispatch<SetStateAction<boolean>>;
-  visualizer: VisualizerSettings;
-  setVisualizer: (settings: VisualizerSettings) => void;
   clearingCache: CacheKind | null;
   cacheUsage: CacheUsage | null;
   cacheNotice: CacheNotice | null;
@@ -113,8 +110,6 @@ export function SettingsPanel({
   setShowTitleUnicode,
   showArtistUnicode,
   setShowArtistUnicode,
-  visualizer,
-  setVisualizer,
   clearingCache,
   cacheUsage,
   cacheNotice,
@@ -384,7 +379,7 @@ export function SettingsPanel({
           <button
             type="button"
             className="secondary-button settings-reset-button"
-            title="Restore playback, layout, appearance, sorting, and visualizer preferences to their original defaults"
+            title="Restore playback, layout, appearance, and sorting preferences to their original defaults"
             onClick={requestSettingsReset}
           >
             <RefreshCw size={15} /> Reset

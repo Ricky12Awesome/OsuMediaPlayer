@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type RefObject } from "react";
 
 export type DebugVideoSource = "none" | "Original" | "Cache" | "HLS";
 
@@ -37,6 +37,7 @@ export interface DebugWidgetData {
 
 interface DebugWidgetProps {
   data: DebugWidgetData | null | undefined;
+  audioRef: RefObject<HTMLAudioElement | null>;
 }
 
 interface DebugRow {
@@ -294,9 +295,19 @@ async function copyText(value: string): Promise<boolean> {
   return copied;
 }
 
-export function DebugWidget({ data }: DebugWidgetProps) {
+export function DebugWidget({ data, audioRef }: DebugWidgetProps) {
   const [copiedLabel, setCopiedLabel] = useState<string | null>(null);
+  const [timestamps, setTimestamps] = useState<string[]>([]);
   const rows = rowsFor(data ?? {});
+  const copyValue = (value: string, label: string) => {
+    void copyText(value).then((copiedToClipboard) => {
+      if (!copiedToClipboard) return;
+      setCopiedLabel(label);
+      window.setTimeout(() => {
+        setCopiedLabel((current) => (current === label ? null : current));
+      }, 900);
+    });
+  };
 
   return (
     <div
@@ -306,45 +317,79 @@ export function DebugWidget({ data }: DebugWidgetProps) {
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
     >
-      {rows.map((row) => {
-        const displayValue = row.format
-          ? row.format(row.value)
-          : textValue(row.value);
-        const missing = displayValue === null;
-        const value = displayValue ?? "none";
-        const copied = copiedLabel === row.label;
-        return (
-          <div className="debug-widget-row" key={row.label}>
-            <span className="debug-widget-key">{row.label}:</span>
-            <button
-              type="button"
-              className={
-                "debug-widget-value" +
-                (missing ? " is-none" : "") +
-                (copied ? " is-copied" : "") +
-                sourceClass(row.source)
-              }
-              title={copied ? "Copied" : `Copy ${row.label}`}
-              aria-label={`Copy ${row.label}`}
-              onPointerDown={(event) => event.stopPropagation()}
-              onClick={(event) => {
-                event.stopPropagation();
-                void copyText(value).then((copiedToClipboard) => {
-                  if (!copiedToClipboard) return;
-                  setCopiedLabel(row.label);
-                  window.setTimeout(() => {
-                    setCopiedLabel((current) =>
-                      current === row.label ? null : current,
-                    );
-                  }, 900);
-                });
-              }}
-            >
-              {value}
-            </button>
-          </div>
-        );
-      })}
+      <div className="debug-widget-metadata">
+        {rows.map((row) => {
+          const displayValue = row.format
+            ? row.format(row.value)
+            : textValue(row.value);
+          const missing = displayValue === null;
+          const value = displayValue ?? "none";
+          const copied = copiedLabel === row.label;
+          return (
+            <div className="debug-widget-row" key={row.label}>
+              <span className="debug-widget-key">{row.label}:</span>
+              <button
+                type="button"
+                className={
+                  "debug-widget-value" +
+                  (missing ? " is-none" : "") +
+                  (copied ? " is-copied" : "") +
+                  sourceClass(row.source)
+                }
+                title={copied ? "Copied" : `Copy ${row.label}`}
+                aria-label={`Copy ${row.label}`}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  copyValue(value, row.label);
+                }}
+              >
+                {value}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      <div className="debug-widget-timestamps">
+        {timestamps.length > 0 && (
+          <ol className="debug-widget-timestamp-list" aria-label="Timestamps">
+            {timestamps.map((timestamp, index) => (
+              <li key={index}>{timestamp}</li>
+            ))}
+          </ol>
+        )}
+        <div className="debug-widget-timestamps-actions">
+          <button
+            type="button"
+            className="debug-widget-timestamp-action"
+            onClick={() => {
+              const position = audioRef.current?.currentTime;
+              if (position === undefined) return;
+              const timestamp = formatDuration(position);
+              if (timestamp)
+                setTimestamps((current) => [...current, timestamp]);
+            }}
+          >
+            Add timestamp
+          </button>
+          <button
+            type="button"
+            className="debug-widget-timestamp-action"
+            disabled={timestamps.length === 0}
+            onClick={() => copyValue(timestamps.join("\n"), "timestamps")}
+          >
+            {copiedLabel === "timestamps" ? "Copied" : "Copy list"}
+          </button>
+          <button
+            type="button"
+            className="debug-widget-timestamp-action"
+            disabled={timestamps.length === 0}
+            onClick={() => setTimestamps([])}
+          >
+            Clear
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

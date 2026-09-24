@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { _electron as electron } from "playwright";
 
 // Keep the packaged-app smoke and shared-control geometry checks independent
@@ -6,8 +9,9 @@ import { _electron as electron } from "playwright";
 const electronEnv = { ...process.env, ELECTRON_RENDERER_URL: "" };
 delete electronEnv.ELECTRON_RUN_AS_NODE;
 
+const userData = await mkdtemp(join(tmpdir(), "osu-media-player-e2e-"));
 const app = await electron.launch({
-  args: [".", "--no-sandbox"],
+  args: [".", "--no-sandbox", `--user-data-dir=${userData}`],
   env: electronEnv,
 });
 
@@ -60,7 +64,6 @@ try {
     await panelToggle.click();
   }
 
-  await page.getByRole("tab", { name: "Settings" }).click();
   const settingsControlMetrics = await page.evaluate(() => {
     const metric = (selector) => {
       const element = document.querySelector(selector);
@@ -91,76 +94,44 @@ try {
     settingsControlMetrics.picker.height,
     settingsControlMetrics.toggle.height,
   );
-
-  await page.getByRole("tab", { name: "Visualizer" }).click();
-  const visualizerMetrics = await page.evaluate(() => {
-    const readGroup = (label) => {
-      const group = document.querySelector(`[aria-label="${label}"]`);
-      const options = group?.querySelector(".settings-choice-group");
-      const text = group?.querySelector(".settings-row-label");
-      if (
-        !(group instanceof HTMLElement) ||
-        !(options instanceof HTMLElement) ||
-        !(text instanceof HTMLElement)
-      ) {
-        throw new Error(`Missing visualizer group: ${label}`);
-      }
-      const groupRect = group.getBoundingClientRect();
-      const optionRect = options.getBoundingClientRect();
-      const textRect = text.getBoundingClientRect();
-      return {
-        buttonsFit: [...options.querySelectorAll("button")].every(
-          (button) => button.scrollWidth <= button.clientWidth,
-        ),
-        rightGap: groupRect.right - optionRect.right,
-        sameLine:
-          Math.abs(
-            textRect.top +
-              textRect.height / 2 -
-              (optionRect.top + optionRect.height / 2),
-          ) < 1,
-        separated: textRect.right <= optionRect.left,
-      };
-    };
-    const heading = document.querySelector(
-      ".visualizer-settings > .settings-label",
-    );
-    const visualizerToggle = document.querySelector(
-      ".visualizer-settings .settings-switch",
-    );
-    const visualizerChoice = document.querySelector(
-      ".visualizer-settings .settings-choice-option",
-    );
-    if (
-      !(heading instanceof HTMLElement) ||
-      !(visualizerToggle instanceof HTMLElement) ||
-      !(visualizerChoice instanceof HTMLElement)
-    ) {
-      throw new Error("Missing visualizer controls");
-    }
-    return {
-      choiceHeight: visualizerChoice.getBoundingClientRect().height,
-      headingVisible: getComputedStyle(heading).display !== "none",
-      mode: readGroup("Visualizer mode"),
-      style: readGroup("Visualizer style"),
-      toggleHeight: visualizerToggle.getBoundingClientRect().height,
-    };
+  await page.getByRole("tab", { name: "Visualizer", exact: true }).click();
+  const response = page.getByRole("spinbutton", {
+    name: "Response time (ms)",
+    exact: true,
   });
-  assert.equal(visualizerMetrics.headingVisible, true);
+  await response.fill("15");
+  await response.press("Enter");
   assert.equal(
-    visualizerMetrics.toggleHeight,
-    settingsControlMetrics.toggle.height,
+    await page.evaluate(
+      () =>
+        JSON.parse(localStorage.getItem("visualizer-settings"))
+          .responsivenessMs,
+    ),
+    15,
   );
+  const canvas = page.locator(".artwork-stage .audio-visualizer");
+  assert.equal(await canvas.count(), 1);
   assert.equal(
-    visualizerMetrics.choiceHeight,
-    settingsControlMetrics.choice.height,
+    await canvas.evaluate((element) => getComputedStyle(element).pointerEvents),
+    "none",
   );
-  for (const group of [visualizerMetrics.style, visualizerMetrics.mode]) {
-    assert.ok(Math.abs(group.rightGap) < 0.5);
-    assert.equal(group.sameLine, true);
-    assert.equal(group.separated, true);
-    assert.equal(group.buttonsFit, true);
-  }
+  await page
+    .getByRole("button", { name: "Enable visualizer", exact: true })
+    .click();
+  assert.equal(await canvas.count(), 0);
+  await page
+    .getByRole("button", { name: "Enable visualizer", exact: true })
+    .click();
+  assert.equal(await canvas.count(), 1);
+  await page.getByRole("tab", { name: "Visualizer", exact: true }).focus();
+  await page.keyboard.press("ArrowLeft");
+  assert.equal(
+    await page
+      .getByRole("tab", { name: "General", exact: true })
+      .getAttribute("aria-selected"),
+    "true",
+  );
 } finally {
   await app.close();
+  await rm(userData, { recursive: true, force: true });
 }

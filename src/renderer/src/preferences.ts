@@ -5,6 +5,11 @@ import {
   type VideoEncodingQuality,
   type VideoMaxFps,
 } from "../../shared/types";
+import {
+  defaultVisualizerSettings,
+  parseVisualizerSettings,
+  type VisualizerSettings,
+} from "./visualizer-settings";
 
 /** Values persisted by the renderer. Keep this map in sync with the UI defaults. */
 export interface Preferences {
@@ -31,8 +36,9 @@ export interface Preferences {
     | "bottom-left"
     | "left-center";
   songListWidth: number;
-  visualizerPanelOpen: boolean;
+  sidePanelOpen: boolean;
   sidePanelWidth: number;
+  visualizer: VisualizerSettings;
   playback: {
     volume: number;
     muted: boolean;
@@ -66,8 +72,9 @@ const keys: Record<PreferenceKey, string> = {
   artworkTheme: "artwork-theme",
   nowPlayingPosition: "now-playing-position",
   songListWidth: "song-list-width",
-  visualizerPanelOpen: "visualizer-panel-open",
+  sidePanelOpen: "side-panel-open",
   sidePanelWidth: "side-panel-width",
+  visualizer: "visualizer-settings",
   playback: "playback-settings",
 };
 
@@ -97,8 +104,9 @@ export const preferenceDefaults: Preferences = {
   artworkTheme: true,
   nowPlayingPosition: "top-left",
   songListWidth: 466,
-  visualizerPanelOpen: false,
+  sidePanelOpen: false,
   sidePanelWidth: 416,
+  visualizer: defaultVisualizerSettings,
   playback: {
     volume: 0.75,
     muted: false,
@@ -163,7 +171,7 @@ function parseValue<K extends PreferenceKey>(
     case "showNowPlayingTitleArtist":
     case "debugMode":
     case "artworkTheme":
-    case "visualizerPanelOpen":
+    case "sidePanelOpen":
       return parseBoolean(value, fallback as boolean) as Preferences[K];
     case "songListPosition":
       return (
@@ -193,6 +201,8 @@ function parseValue<K extends PreferenceKey>(
       ) as Preferences[K];
     case "playback":
       return parsePlayback(value) as Preferences[K];
+    case "visualizer":
+      return parseVisualizerSettings(value) as Preferences[K];
   }
 }
 

@@ -1,31 +1,25 @@
-import type { Dispatch, ReactNode, RefObject, SetStateAction } from "react";
-import { AudioWaveform, Settings2, X } from "lucide-react";
-import type { VisualizerSettings } from "./visualizer-settings";
-import { VisualizerControls } from "./AudioVisualizer";
-
-export type SidePanelTab = "visualizer" | "settings";
+import { useId, useRef, useState, type ReactNode, type RefObject } from "react";
+import { Settings2, X } from "lucide-react";
 
 interface PlayerToolsPanelProps {
   panelRef: RefObject<HTMLElement | null>;
   open: boolean;
-  tab: SidePanelTab;
-  setTab: Dispatch<SetStateAction<SidePanelTab>>;
   onClose: () => void;
-  visualizer: VisualizerSettings;
-  setVisualizer: (settings: VisualizerSettings) => void;
   settingsContent: ReactNode;
+  visualizerContent: ReactNode;
 }
 
 export function PlayerToolsPanel({
   panelRef,
   open,
-  tab,
-  setTab,
   onClose,
-  visualizer,
-  setVisualizer,
   settingsContent,
+  visualizerContent,
 }: PlayerToolsPanelProps) {
+  const id = useId();
+  const [tab, setTab] = useState<"general" | "visualizer">("general");
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const tabs = ["general", "visualizer"] as const;
   return (
     <aside
       ref={panelRef}
@@ -38,14 +32,9 @@ export function PlayerToolsPanel({
       <div className="side-panel-heading">
         <div>
           <span className="settings-label">
-            {tab === "visualizer" ? (
-              <AudioWaveform size={16} />
-            ) : (
-              <Settings2 size={16} />
-            )}{" "}
-            {tab === "visualizer" ? "AUDIO VISUALIZER" : "PLAYER SETTINGS"}
+            <Settings2 size={16} /> PLAYER SETTINGS
           </span>
-          <h2>{tab === "visualizer" ? "Visualizer" : "Settings"}</h2>
+          <h2>Settings</h2>
         </div>
         <button
           type="button"
@@ -57,46 +46,56 @@ export function PlayerToolsPanel({
         </button>
       </div>
       <div
-        className="panel-tabs side-panel-tabs"
+        className="panel-tabs"
         role="tablist"
-        aria-label="Player tools"
+        aria-label="Settings categories"
       >
-        <button
-          type="button"
-          role="tab"
-          id="settings-tab"
-          className={"panel-tab " + (tab === "settings" ? "active" : "")}
-          aria-selected={tab === "settings"}
-          aria-controls="side-panel-tab-panel"
-          tabIndex={tab === "settings" ? 0 : -1}
-          onClick={() => setTab("settings")}
-        >
-          <Settings2 size={15} /> Settings
-        </button>
-        <button
-          type="button"
-          role="tab"
-          id="visualizer-tab"
-          className={"panel-tab " + (tab === "visualizer" ? "active" : "")}
-          aria-selected={tab === "visualizer"}
-          aria-controls="side-panel-tab-panel"
-          tabIndex={tab === "visualizer" ? 0 : -1}
-          onClick={() => setTab("visualizer")}
-        >
-          <AudioWaveform size={15} /> Visualizer
-        </button>
+        {tabs.map((value, index) => (
+          <button
+            key={value}
+            ref={(element) => {
+              tabRefs.current[index] = element;
+            }}
+            id={`${id}-${value}-tab`}
+            type="button"
+            className={`panel-tab ${tab === value ? "active" : ""}`}
+            role="tab"
+            aria-selected={tab === value}
+            aria-controls={`${id}-${value}-panel`}
+            tabIndex={tab === value ? 0 : -1}
+            onClick={() => setTab(value)}
+            onKeyDown={(event) => {
+              let next: number;
+              if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+                next =
+                  (index +
+                    (event.key === "ArrowRight" ? 1 : -1) +
+                    tabs.length) %
+                  tabs.length;
+              } else if (event.key === "Home" || event.key === "End") {
+                next = event.key === "Home" ? 0 : tabs.length - 1;
+              } else {
+                return;
+              }
+              event.preventDefault();
+              event.stopPropagation();
+              setTab(tabs[next]!);
+              tabRefs.current[next]?.focus();
+            }}
+          >
+            {value === "general" ? "General" : "Visualizer"}
+          </button>
+        ))}
       </div>
       <div
+        key={tab}
+        id={`${id}-${tab}-panel`}
         className="side-panel-content"
-        id="side-panel-tab-panel"
         role="tabpanel"
-        aria-labelledby={tab + "-tab"}
+        aria-labelledby={`${id}-${tab}-tab`}
+        tabIndex={0}
       >
-        {tab === "visualizer" ? (
-          <VisualizerControls settings={visualizer} onChange={setVisualizer} />
-        ) : (
-          settingsContent
-        )}
+        {tab === "general" ? settingsContent : visualizerContent}
       </div>
     </aside>
   );

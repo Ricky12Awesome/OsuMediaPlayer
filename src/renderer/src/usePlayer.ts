@@ -31,6 +31,7 @@ import {
 import { displaySongArtist, displaySongTitle } from "./song-title";
 import { usePlayerVideo } from "./usePlayerVideo";
 import { readPreference, writePreference } from "./preferences";
+import { PlayerAudioAnalysis } from "./visualizer-audio";
 
 function readSettings() {
   return readPreference("playback");
@@ -85,8 +86,8 @@ export interface PlayerState {
   next: () => Promise<void>;
   previous: () => Promise<void>;
   jumpRandom: (direction: 1 | -1) => Promise<void>;
-  audioRef: RefObject<HTMLAudioElement>;
-  analyser: AnalyserNode | null;
+  audioRef: RefObject<HTMLAudioElement | null>;
+  getAudioAnalyser: () => AnalyserNode | null;
   videoRef: RefObject<HTMLVideoElement | null>;
   videoUrl: string | null;
   videoSource: VideoSource;
@@ -109,13 +110,13 @@ export function usePlayer(
     element.crossOrigin = "anonymous";
     return element;
   });
-  const graph = useRef<{
-    context: AudioContext;
-    source: MediaElementAudioSourceNode;
-    analyser: AnalyserNode;
-  } | null>(null);
-  const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
-  const audioRef = useRef(audio);
+  const audioRef = useRef<HTMLAudioElement | null>(audio);
+  const [audioAnalysis] = useState(() => new PlayerAudioAnalysis(audio));
+  const getAudioAnalyser = useCallback(
+    () => audioAnalysis.getAnalyser(),
+    [audioAnalysis],
+  );
+  useEffect(() => audioAnalysis.mount(), [audioAnalysis]);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [settings] = useState(readSettings);
   const [song, setSong] = useState<Song | null>(initialSong);
@@ -247,23 +248,8 @@ export function usePlayer(
   const resumeGeneration = useCallback(
     async (id: number) => {
       try {
-        // Attach once to the existing decoder. Only one path reaches the speakers.
-        if (!graph.current) {
-          const context = new AudioContext();
-          const analyser = context.createAnalyser();
-          analyser.fftSize = 2048;
-          // Keep the raw spectrum here; the per-layout FFT retention setting
-          // owns smoothing so its effect remains visible to the user.
-          analyser.smoothingTimeConstant = 0;
-          const source = context.createMediaElementSource(audio);
-          source.connect(context.destination);
-          source.connect(analyser); // Analysis-only branch, never connected to output.
-          graph.current = { context, source, analyser };
-          setAnalyser(analyser);
-        }
-        if (graph.current.context.state === "suspended")
-          await graph.current.context.resume();
         if (id !== generation.current || !mounted.current) return;
+        audioAnalysis.resume();
         await audio.play();
         if (id === generation.current && mounted.current) {
           syncVideo(true);
@@ -281,7 +267,7 @@ export function usePlayer(
         setError(playbackError(reason));
       }
     },
-    [audio, syncVideo],
+    [audio, audioAnalysis, syncVideo],
   );
 
   const loadSong = useCallback(
@@ -750,13 +736,6 @@ export function usePlayer(
       audio.pause();
       audio.removeAttribute("src");
       audio.load();
-      // StrictMode re-runs effects synchronously; only dispose on a real unmount.
-      queueMicrotask(() => {
-        if (!mounted.current && graph.current) {
-          graph.current.source.disconnect();
-          void graph.current.context.close();
-        }
-      });
     };
   }, [api, audio, initialSong, syncVideo]);
 
@@ -882,7 +861,7 @@ export function usePlayer(
     previous,
     jumpRandom,
     audioRef,
-    analyser,
+    getAudioAnalyser,
     videoRef,
     videoUrl,
     videoSource,

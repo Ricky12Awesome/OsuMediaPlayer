@@ -1,638 +1,302 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, type RefObject } from "react";
+import { VisualizerAnalysis } from "./visualizer-analysis";
+import { VISUALIZER_COLOR_PREVIEW_EVENT } from "./visualizer-color";
 import {
-  type VisualizerLayoutSettings,
-  type VisualizerSettings,
-  getVisualizerLayoutSettings,
-  parseVisualizer,
-  fftLeadingOffset,
-  retainWaveform,
-  visualizerBarIndex,
-  visualizerProfileKey,
+  createVisualizerRenderer,
+  WebGPUUnavailableError,
+  type VisualizerColors,
+  type VisualizerRenderer,
+} from "./visualizer-gpu";
+import type {
+  VisualizerSettings,
+  VisualizerStatus,
 } from "./visualizer-settings";
+import "./visualizer.css";
 
-const key = "visualizer";
-
-function normalizeVisualizerValue(name: string, value: number): number {
-  return name === "rotation" ? Math.round(value * 4) / 4 : value;
-}
-
-function visualizerStep(name: string): number {
-  return name === "rotation" ? 0.25 : 1;
-}
-
-export function useVisualizerSettings() {
-  const [settings, setSettings] = useState(() => {
-    try {
-      return parseVisualizer(localStorage.getItem(key));
-    } catch {
-      return parseVisualizer(null);
-    }
-  });
-  useEffect(() => {
-    try {
-      localStorage.setItem(key, JSON.stringify(settings));
-    } catch {
-      /* Optional storage. */
-    }
-  }, [settings]);
-  return [settings, setSettings] as const;
-}
-
-export function VisualizerControls({
-  settings,
-  onChange,
-}: {
+interface AudioVisualizerProps {
+  audioRef: RefObject<HTMLAudioElement | null>;
+  getAudioAnalyser: () => AnalyserNode | null;
   settings: VisualizerSettings;
-  onChange: (settings: VisualizerSettings) => void;
-}) {
-  const layoutSettings = getVisualizerLayoutSettings(settings);
-  const updateLayout = (patch: Partial<VisualizerLayoutSettings>) =>
-    (() => {
-      const next = { ...layoutSettings, ...patch };
-      onChange({
-        ...settings,
-        [settings.layout]: next,
-        profiles: {
-          ...settings.profiles,
-          [visualizerProfileKey(settings.layout, next.mode)]: next,
-        },
-      });
-    })();
-  const switchRow = (
-    active: boolean,
-    title: string,
-    description: string,
-    onClick: () => void,
-    disabled = false,
-  ) => (
-    <div className="settings-row">
-      <span className="settings-row-label" title={description}>
-        {title}
-      </span>
-      <button
-        type="button"
-        className={"settings-switch " + (active ? "active" : "")}
-        aria-label={title}
-        aria-pressed={active}
-        disabled={disabled}
-        title={description}
-        onClick={onClick}
-      >
-        {active ? "On" : "Off"}
-      </button>
-    </div>
-  );
-  const toggleGlobal = (title: string, description: string) =>
-    switchRow(settings.enabled, title, description, () =>
-      onChange({ ...settings, enabled: !settings.enabled }),
-    );
-  const toggle = (
-    key: "mirrored" | "flipped" | "mirrorVertically",
-    title: string,
-    description: string,
-    disabled = false,
-  ) =>
-    switchRow(
-      layoutSettings[key],
-      title,
-      description,
-      () => updateLayout({ [key]: !layoutSettings[key] }),
-      disabled,
-    );
-  return (
-    <div className="settings-block visualizer-settings">
-      <span className="settings-label">AUDIO VISUALIZER</span>
-      {toggleGlobal("Show visualizer", "Display bars over the artwork")}
-      <div
-        className="settings-row visualizer-choice-fieldset"
-        role="group"
-        aria-label="Visualizer style"
-      >
-        <span className="settings-row-label visualizer-choice-label">
-          Style
-        </span>
-        <div className="settings-choice-group visualizer-choice-options">
-          {(["line", "circle"] as const).map((layout) => (
-            <button
-              key={layout}
-              type="button"
-              aria-pressed={settings.layout === layout}
-              className={
-                "settings-choice-option " +
-                (settings.layout === layout ? "active" : "")
-              }
-              onClick={() =>
-                onChange({
-                  ...settings,
-                  layout,
-                  [layout]:
-                    settings.profiles[
-                      visualizerProfileKey(layout, layoutSettings.mode)
-                    ],
-                })
-              }
-            >
-              {layout === "line" ? "Line" : "Circle"}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div
-        className="settings-row visualizer-choice-fieldset"
-        role="group"
-        aria-label="Visualizer mode"
-      >
-        <span className="settings-row-label visualizer-choice-label">Mode</span>
-        <div className="settings-choice-group visualizer-choice-options">
-          {(["fft", "waveform"] as const).map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              aria-pressed={layoutSettings.mode === mode}
-              className={
-                "settings-choice-option " +
-                (layoutSettings.mode === mode ? "active" : "")
-              }
-              onClick={() => updateLayout({ mode })}
-            >
-              {mode === "fft" ? "FFT" : "Waveform"}
-            </button>
-          ))}
-        </div>
-      </div>
-      {settings.layout === "line" ? (
-        <fieldset className="visualizer-toggle-fieldset">
-          <legend className="settings-label">Mirroring</legend>
-          {toggle(
-            "mirrored",
-            "Mirror horizontally",
-            "Reflect the sequence around its peak",
-          )}
-          {toggle(
-            "flipped",
-            "Flip",
-            "Place the lowest frequency at the center",
-            !layoutSettings.mirrored,
-          )}
-          {toggle(
-            "mirrorVertically",
-            "Mirror vertically",
-            "Extend bars equally above and below the baseline",
-          )}
-        </fieldset>
-      ) : (
-        <fieldset className="visualizer-toggle-fieldset">
-          <legend className="settings-label">Mirroring</legend>
-          {toggle(
-            "mirrored",
-            "Mirror horizontally",
-            "Reflect the sequence around the ring",
-          )}
-          {toggle(
-            "flipped",
-            "Flip",
-            "Reverse the mirrored frequency order",
-            !layoutSettings.mirrored,
-          )}
-          {toggle(
-            "mirrorVertically",
-            "Mirror vertically",
-            "Reflect one semicircle onto the other",
-          )}
-        </fieldset>
-      )}
-      <fieldset className="visualizer-dimensions">
-        <legend className="settings-label">Bars</legend>
-        {(
-          [
-            ["bars", "Bars", 8, 256, ""],
-            ["width", "Bar width (%)", 10, 100, "%"],
-            ["length", "Bar length (%)", 10, 100, "%"],
-            ...(layoutSettings.mode === "waveform"
-              ? ([
-                  ["waveformMultiplier", "Waveform multiplier", 1, 25, "×"],
-                  ["waveformRetention", "Retention", 0, 250, " ms"],
-                ] as const)
-              : []),
-            ...(layoutSettings.mode === "fft"
-              ? ([["fftRetention", "Retention", 0, 250, " ms"]] as const)
-              : []),
-            ...(settings.layout === "circle"
-              ? ([
-                  ["inwardLength", "Inner length", 0, 100, "%"],
-                  ["radius", "Radius", 8, 45, "%"],
-                  ["rotation", "Rotation speed", -6, 6, ""],
-                ] as const)
-              : []),
-          ] as const
-        ).map(([name, label, min, max, unit]) => (
-          <div className="visualizer-slider-card" key={name}>
-            <label
-              className="settings-row-label visualizer-slider-label"
-              htmlFor={`visualizer-${name}`}
-            >
-              {label.replace(" (%)", "")}
-            </label>
-            <div className="visualizer-slider-control">
-              <input
-                id={`visualizer-${name}`}
-                aria-label={label}
-                type="range"
-                min={min}
-                max={max}
-                step={visualizerStep(name)}
-                value={normalizeVisualizerValue(name, layoutSettings[name])}
-                aria-valuetext={
-                  name === "rotation" &&
-                  normalizeVisualizerValue(name, layoutSettings[name]) === 0
-                    ? "Off"
-                    : `${normalizeVisualizerValue(name, layoutSettings[name])}${name === "bars" ? " bars" : unit}`
-                }
-                style={
-                  {
-                    "--slider-progress": `${((normalizeVisualizerValue(name, layoutSettings[name]) - min) / (max - min)) * 100}%`,
-                  } as CSSProperties
-                }
-                onChange={(e) =>
-                  updateLayout({
-                    [name]: normalizeVisualizerValue(
-                      name,
-                      Number(e.target.value),
-                    ),
-                  })
-                }
-              />
-              <div className="visualizer-slider-limits" aria-hidden="true">
-                <span>
-                  {min}
-                  {unit}
-                </span>
-                <span>
-                  {max}
-                  {unit}
-                </span>
-              </div>
-            </div>
-            <output
-              className="visualizer-slider-value"
-              htmlFor={`visualizer-${name}`}
-            >
-              {name === "rotation" &&
-              normalizeVisualizerValue(name, layoutSettings[name]) === 0
-                ? "Off"
-                : `${normalizeVisualizerValue(name, layoutSettings[name])}${unit}`}
-            </output>
-          </div>
-        ))}
-      </fieldset>
-    </div>
-  );
+  onStatus: (status: VisualizerStatus, detail?: string) => void;
+  themeKey?: unknown;
+  trackKey?: string;
+}
+
+function hexColor(value: string): [number, number, number] {
+  return [1, 3, 5].map(
+    (offset) => parseInt(value.slice(offset, offset + 2), 16) / 255,
+  ) as [number, number, number];
 }
 
 export function AudioVisualizer({
-  analyser,
-  playing,
+  audioRef,
+  getAudioAnalyser,
   settings,
-}: {
-  analyser: AnalyserNode | null;
-  playing: boolean;
-  settings: VisualizerSettings;
-}) {
+  onStatus,
+  themeKey,
+  trackKey,
+}: AudioVisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const latest = useRef(settings);
-  latest.current = settings;
-  const playbackRef = useRef(playing);
-  playbackRef.current = playing;
-  const playbackMixRef = useRef(0);
-  const [revision, setRevision] = useState(0);
-  const [unavailable, setUnavailable] = useState(false);
+  const colorRef = useRef<HTMLSpanElement>(null);
+  const latest = useRef({
+    settings,
+    getAudioAnalyser,
+    onStatus,
+    trackKey,
+  });
+  latest.current = { settings, getAudioAnalyser, onStatus, trackKey };
+  const refresh = useRef<(() => void) | null>(null);
+
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || !settings.enabled) return;
-    const gl = canvas.getContext("webgl", {
-      alpha: true,
-      antialias: false,
-      depth: false,
-      stencil: false,
-      powerPreference: "low-power",
-    });
-    if (!gl) {
-      setUnavailable(true);
+    if (!settings.enabled) {
+      latest.current.onStatus("off");
       return;
     }
-    let frame = 0,
-      visible = true,
-      lost = false;
-    let width = 0,
-      height = 0;
-    const shaders: WebGLShader[] = [];
-    const program = gl.createProgram()!;
-    const buffer = gl.createBuffer()!;
-    const setup = () => {
-      for (const [type, code] of [
-        [
-          gl.VERTEX_SHADER,
-          "attribute vec2 p; void main(){gl_Position=vec4(p,0.0,1.0);}",
-        ],
-        [
-          gl.FRAGMENT_SHADER,
-          "precision mediump float; uniform vec3 color; void main(){gl_FragColor=vec4(color * 0.8,0.8);}",
-        ],
-      ] as const) {
-        const shader = gl.createShader(type)!;
-        shaders.push(shader);
-        gl.shaderSource(shader, code);
-        gl.compileShader(shader);
-        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) return false;
-        gl.attachShader(program, shader);
-      }
-      gl.linkProgram(program);
-      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) return false;
-      gl.useProgram(program);
-      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-      gl.bufferData(gl.ARRAY_BUFFER, 1022 * 12 * 4, gl.DYNAMIC_DRAW);
-      const position = gl.getAttribLocation(program, "p");
-      gl.enableVertexAttribArray(position);
-      gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
-      return true;
+    const canvas = canvasRef.current;
+    const audio = audioRef.current;
+    const colorProbe = colorRef.current;
+    if (!canvas || !audio || !colorProbe) return;
+    let cancelled = false;
+    const controller = new AbortController();
+    let failed = false;
+    let renderer: VisualizerRenderer | null = null;
+    let frameId: number | null = null;
+    let previousTime = 0;
+    let angle = 0;
+    let width = 0;
+    let height = 0;
+    let visible = true;
+    let colorPreviewPending = false;
+    let colors: VisualizerColors = [
+      [1, 0.4, 0.67],
+      [1, 0.7, 0.83],
+    ];
+    const analysis = new VisualizerAnalysis();
+    const motionPreference = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    );
+    const active = () =>
+      !audio.paused && !audio.ended && !audio.seeking && audio.readyState >= 2;
+    const stop = () => {
+      if (frameId !== null) cancelAnimationFrame(frameId);
+      frameId = null;
+      previousTime = 0;
     };
-    const ready = setup();
-    setUnavailable(!ready);
-    const sampleSize = analyser?.fftSize ?? 2048;
-    const samples = new Uint8Array(sampleSize);
-    const waveform = new Float32Array(sampleSize);
-    const retained = new Float32Array(256);
-    const initialLayoutSettings = getVisualizerLayoutSettings(settings);
-    let previousMode = initialLayoutSettings.mode;
-    let previousBars = initialLayoutSettings.bars;
-    let previousLayout = settings.layout;
-    const amplitudes = new Float32Array(256);
-    const liveAmplitudes = new Float32Array(256);
-    const vertices = new Float32Array(1022 * 12);
-    let lastFrame = -Infinity;
-    const draw = (time: number) => {
-      frame = 0;
-      if (!ready || lost) return;
-
-      if (document.hidden || !visible || width === 0 || height === 0) {
-        gl.clearColor(0, 0, 0, 0);
-        gl.clear(gl.COLOR_BUFFER_BIT);
-        return;
-      }
-      if (time - lastFrame < 1000 / 60 - 1) {
-        frame = requestAnimationFrame(draw);
-        return;
-      }
-      const elapsed = Number.isFinite(lastFrame) ? time - lastFrame : 1000 / 60;
-      lastFrame = time;
-      const activeAnalyser = playbackRef.current ? analyser : null;
-      const targetMix = activeAnalyser ? 1 : 0;
-      const mixStep = Math.min(1, Math.max(0, elapsed / 280));
-      const playbackMix =
-        playbackMixRef.current + (targetMix - playbackMixRef.current) * mixStep;
-      playbackMixRef.current = playbackMix;
-      gl.clearColor(0, 0, 0, 0);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      const s = latest.current;
-      const layoutSettings = s[s.layout];
-      const mode = layoutSettings.mode;
-      const bars = layoutSettings.bars;
+    const fail = (message: string) => {
+      if (cancelled || failed) return;
+      failed = true;
+      stop();
+      renderer?.dispose();
+      renderer = null;
+      canvas.style.visibility = "hidden";
+      latest.current.onStatus("error", message);
+    };
+    const draw = (now: number) => {
+      frameId = null;
       if (
-        s.layout !== previousLayout ||
-        mode !== previousMode ||
-        bars !== previousBars
+        cancelled ||
+        failed ||
+        !renderer ||
+        document.hidden ||
+        !visible ||
+        !width ||
+        !height
+      )
+        return;
+      const current = latest.current.settings;
+      const playing = active();
+      const interval = current.maxFps > 0 ? 1000 / current.maxFps : 0;
+      if (
+        interval > 0 &&
+        playing &&
+        previousTime &&
+        !colorPreviewPending &&
+        now - previousTime < interval - 0.5
       ) {
-        retained.fill(0);
-        liveAmplitudes.fill(0);
+        frameId = requestAnimationFrame(draw);
+        return;
       }
-      previousLayout = s.layout;
-      previousMode = mode;
-      previousBars = bars;
-      if (activeAnalyser && mode === "fft")
-        activeAnalyser.getByteFrequencyData(samples);
-      else if (activeAnalyser) activeAnalyser.getFloatTimeDomainData(waveform);
-      const scale = Math.min(width, height);
-      const radius =
-        scale * (s.layout === "circle" ? layoutSettings.radius / 100 : 0.23);
-      const maxLength = (scale * 0.2 * layoutSettings.length) / 100;
-      // Analyze once before mirroring, so trimming preserves all symmetries.
-      for (let i = 0; i < bars; i++) {
-        let liveAmplitude = liveAmplitudes[i];
-        if (activeAnalyser) {
-          let amplitude = 0;
-          if (mode === "fft") {
-            const endBin = Math.min(
-              activeAnalyser.frequencyBinCount,
-              Math.floor(
-                (18000 * activeAnalyser.fftSize) /
-                  activeAnalyser.context.sampleRate,
-              ),
-            );
-            const start = Math.floor(Math.pow(endBin, i / bars));
-            const end = Math.max(
-              start + 1,
-              Math.floor(Math.pow(endBin, (i + 1) / bars)),
-            );
-            for (let j = start; j < end; j++)
-              amplitude = Math.max(amplitude, samples[j] / 255);
-            amplitude = retainWaveform(
-              retained[i],
-              amplitude,
-              elapsed,
-              layoutSettings.fftRetention,
-            );
-            retained[i] = amplitude;
-          } else {
-            const sample =
-              waveform[Math.floor((i * (waveform.length - 1)) / (bars - 1))];
-            const target = Math.min(
-              1,
-              Math.abs(sample) * layoutSettings.waveformMultiplier,
-            );
-            amplitude = retainWaveform(
-              retained[i],
-              target,
-              elapsed,
-              layoutSettings.waveformRetention,
-            );
-            retained[i] = amplitude;
-          }
-          liveAmplitude = amplitude;
-          liveAmplitudes[i] = amplitude;
+      try {
+        const analyser = latest.current.getAudioAnalyser();
+        if (analyser) {
+          const result = analysis.update(
+            analyser,
+            current,
+            now,
+            playing,
+            latest.current.trackKey,
+          );
+          const reduced =
+            current.respectReducedMotion && motionPreference.matches;
+          if (playing && previousTime && !reduced)
+            angle =
+              (angle +
+                ((Math.min(100, now - previousTime) / 1000) *
+                  current.rotationSpeed *
+                  Math.PI) /
+                  180) %
+              (Math.PI * 2);
+          renderer.resize(width, height, current.resolution);
+          renderer.render(current, result, angle, colors, reduced);
+          colorPreviewPending = false;
+          canvas.style.visibility = "visible";
         }
-
-        const breath = 0.08 + 0.045 * (0.5 + 0.5 * Math.sin(time * 0.0012));
-        const ripple = 0.025 * Math.sin(time * 0.0018 + i * 0.24);
-        const idleAmplitude = Math.max(0, Math.min(1, breath + ripple));
-        amplitudes[i] = Math.max(
-          idleAmplitude,
-          liveAmplitude * playbackMix + idleAmplitude * (1 - playbackMix),
+      } catch {
+        fail(
+          "The visualizer could not read or render audio. Toggle it off and on to retry.",
         );
+        return;
       }
-      const offset = mode === "fft" ? fftLeadingOffset(amplitudes, bars) : 0;
-      const count = bars - offset;
-      const mirrored = layoutSettings.mirrored;
-      const flipped = layoutSettings.flipped;
-      const barCount = count === 0 ? 0 : mirrored ? count * 2 - 1 : count;
-      const mirrorCircle =
-        s.layout === "circle" && layoutSettings.mirrorVertically;
-      const drawnBars = mirrorCircle ? barCount * 2 : barCount;
-      const rotationRpm = normalizeVisualizerValue(
-        "rotation",
-        layoutSettings.rotation,
-      );
-      const circleRotation =
-        s.layout === "circle" ? (time / 60000) * rotationRpm * Math.PI * 2 : 0;
-      for (let i = 0; i < barCount; i++) {
-        const sampleIndex = visualizerBarIndex(i, count, mirrored, flipped);
-        const amplitude = amplitudes[offset + sampleIndex];
-        const angle = mirrorCircle
-          ? ((i + 0.5) / drawnBars) * Math.PI * 2
-          : (i / barCount) * Math.PI * 2 - Math.PI / 2;
-        const dx = s.layout === "circle" ? Math.cos(angle) : 0;
-        const dy = s.layout === "circle" ? Math.sin(angle) : -1;
-        const x =
-          s.layout === "circle"
-            ? width / 2 + dx * radius
-            : width * (0.08 + (0.84 * (i + 0.5)) / barCount);
-        const y = s.layout === "circle" ? height / 2 + dy * radius : height / 2;
-        const halfWidth =
-          (((s.layout === "circle" ? 2 * Math.PI * radius : width * 0.84) /
-            drawnBars) *
-            layoutSettings.width) /
-          200;
-        const length = amplitude * maxLength;
-        const mirrorBaseline =
-          layoutSettings.mirrorVertically && s.layout === "line";
-        const inwardLength =
-          s.layout === "circle"
-            ? length * (layoutSettings.inwardLength / 100)
-            : 0;
-        const low =
-          s.layout === "circle"
-            ? -inwardLength
-            : mirrorBaseline
-              ? -Math.abs(length)
-              : 0;
-        const high = mirrorBaseline ? Math.abs(length) : length;
-        // Two triangles per bar, uploaded and drawn together in one call.
-        for (let v = 0; v < 6; v++) {
-          const side = v === 0 || v === 3 || v === 5 ? -halfWidth : halfWidth;
-          const along = v === 0 || v === 1 || v === 3 ? low : high;
-          vertices[i * 12 + v * 2] =
-            ((x + dx * along - dy * side) / width) * 2 - 1;
-          vertices[i * 12 + v * 2 + 1] =
-            1 - ((y + dy * along + dx * side) / height) * 2;
-          if (mirrorCircle) {
-            // Reflect the same geometry across the horizontal diameter.
-            const reflected = (drawnBars - 1 - i) * 12 + v * 2;
-            vertices[reflected] = vertices[i * 12 + v * 2];
-            vertices[reflected + 1] = -vertices[i * 12 + v * 2 + 1];
-          }
-        }
-      }
-      if (s.layout === "circle" && circleRotation !== 0) {
-        // Rotate around the canvas center in pixel space. NDC x/y have
-        // different scales when the canvas is not square, so compensate for
-        // the aspect ratio while applying the clockwise screen-space turn.
-        const cosine = Math.cos(circleRotation);
-        const sine = Math.sin(circleRotation);
-        const heightToWidth = height / width;
-        const widthToHeight = width / height;
-        for (let i = 0; i < drawnBars * 12; i += 2) {
-          const x = vertices[i];
-          const y = vertices[i + 1];
-          vertices[i] = cosine * x + sine * heightToWidth * y;
-          vertices[i + 1] = -sine * widthToHeight * x + cosine * y;
-        }
-      }
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, vertices);
-      gl.drawArrays(gl.TRIANGLES, 0, drawnBars * 6);
-      frame = requestAnimationFrame(draw);
+      previousTime = playing ? now : 0;
+      if (playing) frameId = requestAnimationFrame(draw);
     };
-    const refresh = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(draw);
+    const schedule = () => {
+      if (
+        !cancelled &&
+        !failed &&
+        renderer &&
+        frameId === null &&
+        !document.hidden &&
+        visible
+      )
+        frameId = requestAnimationFrame(draw);
     };
-    const colorLocation = gl.getUniformLocation(program, "color");
-    const updateColor = () => {
-      if (!ready || lost) return;
-      const rgb = getComputedStyle(canvas)
-        .getPropertyValue("--pink-rgb")
-        .trim()
-        .split(/\s+/)
-        .map(Number);
-      const color =
-        rgb.length === 3 && rgb.every(Number.isFinite) ? rgb : [255, 102, 170];
-      gl.uniform3f(
-        colorLocation,
-        color[0] / 255,
-        color[1] / 255,
-        color[2] / 255,
-      );
-      refresh();
+    const updateColors = () => {
+      const current = latest.current.settings;
+      const readColor = (value: string): [number, number, number] => {
+        if (value.startsWith("#")) return hexColor(value);
+        colorProbe.style.color = value;
+        const parts = getComputedStyle(colorProbe)
+          .color.match(/[\d.]+/g)
+          ?.map(Number);
+        return parts && parts.length >= 3
+          ? [parts[0] / 255, parts[1] / 255, parts[2] / 255]
+          : [1, 0.4, 0.67];
+      };
+      colors = [
+        readColor(
+          current.colorMode === "theme" ? "var(--pink)" : current.color1,
+        ),
+        readColor(
+          current.colorMode === "theme" ? "var(--pink-pale)" : current.color2,
+        ),
+      ];
+      schedule();
     };
-    // Theme variables live on the app shell; react only to theme mutations.
-    const themeObserver = new MutationObserver(updateColor);
-    for (
-      let element: Element | null = canvas;
-      element;
-      element = element.parentElement
-    )
-      themeObserver.observe(element, {
-        attributes: true,
-        attributeFilter: ["style", "class"],
-      });
-    updateColor();
+    const previewColor = (event: Event) => {
+      if (!(event instanceof CustomEvent)) return;
+      const detail = event.detail as { field?: unknown; value?: unknown };
+      if (
+        latest.current.settings.colorMode !== "custom" ||
+        typeof detail.value !== "string" ||
+        !/^#[0-9a-f]{6}$/i.test(detail.value)
+      )
+        return;
+      const field = detail.field;
+      if (field !== "color1" && field !== "color2") return;
+      colors[field === "color1" ? 0 : 1] = hexColor(detail.value);
+      colorPreviewPending = true;
+      schedule();
+    };
+    refresh.current = updateColors;
+    const reset = () => {
+      analysis.reset();
+      previousTime = 0;
+      schedule();
+    };
+    const pause = () => {
+      stop();
+      reset();
+    };
+    const visibility = () => {
+      if (document.hidden) stop();
+      else reset();
+    };
     const resize = new ResizeObserver(([entry]) => {
       width = entry.contentRect.width;
       height = entry.contentRect.height;
-      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-      canvas.width = Math.round(width * dpr);
-      canvas.height = Math.round(height * dpr);
-      gl.viewport(0, 0, canvas.width, canvas.height);
-      refresh();
+      schedule();
     });
+    resize.observe(canvas);
     const intersection = new IntersectionObserver(([entry]) => {
       visible = entry.isIntersecting;
-      refresh();
+      if (!visible) stop();
+      else reset();
     });
-    const contextLost = (event: Event) => {
-      event.preventDefault();
-      lost = true;
-      cancelAnimationFrame(frame);
-      setUnavailable(true);
-    };
-    // Remounting restores all GPU resources after a context loss.
-    const contextRestored = () => setRevision((value) => value + 1);
-    resize.observe(canvas);
     intersection.observe(canvas);
-    document.addEventListener("visibilitychange", refresh);
-    canvas.addEventListener("webglcontextlost", contextLost);
-    canvas.addEventListener("webglcontextrestored", contextRestored);
-    refresh();
-    return () => {
-      cancelAnimationFrame(frame);
+    const events: Array<[string, () => void]> = [
+      ["play", reset],
+      ["playing", schedule],
+      ["pause", pause],
+      ["ended", pause],
+      ["seeking", pause],
+      ["seeked", reset],
+      ["emptied", pause],
+      ["loadeddata", reset],
+    ];
+    for (const [event, handler] of events)
+      audio.addEventListener(event, handler);
+    document.addEventListener("visibilitychange", visibility);
+    document.addEventListener(VISUALIZER_COLOR_PREVIEW_EVENT, previewColor);
+    motionPreference.addEventListener("change", reset);
+    latest.current.onStatus("loading");
+    canvas.style.visibility = "hidden";
+    updateColors();
+    void createVisualizerRenderer(canvas, fail, controller.signal)
+      .then((created) => {
+        if (cancelled || failed) {
+          created.dispose();
+          return;
+        }
+        renderer = created;
+        latest.current.onStatus("ready");
+        schedule();
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        failed = true;
+        latest.current.onStatus(
+          error instanceof WebGPUUnavailableError ? "unsupported" : "error",
+          error instanceof WebGPUUnavailableError
+            ? "WebGPU is unavailable on this device. Audio and video playback still work."
+            : "The visualizer could not start. Toggle it off and on to retry.",
+        );
+      });
+    const cleanup = () => {
+      cancelled = true;
+      controller.abort();
+      stop();
+      refresh.current = null;
       resize.disconnect();
-      themeObserver.disconnect();
       intersection.disconnect();
-      document.removeEventListener("visibilitychange", refresh);
-      canvas.removeEventListener("webglcontextlost", contextLost);
-      canvas.removeEventListener("webglcontextrestored", contextRestored);
-      gl.deleteBuffer(buffer);
-      gl.deleteProgram(program);
-      shaders.forEach((shader) => gl.deleteShader(shader));
+      document.removeEventListener("visibilitychange", visibility);
+      document.removeEventListener(
+        VISUALIZER_COLOR_PREVIEW_EVENT,
+        previewColor,
+      );
+      motionPreference.removeEventListener("change", reset);
+      for (const [event, handler] of events)
+        audio.removeEventListener(event, handler);
+      renderer?.dispose();
+      window.removeEventListener("pagehide", cleanup);
     };
-  }, [analyser, settings.enabled, revision]);
+    window.addEventListener("pagehide", cleanup);
+    return cleanup;
+  }, [audioRef, settings.enabled]);
+
+  useEffect(() => {
+    refresh.current?.();
+  }, [settings, themeKey]);
+
   if (!settings.enabled) return null;
   return (
     <>
-      <canvas className="audio-visualizer" ref={canvasRef} aria-hidden="true" />
-      {unavailable && (
-        <span className="visualizer-unavailable">
-          Visualizer unavailable: WebGL is not available.
-        </span>
-      )}
+      <canvas ref={canvasRef} className="audio-visualizer" aria-hidden="true" />
+      <span
+        ref={colorRef}
+        className="visualizer-color-probe"
+        aria-hidden="true"
+      />
     </>
   );
 }

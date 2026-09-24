@@ -26,9 +26,7 @@ import {
   clearCachedLastArtworkTheme,
 } from "./artwork-theme-cache";
 import { type VirtualSongListKeyboardControls } from "./VirtualSongList";
-import { useVisualizerSettings } from "./AudioVisualizer";
 import { usePlayer } from "./usePlayer";
-import { parseVisualizer } from "./visualizer-settings";
 import { SongListPanel, type SongListTab } from "./SongListPanel";
 import { NowPlaying, type CaptionPosition } from "./NowPlaying";
 import {
@@ -39,8 +37,13 @@ import {
 import { Transport } from "./Transport";
 import { useKeyboardShortcuts } from "./useKeyboardShortcuts";
 import { AppOverlays, type SongContextMenuState } from "./AppOverlays";
-import { PlayerToolsPanel, type SidePanelTab } from "./PlayerToolsPanel";
+import { PlayerToolsPanel } from "./PlayerToolsPanel";
 import { PanelResizers } from "./PanelResizers";
+import { VisualizerSettingsPanel } from "./VisualizerSettingsPanel";
+import {
+  defaultVisualizerSettings,
+  type VisualizerStatus,
+} from "./visualizer-settings";
 import {
   readPreference,
   removePreference,
@@ -187,7 +190,6 @@ export function App({
     showTitleUnicode,
     showArtistUnicode,
   );
-  const [visualizer, setVisualizer] = useVisualizerSettings();
   const [summary, setSummary] = useState<SongListSummary | null>(
     initialSongList,
   );
@@ -242,6 +244,19 @@ export function App({
     () => readPreference("showNowPlayingTitleArtist"),
   );
   const [debugMode, setDebugMode] = useState(() => readPreference("debugMode"));
+  const [visualizerSettings, setVisualizerSettings] = useState(() =>
+    readPreference("visualizer"),
+  );
+  const [visualizerStatus, setVisualizerStatus] = useState<{
+    status: VisualizerStatus;
+    detail?: string;
+  }>({ status: "loading" });
+  const updateVisualizerStatus = useCallback(
+    (status: VisualizerStatus, detail?: string) => {
+      setVisualizerStatus({ status, detail });
+    },
+    [],
+  );
   const [debugInfo, setDebugInfo] = useState<SongDebugInfo | null>(null);
   useEffect(() => {
     const toggleDebugMode = (event: globalThis.KeyboardEvent) => {
@@ -289,9 +304,8 @@ export function App({
   const [controlsVisible, setControlsVisible] = useState(true);
   const [alwaysShowControls, setAlwaysShowControls] = useState(true);
   const [sidePanelOpen, setSidePanelOpen] = useState(() =>
-    readPreference("visualizerPanelOpen"),
+    readPreference("sidePanelOpen"),
   );
-  const [sidePanelTab, setSidePanelTab] = useState<SidePanelTab>("settings");
   const [sidePanelWidth, setSidePanelWidth] = useState(() => {
     const value = readPreference("sidePanelWidth");
     return Number.isFinite(value)
@@ -300,7 +314,6 @@ export function App({
   });
   const [sidePanelResizing, setSidePanelResizing] = useState(false);
   const cacheLimitWheelRemainder = useRef(0);
-  const settingsPanelOpen = sidePanelOpen && sidePanelTab === "settings";
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [settingsResetConfirmation, setSettingsResetConfirmation] =
     useState(false);
@@ -565,7 +578,7 @@ export function App({
     [sidebarHidden],
   );
   useEffect(
-    () => writePreference("visualizerPanelOpen", sidePanelOpen),
+    () => writePreference("sidePanelOpen", sidePanelOpen),
     [sidePanelOpen],
   );
   useEffect(
@@ -586,6 +599,10 @@ export function App({
     [showNowPlayingTitleArtist],
   );
   useEffect(() => writePreference("debugMode", debugMode), [debugMode]);
+  useEffect(
+    () => writePreference("visualizer", visualizerSettings),
+    [visualizerSettings],
+  );
   useEffect(() => {
     const songId = player.song?.id;
     if (!debugMode || !songId) {
@@ -740,7 +757,7 @@ export function App({
     setSidePanelOpen,
     setSidebarHidden,
     setAlwaysShowControls,
-    settingsPanelOpen,
+    settingsPanelOpen: sidePanelOpen,
     shortcutsOpen,
     setShortcutsOpen,
     setShowNowPlayingTitleArtist,
@@ -914,7 +931,6 @@ export function App({
 
   const cancelCacheClear = useCallback(() => {
     setCacheConfirmation(null);
-    setSidePanelTab("settings");
     setSidePanelOpen(true);
   }, []);
 
@@ -940,7 +956,6 @@ export function App({
       });
     } finally {
       setClearingCache(null);
-      setSidePanelTab("settings");
       setSidePanelOpen(true);
       try {
         setCacheUsage(await api.getCacheUsage());
@@ -957,13 +972,11 @@ export function App({
 
   const cancelSettingsReset = useCallback(() => {
     setSettingsResetConfirmation(false);
-    setSidePanelTab("settings");
     setSidePanelOpen(true);
   }, []);
 
   const confirmSettingsReset = useCallback(() => {
     player.resetPlaybackSettings();
-    setVisualizer(parseVisualizer(null));
     setSort("title");
     setDescending(false);
     setCaptionPosition(defaultPosition);
@@ -975,16 +988,16 @@ export function App({
     setShowNowPlayingTitleArtist(true);
     setDebugMode(false);
     setArtworkThemeEnabled(true);
+    setVisualizerSettings({ ...defaultVisualizerSettings });
     setSongListWidth(minSongListWidth);
     setSidePanelWidth(defaultSidePanelWidth);
     setCacheNotice(null);
     setSettingsResetConfirmation(false);
-    setSidePanelTab("settings");
     setSidePanelOpen(true);
   }, [player.resetPlaybackSettings]);
 
   useEffect(() => {
-    if (!settingsPanelOpen) return;
+    if (!sidePanelOpen) return;
     let cancelled = false;
     void api
       .getCacheUsage()
@@ -997,7 +1010,7 @@ export function App({
     return () => {
       cancelled = true;
     };
-  }, [settingsPanelOpen]);
+  }, [sidePanelOpen]);
 
   useEffect(() => {
     if (!cacheConfirmation) return;
@@ -1225,7 +1238,9 @@ export function App({
         >
           <NowPlaying
             player={player}
-            visualizer={visualizer}
+            visualizerSettings={visualizerSettings}
+            onVisualizerStatus={updateVisualizerStatus}
+            visualizerThemeKey={activeArtworkTheme}
             showNowPlayingTitleArtist={showNowPlayingTitleArtist}
             debugMode={debugMode}
             debugInfo={debugInfo}
@@ -1241,11 +1256,15 @@ export function App({
           <PlayerToolsPanel
             panelRef={sidePanelRef}
             open={sidePanelOpen}
-            tab={sidePanelTab}
-            setTab={setSidePanelTab}
             onClose={() => setSidePanelOpen(false)}
-            visualizer={visualizer}
-            setVisualizer={setVisualizer}
+            visualizerContent={
+              <VisualizerSettingsPanel
+                settings={visualizerSettings}
+                onChange={setVisualizerSettings}
+                status={visualizerStatus.status}
+                statusDetail={visualizerStatus.detail}
+              />
+            }
             settingsContent={
               <SettingsPanel
                 summary={summary}
@@ -1270,8 +1289,6 @@ export function App({
                 setShowTitleUnicode={setShowTitleUnicode}
                 showArtistUnicode={showArtistUnicode}
                 setShowArtistUnicode={setShowArtistUnicode}
-                visualizer={visualizer}
-                setVisualizer={setVisualizer}
                 clearingCache={clearingCache}
                 cacheUsage={cacheUsage}
                 cacheNotice={cacheNotice}
@@ -1370,10 +1387,7 @@ export function App({
         onOpenShortcuts={() => setShortcutsOpen(true)}
         onToggleSidePanel={() => {
           if (sidePanelOpen) setSidePanelOpen(false);
-          else {
-            setSidePanelTab("settings");
-            setSidePanelOpen(true);
-          }
+          else setSidePanelOpen(true);
         }}
         onToggleSidebar={() => setSidebarHidden((value) => !value)}
         onFullscreen={() => api.windowControl("fullscreen")}
