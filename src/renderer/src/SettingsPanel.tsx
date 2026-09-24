@@ -1,4 +1,4 @@
-import type { Dispatch, RefObject, SetStateAction } from "react";
+import type { CSSProperties, Dispatch, RefObject, SetStateAction } from "react";
 import {
   FolderOpen,
   FolderHeart,
@@ -62,6 +62,8 @@ export interface SettingsPanelProps {
   setTransportLayout: Dispatch<SetStateAction<TransportLayout>>;
   artworkThemeEnabled: boolean;
   setArtworkThemeEnabled: Dispatch<SetStateAction<boolean>>;
+  backgroundDim: number;
+  setBackgroundDim: Dispatch<SetStateAction<number>>;
   showNowPlayingTitleArtist: boolean;
   setShowNowPlayingTitleArtist: Dispatch<SetStateAction<boolean>>;
   debugMode: boolean;
@@ -108,6 +110,8 @@ export function SettingsPanel({
   setTransportLayout,
   artworkThemeEnabled,
   setArtworkThemeEnabled,
+  backgroundDim,
+  setBackgroundDim,
   showNowPlayingTitleArtist,
   setShowNowPlayingTitleArtist,
   debugMode,
@@ -297,6 +301,25 @@ export function SettingsPanel({
           showArtistUnicode,
           () => setShowArtistUnicode((value) => !value),
         )}
+        <div>
+          <div className="settings-row">
+            <label className="settings-row-label" htmlFor="background-dim">
+              Dim background
+            </label>
+            <span className="settings-row-value">{backgroundDim}%</span>
+          </div>
+          <input
+            id="background-dim"
+            className="settings-range-input"
+            type="range"
+            min={0}
+            max={100}
+            value={backgroundDim}
+            aria-valuetext={`${backgroundDim}%`}
+            style={{ "--range-progress": `${backgroundDim}%` } as CSSProperties}
+            onChange={(event) => setBackgroundDim(Number(event.target.value))}
+          />
+        </div>
       </div>
       <div className="settings-block video-encoding-setting">
         <span className="settings-label">

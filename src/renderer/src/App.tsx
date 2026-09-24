@@ -291,6 +291,9 @@ export function App({
   const [artworkThemeEnabled, setArtworkThemeEnabled] = useState(() =>
     readPreference("artworkTheme"),
   );
+  const [backgroundDim, setBackgroundDim] = useState(() =>
+    readPreference("backgroundDim"),
+  );
   const [artworkTheme, setArtworkTheme] = useState<{
     url: string;
     theme: ArtworkTheme;
@@ -634,6 +637,10 @@ export function App({
   useEffect(
     () => writePreference("artworkTheme", artworkThemeEnabled),
     [artworkThemeEnabled],
+  );
+  useEffect(
+    () => writePreference("backgroundDim", backgroundDim),
+    [backgroundDim],
   );
   useEffect(
     () => writePreference("nowPlayingPosition", captionPosition),
@@ -989,6 +996,7 @@ export function App({
     setShowNowPlayingTitleArtist(true);
     setDebugMode(false);
     setArtworkThemeEnabled(true);
+    setBackgroundDim(0);
     setVisualizerSettings({ ...defaultVisualizerSettings });
     setSongListWidth(minSongListWidth);
     setSidePanelWidth(defaultSidePanelWidth);
@@ -1239,6 +1247,7 @@ export function App({
         >
           <NowPlaying
             player={player}
+            backgroundDim={backgroundDim}
             visualizerSettings={visualizerSettings}
             onVisualizerStatus={updateVisualizerStatus}
             visualizerThemeKey={activeArtworkTheme}
@@ -1286,6 +1295,8 @@ export function App({
                 setTransportLayout={setTransportLayout}
                 artworkThemeEnabled={artworkThemeEnabled}
                 setArtworkThemeEnabled={setArtworkThemeEnabled}
+                backgroundDim={backgroundDim}
+                setBackgroundDim={setBackgroundDim}
                 showNowPlayingTitleArtist={showNowPlayingTitleArtist}
                 setShowNowPlayingTitleArtist={setShowNowPlayingTitleArtist}
                 debugMode={debugMode}

@@ -26,6 +26,7 @@ export interface Preferences {
   showNowPlayingTitleArtist: boolean;
   debugMode: boolean;
   artworkTheme: boolean;
+  backgroundDim: number;
   nowPlayingPosition:
     | "top-left"
     | "top-center"
@@ -70,6 +71,7 @@ const keys: Record<PreferenceKey, string> = {
   showNowPlayingTitleArtist: "show-now-playing-title-artist",
   debugMode: "debug-mode",
   artworkTheme: "artwork-theme",
+  backgroundDim: "background-dim",
   nowPlayingPosition: "now-playing-position",
   songListWidth: "song-list-width",
   sidePanelOpen: "side-panel-open",
@@ -102,6 +104,7 @@ export const preferenceDefaults: Preferences = {
   showNowPlayingTitleArtist: true,
   debugMode: false,
   artworkTheme: true,
+  backgroundDim: 0,
   nowPlayingPosition: "top-left",
   songListWidth: 466,
   sidePanelOpen: false,
@@ -193,6 +196,11 @@ function parseValue<K extends PreferenceKey>(
       return Math.min(
         720,
         Math.max(466, parseNumber(value, fallback as number)),
+      ) as Preferences[K];
+    case "backgroundDim":
+      return Math.min(
+        100,
+        Math.max(0, parseNumber(value, fallback as number)),
       ) as Preferences[K];
     case "sidePanelWidth":
       return Math.min(

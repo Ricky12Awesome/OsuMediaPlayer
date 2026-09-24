@@ -25,6 +25,7 @@ export type CaptionPosition = (typeof captionPositions)[number];
 
 export interface NowPlayingProps {
   player: PlayerState;
+  backgroundDim: number;
   visualizerSettings: VisualizerSettings;
   onVisualizerStatus: (status: VisualizerStatus, detail?: string) => void;
   visualizerThemeKey?: unknown;
@@ -42,6 +43,7 @@ export interface NowPlayingProps {
 
 export function NowPlaying({
   player,
+  backgroundDim,
   visualizerSettings,
   onVisualizerStatus,
   visualizerThemeKey,
@@ -119,6 +121,11 @@ export function NowPlaying({
             aria-hidden="true"
           />
         )}
+        <div
+          className="artwork-dim"
+          style={{ opacity: backgroundDim / 100 }}
+          aria-hidden="true"
+        />
         <div className="artwork-grain" />
         <AudioVisualizer
           audioRef={player.audioRef}
