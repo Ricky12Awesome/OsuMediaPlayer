@@ -136,6 +136,61 @@ test("imports multiple sets selected by set and beatmap IDs or hashes", async ()
   }
 });
 
+test("reuses a file referenced by multiple names in one set", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "osu-import-shared-file-"));
+  const source = join(directory, "source");
+  const target = join(directory, "target");
+  await mkdir(source);
+  await mkdir(target);
+  try {
+    const hash = await addSong(source, "Shared File", 123);
+    await addSong(target, "Fixture Track", 900001);
+    const realm = new Realm({
+      path: join(source, "client.realm"),
+      schema: Schema,
+      schemaVersion: 52,
+    });
+    try {
+      realm.write(() => {
+        const set = realm.objects("BeatmapSet")[0] as unknown as {
+          Files: Array<{ Filename: string; File: { Hash: string } }>;
+        };
+        set.Files.push({ Filename: "copy.mp3", File: set.Files[0].File });
+      });
+    } finally {
+      realm.close();
+    }
+
+    assert.equal(await addTestTracks(source, target, { onlineIds: [123] }), 1);
+    const imported = new Realm({
+      path: join(target, "client.realm"),
+      schema: Schema,
+      schemaVersion: 52,
+    });
+    try {
+      const set = imported
+        .objects("BeatmapSet")
+        .find(
+          (entry) =>
+            (entry as unknown as { OnlineID: number }).OnlineID === 123,
+        ) as unknown as {
+        Files: Array<{ Filename: string; File: { Hash: string } }>;
+      };
+      assert.deepEqual(
+        set.Files.map((file) => [file.Filename, file.File.Hash]),
+        [
+          ["audio.mp3", hash],
+          ["copy.mp3", hash],
+        ],
+      );
+    } finally {
+      imported.close();
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("adds selected installed sets without changing the source or adding duplicates", async () => {
   const directory = await mkdtemp(join(tmpdir(), "osu-import-test-"));
   const source = join(directory, "source");

@@ -188,9 +188,9 @@ export async function addTestTracks(
             return [
               {
                 Filename: usage.Filename,
-                File: target.objectForPrimaryKey("File", hash) ?? {
-                  Hash: hash,
-                },
+                File:
+                  target.objectForPrimaryKey("File", hash) ??
+                  target.create("File", { Hash: hash }),
               },
             ];
           });

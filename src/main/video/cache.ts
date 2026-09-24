@@ -13,6 +13,7 @@ export interface StreamMetadata {
   profile?: EncodingProfile;
   cacheLimitBytes?: number;
   encoder?: string;
+  timestampRepaired?: boolean;
 }
 
 export interface CachedVideo {

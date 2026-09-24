@@ -92,6 +92,7 @@ export class VideoTranscoder {
   private cacheGeneration = 0;
   private clearPromise: Promise<void> | null = null;
   private requestVersion = 0;
+  private readonly timingChecks = new Map<string, Promise<boolean>>();
 
   constructor(
     private readonly cacheDirectory: string,
@@ -193,18 +194,35 @@ export class VideoTranscoder {
     if (!hash) return null;
     const asset = songList.assets.get(hash);
     if (!asset) return null;
-    if (!videoNeedsConversion(asset.filename)) {
+    const settings = normalizeVideoEncodingSettings(inputSettings);
+    const direct = !videoNeedsConversion(asset.filename);
+    let source: Awaited<ReturnType<typeof resolveMediaFile>> = null;
+    if (direct || settings.forceRemux) {
+      try {
+        source = await resolveMediaFile(songList, hash);
+      } catch {
+        // A cached conversion can still be used when the source is unavailable.
+      }
+    }
+    const inspectTiming =
+      (direct && /\.m(?:p4|4v)$/i.test(asset.filename)) || settings.forceRemux;
+    const timingIssue =
+      inspectTiming && source
+        ? await this.needsTimestampRepair(hash, source.filename)
+        : false;
+    if (requestVersion !== this.requestVersion) return null;
+    if (direct && !timingIssue) {
       await this.cancelEncoding();
       return { url: song.videoUrl, streaming: false };
     }
-    const settings = normalizeVideoEncodingSettings(inputSettings);
     const profileHash = videoEncodingProfileHash(settings);
-    let source: Awaited<ReturnType<typeof resolveMediaFile>> = null;
-    try {
-      source = await resolveMediaFile(songList, hash);
-    } catch {
-      // A cached conversion or an already-running stream does not need the
-      // original asset to be present.
+    if (!source) {
+      try {
+        source = await resolveMediaFile(songList, hash);
+      } catch {
+        // A cached conversion or an already-running stream does not need the
+        // original asset to be present.
+      }
     }
 
     const generation = this.cacheGeneration;
@@ -223,6 +241,14 @@ export class VideoTranscoder {
         let cachedMatches =
           cacheLimitBytes(settings) !== 0 &&
           (await this.cache.rememberCached(hash, destination, profileHash));
+        if (
+          timingIssue &&
+          cachedMatches &&
+          (await this.cache.readCacheManifest(hash))?.timestampRepaired !== true
+        ) {
+          await this.cache.removeCached(hash, destination);
+          cachedMatches = false;
+        }
         if (cachedMatches) await this.cache.touchCached(destination);
         await this.cache.enforceCacheLimit(cacheLimitBytes(settings));
         if (cachedMatches && !this.cache.ready.has(hash)) cachedMatches = false;
@@ -251,7 +277,9 @@ export class VideoTranscoder {
           return { ready: null as Promise<void> | null };
         }
 
-        if (streamHash === hash && streamMatchesProfile) {
+        const unrepairedStream =
+          timingIssue && streamMetadata?.timestampRepaired !== true;
+        if (streamHash === hash && streamMatchesProfile && !unrepairedStream) {
           if (requestVersion !== this.requestVersion)
             throw new VideoEncodingSupersededError();
           if (this.active?.hash === hash) return { ready: this.active.ready };
@@ -265,7 +293,7 @@ export class VideoTranscoder {
           await this.rotateStream(
             streamHash,
             generation,
-            streamHash !== hash || streamMatchesProfile,
+            streamHash !== hash || (streamMatchesProfile && !unrepairedStream),
           );
 
         if (requestVersion !== this.requestVersion)
@@ -280,6 +308,7 @@ export class VideoTranscoder {
           settings,
           profileHash,
           generation,
+          timingIssue,
         );
         return { ready: session.ready };
       });
@@ -302,6 +331,8 @@ export class VideoTranscoder {
       };
     } catch (error) {
       if (error instanceof VideoEncodingSupersededError) return null;
+      if (direct && timingIssue && requestVersion === this.requestVersion)
+        return { url: song.videoUrl, streaming: false };
       throw error;
     }
   }
@@ -333,6 +364,7 @@ export class VideoTranscoder {
     codec: string | null;
     fps: number | null;
     duration: number | null;
+    hasBFrames: number | null;
   }> {
     const { result } = runProcess(ffprobeFor(this.executable), [
       "-v",
@@ -340,39 +372,134 @@ export class VideoTranscoder {
       "-select_streams",
       "v:0",
       "-show_entries",
-      "stream=codec_name,avg_frame_rate,duration:format=duration",
+      "stream=codec_name,avg_frame_rate,r_frame_rate,duration,has_b_frames:format=duration",
       "-of",
       "json",
       filename,
     ]);
     const completed = await result;
-    if (completed.code !== 0) return { codec: null, fps: null, duration: null };
+    if (completed.code !== 0)
+      return { codec: null, fps: null, duration: null, hasBFrames: null };
     try {
       const parsed = JSON.parse(completed.stdout) as {
         streams?: Array<{
           codec_name?: string;
           avg_frame_rate?: string;
+          r_frame_rate?: string;
           duration?: string;
+          has_b_frames?: number;
         }>;
         format?: { duration?: string };
       };
       const stream = parsed.streams?.[0];
-      const [numerator, denominator] = (stream?.avg_frame_rate ?? "")
-        .split("/")
-        .map(Number);
       const fps =
-        denominator > 0 && Number.isFinite(numerator / denominator)
-          ? numerator / denominator
-          : null;
+        [stream?.avg_frame_rate, stream?.r_frame_rate]
+          .map((value) => {
+            const [numerator, denominator] = (value ?? "")
+              .split("/")
+              .map(Number);
+            return numerator > 0 && denominator > 0
+              ? numerator / denominator
+              : null;
+          })
+          .find((value) => value !== null && Number.isFinite(value)) ?? null;
       const durationValue = Number(stream?.duration ?? parsed.format?.duration);
       return {
         codec: stream?.codec_name ?? null,
         fps,
         duration: Number.isFinite(durationValue) ? durationValue : null,
+        hasBFrames:
+          typeof stream?.has_b_frames === "number" ? stream.has_b_frames : null,
       };
     } catch {
-      return { codec: null, fps: null, duration: null };
+      return { codec: null, fps: null, duration: null, hasBFrames: null };
     }
+  }
+
+  private needsTimestampRepair(
+    hash: string,
+    filename: string,
+  ): Promise<boolean> {
+    const existing = this.timingChecks.get(hash);
+    if (existing) return existing;
+    const check = this.detectTimestampIssue(filename).catch(() => false);
+    this.timingChecks.set(hash, check);
+    if (this.timingChecks.size > 128)
+      this.timingChecks.delete(this.timingChecks.keys().next().value!);
+    return check;
+  }
+
+  private async detectTimestampIssue(filename: string): Promise<boolean> {
+    const source = await this.probeSource(filename);
+    if (source.hasBFrames === null) return false;
+    const intervals =
+      source.duration && source.duration > 16
+        ? `%+#64,${source.duration / 2}%+#64`
+        : "%+#64";
+    const { result } = runProcess(ffprobeFor(this.executable), [
+      "-v",
+      "error",
+      "-select_streams",
+      "v:0",
+      "-read_intervals",
+      intervals,
+      "-show_entries",
+      "packet=pts,dts",
+      "-of",
+      "json",
+      filename,
+    ]);
+    const completed = await result;
+    if (completed.code !== 0) return false;
+    const parsed = JSON.parse(completed.stdout) as {
+      packets?: Array<{ pts?: number; dts?: number }>;
+    };
+    const packets = parsed.packets ?? [];
+    if (
+      source.hasBFrames > 0 &&
+      packets.length >= 8 &&
+      packets.every(
+        (packet) => packet.pts === undefined || packet.pts === packet.dts,
+      )
+    )
+      return true;
+    if (
+      source.hasBFrames !== 0 ||
+      !source.duration ||
+      packets[0]?.pts === undefined ||
+      packets[0].pts >= 0
+    )
+      return false;
+
+    const { result: frameResult } = runProcess(ffprobeFor(this.executable), [
+      "-v",
+      "error",
+      "-select_streams",
+      "v:0",
+      "-read_intervals",
+      `${Math.max(0, source.duration - 8)}%+9`,
+      "-show_entries",
+      "frame=best_effort_timestamp",
+      "-of",
+      "json",
+      filename,
+    ]);
+    const frames = await frameResult;
+    if (frames.code !== 0) return false;
+    const timestamps = (
+      JSON.parse(frames.stdout) as {
+        frames?: Array<{ best_effort_timestamp?: number }>;
+      }
+    ).frames?.map((frame) => frame.best_effort_timestamp);
+    return Boolean(
+      timestamps?.some(
+        (timestamp, index) =>
+          index > 0 &&
+          timestamp !== undefined &&
+          timestamps[index - 1] !== undefined &&
+          timestamp <= timestamps[index - 1]!,
+      ),
+    );
   }
 
   private async startEncoding(
@@ -381,6 +508,7 @@ export class VideoTranscoder {
     settings: VideoEncodingSettings,
     profileHash: string,
     generation: number,
+    timingIssue: boolean,
   ): Promise<EncodingSession> {
     await mkdir(this.streamDirectory, { recursive: true });
     const metadata: StreamMetadata = {
@@ -388,6 +516,7 @@ export class VideoTranscoder {
       profileHash,
       profile: encodingProfile(settings),
       cacheLimitBytes: cacheLimitBytes(settings),
+      timestampRepaired: timingIssue,
     };
     await writeFile(this.metadataFile, JSON.stringify(metadata));
 
@@ -419,6 +548,7 @@ export class VideoTranscoder {
       generation,
       resolveReady,
       rejectReady,
+      timingIssue,
     )
       .then(async () => {
         if (session.cancelled || generation !== this.cacheGeneration) return;
@@ -471,6 +601,7 @@ export class VideoTranscoder {
     generation: number,
     resolveReady: () => void,
     rejectReady: (error: Error) => void,
+    timingIssue: boolean,
   ): Promise<void> {
     let ready = false;
     const sourceInfo = await this.probeSource(source);
@@ -479,6 +610,7 @@ export class VideoTranscoder {
       (sourceInfo.fps !== null && sourceInfo.fps <= settings.maxFps + 0.01);
     const canRemux =
       settings.forceRemux &&
+      !timingIssue &&
       canKeepFrameRate &&
       sourceInfo.codec !== null &&
       new Set(["av1", "hevc", "h264"]).has(sourceInfo.codec) &&
@@ -520,7 +652,9 @@ export class VideoTranscoder {
           "-map",
           "0:v:0",
           "-vf",
-          options.filter,
+          timingIssue && sourceInfo.fps
+            ? `setpts=N/(${sourceInfo.fps}*TB),${options.filter}`
+            : options.filter,
           "-c:v",
           encoder.name,
           ...options.output,
@@ -550,6 +684,7 @@ export class VideoTranscoder {
           profile: encodingProfile(session.settings),
           cacheLimitBytes: cacheLimitBytes(session.settings),
           encoder: attempt.label,
+          timestampRepaired: timingIssue,
         } satisfies StreamMetadata),
       );
       this.emitEncodingStatus(session);
@@ -750,6 +885,7 @@ export class VideoTranscoder {
           profileHash: metadata.profileHash,
           profile: metadata.profile,
           encoder: metadata.encoder,
+          timestampRepaired: metadata.timestampRepaired,
         };
         await writeFile(
           this.cache.manifestFile(hash),
