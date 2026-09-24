@@ -1,15 +1,16 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { _electron as electron } from "playwright";
 import Realm from "realm";
 import { Schema } from "../src/shared/client-model";
+import { startElectronBootstrap } from "./fixtures/electron-bootstrap.mjs";
 
 const directory = await mkdtemp(join(tmpdir(), "osu-streaming-"));
 const songCount = 3000;
+const bootstrap = await startElectronBootstrap();
 try {
   const fixture = new Realm({
     path: join(directory, "client.realm"),
@@ -61,13 +62,10 @@ try {
   } finally {
     fixture.close();
   }
-  const bootstrap = join(directory, "bootstrap.html");
-  await writeFile(bootstrap, "<!doctype html><title>Streaming test</title>");
-
   for (const closeAt of ["complete", "early", "reading", "indexing"] as const) {
     const env: Record<string, string> = {
       ...process.env,
-      ELECTRON_RENDERER_URL: pathToFileURL(bootstrap).href,
+      ELECTRON_RENDERER_URL: bootstrap.url,
     };
     delete env.ELECTRON_RUN_AS_NODE;
     const app = await electron.launch({
@@ -88,10 +86,7 @@ try {
       const page = await app.firstWindow();
       await page.addInitScript(
         ({ installPath, closeAt }) => {
-          localStorage.setItem(
-            "song-list-path",
-            JSON.stringify(installPath),
-          );
+          localStorage.setItem("song-list-path", JSON.stringify(installPath));
           const state = window as typeof window & { streamedCounts: number[] };
           state.streamedCounts = [];
           window.playerAPI!.onSongListProgress((progress) => {
@@ -165,5 +160,6 @@ try {
   }
 } finally {
   Realm.shutdown();
+  await bootstrap.close();
   await rm(directory, { recursive: true, force: true });
 }

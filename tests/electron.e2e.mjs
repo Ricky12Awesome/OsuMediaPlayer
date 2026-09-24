@@ -1,28 +1,97 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { _electron as electron } from "playwright";
+import { startElectronBootstrap } from "./fixtures/electron-bootstrap.mjs";
 
-// Keep the packaged-app smoke and shared-control geometry checks independent
-// of a user's osu!lazer song list.
-const electronEnv = { ...process.env, ELECTRON_RENDERER_URL: "" };
-delete electronEnv.ELECTRON_RUN_AS_NODE;
+const mediaTypes = {
+  mp3: "audio/mpeg",
+  ogg: "audio/ogg",
+  wav: "audio/wav",
+  png: "image/png",
+  mp4: "video/mp4",
+  avi: "video/x-msvideo",
+  flv: "video/x-flv",
+};
 
+const installPath = resolve("tests/environment");
+const manifest = JSON.parse(
+  await readFile(join(installPath, "manifest.json"), "utf8"),
+);
 const userData = await mkdtemp(join(tmpdir(), "osu-media-player-e2e-"));
-const app = await electron.launch({
-  args: [".", "--no-sandbox", `--user-data-dir=${userData}`],
-  env: electronEnv,
-});
-
+let bootstrap;
+let app;
 try {
+  bootstrap = await startElectronBootstrap();
+  const electronEnv = {
+    ...process.env,
+    ELECTRON_RENDERER_URL: bootstrap.url,
+  };
+  delete electronEnv.ELECTRON_RUN_AS_NODE;
+  app = await electron.launch({
+    args: [".", "--no-sandbox", `--user-data-dir=${userData}`],
+    env: electronEnv,
+  });
   const page = await app.firstWindow();
+  await page.addInitScript((path) => {
+    localStorage.setItem("song-list-path", JSON.stringify(path));
+  }, installPath);
+  await app.evaluate(
+    ({ BrowserWindow }, filename) => {
+      void BrowserWindow.getAllWindows()[0].loadFile(filename);
+    },
+    join(process.cwd(), "dist/index.html"),
+  );
   await page.waitForSelector(".app-shell");
+  await page.waitForFunction(
+    (count) =>
+      document
+        .querySelector(".song-list-footer")
+        ?.textContent?.includes(`${count} songs in your song list`),
+    manifest.songs.length,
+  );
+  const loadedSongs = await page.evaluate(async () =>
+    (await window.playerAPI.querySongList({ limit: 10 })).items.map((song) => ({
+      title: song.title,
+      audioHash: song.audioHash,
+      backgroundHash: song.backgroundHash,
+      videoHash: song.videoHash,
+    })),
+  );
+  for (const expected of manifest.songs) {
+    const song = loadedSongs.find((item) => item.title === expected.title);
+    assert.ok(song, `Missing ${expected.title}`);
+    assert.equal(song.audioHash, expected.audio.hash);
+    assert.equal(song.backgroundHash, expected.background?.hash);
+    assert.equal(song.videoHash, expected.video?.hash);
+    for (const asset of [expected.audio, expected.background, expected.video]) {
+      if (!asset) continue;
+      const response = await page.evaluate(async (hash) => {
+        const result = await fetch(`omp://asset/${hash}`, {
+          headers: { Range: "bytes=0-31" },
+        });
+        return {
+          status: result.status,
+          type: result.headers.get("content-type"),
+          length: (await result.arrayBuffer()).byteLength,
+        };
+      }, asset.hash);
+      assert.deepEqual(response, {
+        status: 206,
+        type: mediaTypes[asset.filename.split(".").at(-1)],
+        length: 32,
+      });
+    }
+  }
   assert.equal(await page.title(), "OsuMediaPlayer");
   assert.ok(await page.locator(".transport").count());
 
   await page.mouse.move(1, 1);
-  await page.waitForTimeout(1500);
+  await page.waitForFunction(
+    () =>
+      getComputedStyle(document.querySelector(".transport")).opacity === "1",
+  );
   const shell = page.locator(".app-shell");
   assert.equal(
     await shell.evaluate((element) =>
@@ -43,7 +112,16 @@ try {
     ),
     false,
   );
-  await page.waitForTimeout(1500);
+  await page.waitForFunction(
+    () =>
+      !document
+        .querySelector(".app-shell")
+        ?.classList.contains("fullscreen-controls-visible"),
+  );
+  await page.waitForFunction(
+    () =>
+      getComputedStyle(document.querySelector(".transport")).opacity === "0",
+  );
   assert.equal(
     await shell.evaluate((element) =>
       element.classList.contains("fullscreen-controls-visible"),
@@ -55,6 +133,12 @@ try {
       .locator(".transport")
       .evaluate((element) => getComputedStyle(element).opacity),
     "0",
+  );
+  await page.keyboard.press("Control+e");
+  await page.waitForFunction(() =>
+    document
+      .querySelector(".app-shell")
+      ?.classList.contains("controls-always-visible"),
   );
 
   const panelToggle = page.getByRole("button", {
@@ -132,6 +216,7 @@ try {
     "true",
   );
 } finally {
-  await app.close();
+  await app?.close();
+  await bootstrap?.close();
   await rm(userData, { recursive: true, force: true });
 }
