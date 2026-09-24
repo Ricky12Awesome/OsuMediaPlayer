@@ -86,15 +86,24 @@ export function mapFrequencyBands(
   const low = clamp(minFrequency, 1, nyquist);
   const high = clamp(maxFrequency, low, nyquist);
   const binHz = sampleRate / fftSize;
+  const logRange = Math.log(high / low);
+  const logStep = (low * logRange) / count;
+  const linearStep = (high - low) / count;
+  // A purely logarithmic scale can assign dozens of bars to the same few
+  // low FFT bins. Blend toward linear spacing only enough to resolve them.
+  const linearBlend =
+    scale === "log" && linearStep > logStep
+      ? clamp((binHz * 0.55 - logStep) / (linearStep - logStep))
+      : 0;
+  const frequencyAt = (position: number) => {
+    const linear = low + (high - low) * position;
+    if (scale === "linear") return linear;
+    const logarithmic = low * Math.exp(logRange * position);
+    return logarithmic + (linear - logarithmic) * linearBlend;
+  };
   for (let i = 0; i < count; i++) {
-    const startHz =
-      scale === "log"
-        ? low * Math.pow(high / low, i / count)
-        : low + ((high - low) * i) / count;
-    const endHz =
-      scale === "log"
-        ? low * Math.pow(high / low, (i + 1) / count)
-        : low + ((high - low) * (i + 1)) / count;
+    const startHz = frequencyAt(i / count);
+    const endHz = frequencyAt((i + 1) / count);
     const start = Math.min(frequency.length - 1, Math.floor(startHz / binHz));
     const end = Math.min(
       frequency.length,

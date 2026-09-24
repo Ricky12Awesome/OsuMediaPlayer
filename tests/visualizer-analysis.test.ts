@@ -93,6 +93,16 @@ test("a narrow high note remains visible without lifting silent bands", () => {
   assert.ok(output[active] > 0 && output[active] < 0.1);
 });
 
+test("log spacing avoids repeating a low FFT bin across dozens of bars", () => {
+  const bins = new Float32Array(1024).fill(-Infinity);
+  bins[2] = -3;
+  const output = new Float32Array(256);
+  mapFrequencyBands(bins, 44100, 2048, 256, 30, 16000, "log", output);
+  assert.equal(output.length, 256);
+  assert.ok(output.filter((value) => value > 0.01).length <= 4);
+  assert.ok(output[0] > 0 && output[1] > 0);
+});
+
 test("adjacent low spectrum bars follow a strong bass slope without clipping", () => {
   const fixture = analyserFixture();
   fixture.frequency.set([-3, -6, -12, -20], 1);
@@ -105,9 +115,7 @@ test("adjacent low spectrum bars follow a strong bass slope without clipping", (
   );
   const head = Array.from(frame.values.slice(0, 12));
   assert.ok(head[0] < 1 && head[0] > 0.8);
-  assert.ok(
-    head.every((value, index) => index === 0 || value < head[index - 1]),
-  );
+  assert.ok(head.slice(1, 6).every((value, index) => value < head[index]));
   assert.ok(head[0] - head[11] > 0.4);
 });
 
