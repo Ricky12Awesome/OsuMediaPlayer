@@ -35,13 +35,16 @@ const browser = await chromium.launch({
     : {}),
   headless: true,
   args: [
+    // CI uses Xvfb so SwiftShader can present WebGPU canvas frames.
     "--no-sandbox",
     "--enable-unsafe-webgpu",
+    "--enable-unsafe-swiftshader",
+    "--enable-gpu",
+    "--ignore-gpu-blocklist",
     "--enable-features=Vulkan",
-    "--use-angle=vulkan",
+    "--use-angle=swiftshader",
     "--use-vulkan=swiftshader",
     "--use-webgpu-adapter=swiftshader",
-    "--disable-vulkan-surface",
   ],
 });
 const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });

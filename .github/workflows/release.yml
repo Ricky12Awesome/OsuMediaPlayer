@@ -48,7 +48,7 @@ jobs:
         run: npm run test:streaming
 
       - name: Run visualizer tests
-        run: npm run test:visualizer
+        run: xvfb-run -a -s "-screen 0 1600x1000x24" npm run test:visualizer
 
   prepare:
     name: Prepare release tag
