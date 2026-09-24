@@ -3,6 +3,9 @@ dist/
 dist-electron/
 release/
 test-results/
+tests/environment/
+tests/.environment-build-*/
+.streaming-test-*/
 .cache/
 .vite/
 *.log

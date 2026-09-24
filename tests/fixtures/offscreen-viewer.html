@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OsuMediaPlayer test environment</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: #17131f;
+        color: #eee;
+        font: 16px system-ui;
+      }
+      body {
+        display: grid;
+        grid-template-rows: auto 1fr;
+      }
+      header {
+        padding: 0.75rem 1rem;
+        background: #24202d;
+      }
+      header small {
+        display: block;
+        margin-top: 0.2rem;
+        opacity: 0.75;
+      }
+      main {
+        display: grid;
+        place-items: center;
+        padding: 1rem;
+      }
+      #screen {
+        display: block;
+        max-width: 100%;
+        max-height: calc(100dvh - 6rem);
+        outline: 1px solid #423a4e;
+        cursor: default;
+        user-select: none;
+        touch-action: none;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      OsuMediaPlayer · Electron offscreen test
+      <small
+        >Click the player to control it. Audio plays through Electron on this
+        computer.</small
+      >
+    </header>
+    <main>
+      <img id="screen" alt="Live Electron player" draggable="false" />
+    </main>
+    <script>
+      const screen = document.getElementById("screen");
+      let contentWidth = 1440;
+      let contentHeight = 920;
+      let currentFrame;
+      let moving = false;
+
+      fetch("/__offscreen/size")
+        .then((response) => response.json())
+        .then(([width, height]) => {
+          contentWidth = width;
+          contentHeight = height;
+        });
+
+      async function updateFrame() {
+        try {
+          if (!document.hidden) {
+            const response = await fetch("/__offscreen/frame", {
+              cache: "no-store",
+            });
+            if (response.ok && response.status === 200) {
+              const nextFrame = URL.createObjectURL(await response.blob());
+              await new Promise((done) => {
+                screen.onload = done;
+                screen.onerror = done;
+                screen.src = nextFrame;
+              });
+              if (currentFrame) URL.revokeObjectURL(currentFrame);
+              currentFrame = nextFrame;
+            }
+          }
+        } catch {
+          // The viewer retries while Electron starts or stops.
+        } finally {
+          setTimeout(updateFrame, 100);
+        }
+      }
+      void updateFrame();
+
+      function position(event) {
+        const rect = screen.getBoundingClientRect();
+        return {
+          x: Math.round(
+            ((event.clientX - rect.left) / rect.width) * contentWidth,
+          ),
+          y: Math.round(
+            ((event.clientY - rect.top) / rect.height) * contentHeight,
+          ),
+        };
+      }
+
+      function modifiers(event) {
+        return [
+          event.shiftKey && "shift",
+          event.ctrlKey && "control",
+          event.altKey && "alt",
+          event.metaKey && "meta",
+          event.buttons & 1 && "leftbuttondown",
+          event.buttons & 2 && "rightbuttondown",
+          event.buttons & 4 && "middlebuttondown",
+        ].filter(Boolean);
+      }
+
+      function send(input) {
+        void fetch("/__offscreen/input", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        }).catch(() => {});
+      }
+
+      screen.addEventListener("pointermove", (event) => {
+        if (moving) return;
+        moving = true;
+        requestAnimationFrame(() => {
+          moving = false;
+          send({
+            type: "mouseMove",
+            ...position(event),
+            modifiers: modifiers(event),
+          });
+        });
+      });
+      screen.addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        screen.setPointerCapture(event.pointerId);
+        send({
+          type: "mouseDown",
+          ...position(event),
+          button: ["left", "middle", "right"][event.button] ?? "left",
+          clickCount: event.detail >= 2 ? 2 : 1,
+          modifiers: modifiers(event),
+        });
+      });
+      screen.addEventListener("pointerup", (event) => {
+        send({
+          type: "mouseUp",
+          ...position(event),
+          button: ["left", "middle", "right"][event.button] ?? "left",
+          clickCount: event.detail >= 2 ? 2 : 1,
+          modifiers: modifiers(event),
+        });
+      });
+      screen.addEventListener(
+        "wheel",
+        (event) => {
+          event.preventDefault();
+          send({
+            type: "mouseWheel",
+            ...position(event),
+            deltaX: event.deltaX,
+            deltaY: event.deltaY,
+            modifiers: modifiers(event),
+          });
+        },
+        { passive: false },
+      );
+      screen.addEventListener("contextmenu", (event) => event.preventDefault());
+
+      function keyCode(event) {
+        if (event.code.startsWith("Key")) return event.code.slice(3);
+        if (event.code.startsWith("Digit")) return event.code.slice(5);
+        return (
+          {
+            ArrowLeft: "Left",
+            ArrowRight: "Right",
+            ArrowUp: "Up",
+            ArrowDown: "Down",
+            " ": "Space",
+          }[event.key] ?? event.key
+        );
+      }
+
+      window.addEventListener("keydown", (event) => {
+        event.preventDefault();
+        send({
+          type: "rawKeyDown",
+          keyCode: keyCode(event),
+          modifiers: modifiers(event),
+        });
+        if (
+          event.key.length === 1 &&
+          !event.ctrlKey &&
+          !event.altKey &&
+          !event.metaKey
+        )
+          send({
+            type: "char",
+            keyCode: event.key,
+            modifiers: modifiers(event),
+          });
+      });
+      window.addEventListener("keyup", (event) => {
+        event.preventDefault();
+        send({
+          type: "keyUp",
+          keyCode: keyCode(event),
+          modifiers: modifiers(event),
+        });
+      });
+    </script>
+  </body>
+</html>
