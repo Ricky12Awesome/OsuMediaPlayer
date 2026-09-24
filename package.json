@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit",
     "test": "npm run test:environment && node --import tsx --test tests/*.test.ts",
     "test:environment": "node --import tsx scripts/create-test-environment.ts",
+    "test:environment:add": "node --import tsx scripts/add-test-tracks.ts",
     "test:e2e": "npm run test:environment && npm run build && node tests/electron.e2e.mjs",
     "test:streaming": "node --import tsx tests/song-list-streaming.e2e.ts",
     "format": "prettier --write src tests scripts *.json *.ts README.md",

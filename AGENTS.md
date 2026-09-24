@@ -62,6 +62,18 @@ Keep these boundaries intact. Renderer code must not import Electron, Node files
 
 Add tests for changed behavior, especially boundary cases and cancellation or cache invalidation paths. Keep pure logic in focused `tests/*.test.ts` files and use Electron/browser tests for process or UI behavior.
 
+To inspect real tracks in the isolated test app, create the synthetic fixture, then import a bounded number of beatmap sets from an osu!lazer installation:
+
+```sh
+npm run test:environment
+npm run test:environment:add -- --source "/path/to/osu" --ids '[345678, 3456789, 234789]'
+npm run dev:test
+```
+
+`--ids` accepts a comma-separated or bracketed list of beatmap or beatmap set online IDs. `--hashes` accepts a list of 32-character MD5 hashes or stored 64-character hashes for beatmaps or sets. Quote bracketed lists in the shell; the flags can be repeated or combined, and matching sets are imported once. For example, `--hashes '["0123456789abcdef0123456789abcdef", "abcdef0123456789abcdef0123456789"]'`. `--query "track title"` can also match title or artist without case sensitivity. With no ID, hash, or query, the command adds the five most recently added sets; `--limit` changes that bound (maximum 100). Explicit ID or hash lists import all matches unless `--limit` is supplied.
+
+`--source` may be omitted to use the platform's default osu!lazer directory; `storage.ini` redirects are followed. The import copies each selected set's hashed files and song metadata into `tests/environment/`, skips sets already present, and only reads the installed directory. Stop the test app before importing. The added data is local and ignored by Git. `npm run dev:test` reuses this environment by default, creating it on first run. Use `npm run dev:test -- --clean` to rebuild it. `npm run test:environment`, `npm test`, and `npm run test:e2e` also rebuild the synthetic fixture and discard imported tracks.
+
 Run the checks that match the change:
 
 ```sh

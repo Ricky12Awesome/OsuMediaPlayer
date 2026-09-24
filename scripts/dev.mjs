@@ -1,5 +1,5 @@
 import { execFile, spawn } from "node:child_process";
-import { mkdir } from "node:fs/promises";
+import { mkdir, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
 
@@ -15,6 +15,7 @@ const viteCommand =
     : "node_modules/.bin/vite";
 const viteOrigin = "http://127.0.0.1:5173";
 const testEnvironment = process.argv.includes("--test-environment");
+const cleanTestEnvironment = process.argv.includes("--clean");
 // The viewer uses Vite's root while Electron loads the renderer on the same origin.
 const rendererUrl = testEnvironment
   ? `${viteOrigin}/index.html`
@@ -24,11 +25,21 @@ const testUserData = testEnvironment
   : null;
 
 if (testEnvironment) {
-  await execFileAsync(process.execPath, [
-    "--import",
-    "tsx",
-    "scripts/create-test-environment.ts",
-  ]);
+  let hasTestEnvironment = false;
+  try {
+    hasTestEnvironment = (
+      await stat(resolve("tests/environment/client.realm"))
+    ).isFile();
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  if (cleanTestEnvironment || !hasTestEnvironment) {
+    await execFileAsync(process.execPath, [
+      "--import",
+      "tsx",
+      "scripts/create-test-environment.ts",
+    ]);
+  }
   await mkdir(testUserData, { recursive: true });
 }
 
