@@ -248,7 +248,7 @@ export class VisualizerAnalysis {
     const elapsed =
       this.previousMs === null ? 0 : Math.max(0, nowMs - this.previousMs);
     this.previousMs = nowMs;
-    const sensitivity = clamp(settings.sensitivity, 0.1, 5);
+    const sensitivity = clamp(settings.sensitivity, 0.1, 15);
     const sampleRate = analyser.context.sampleRate;
     let sum = 0;
     for (let i = 0; i < this.time.length; i++) sum += this.time[i] ** 2;
