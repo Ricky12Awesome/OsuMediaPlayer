@@ -76,7 +76,8 @@ await page.addInitScript(() => {
         min = Math.min(min, data[index * 2]);
         max = Math.max(max, data[index * 2]);
       }
-      window.gpuTestStats.sampleRanges.push({ min, max });
+      const head = Array.from({ length: 20 }, (_, index) => data[index * 2]);
+      window.gpuTestStats.sampleRanges.push({ min, max, head });
       if (window.gpuTestStats.sampleRanges.length > 4)
         window.gpuTestStats.sampleRanges.shift();
     }
@@ -240,6 +241,26 @@ try {
     loud.red > loud.green * 5 && loud.red > loud.blue * 5,
     "Custom red colors reach the actual shader output",
   );
+
+  await update({
+    style: "line",
+    mode: "spectrum",
+    barCount: 64,
+    sensitivity: 1.5,
+    bassImpact: 100,
+  });
+  await snapshot();
+  const fftHead = await page.evaluate(
+    () => window.gpuTestStats.sampleRanges.at(-1).head,
+  );
+  assert.ok(
+    Math.max(...fftHead) < 0.99 &&
+      new Set(fftHead.map((value) => value.toFixed(2))).size > 5,
+    `Bass impact does not flatten the first FFT bars (${fftHead.map((value) => value.toFixed(2)).join(", ")})`,
+  );
+  await mkdir("test-results", { recursive: true });
+  await page.screenshot({ path: "test-results/visualizer-fft-line.png" });
+  await update({ bassImpact: 0 });
 
   await update({ colorMode: "theme" });
   await page.evaluate(() => window.visualizerTest.theme("#00ff00"));
