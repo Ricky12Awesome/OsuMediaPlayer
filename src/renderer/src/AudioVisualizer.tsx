@@ -21,6 +21,12 @@ interface AudioVisualizerProps {
   trackKey?: string;
 }
 
+function hexColor(value: string): [number, number, number] {
+  return [1, 3, 5].map(
+    (offset) => parseInt(value.slice(offset, offset + 2), 16) / 255,
+  ) as [number, number, number];
+}
+
 export function AudioVisualizer({
   audioRef,
   getAudioAnalyser,
@@ -59,6 +65,7 @@ export function AudioVisualizer({
     let width = 0;
     let height = 0;
     let visible = true;
+    let colorPreviewPending = false;
     let colors: VisualizerColors = [
       [1, 0.4, 0.67],
       [1, 0.7, 0.83],
@@ -98,6 +105,16 @@ export function AudioVisualizer({
       const current = latest.current.settings;
       const playing = active();
       const interval = current.maxFps > 0 ? 1000 / current.maxFps : 0;
+      if (
+        interval > 0 &&
+        playing &&
+        previousTime &&
+        !colorPreviewPending &&
+        now - previousTime < interval - 0.5
+      ) {
+        frameId = requestAnimationFrame(draw);
+        return;
+      }
       try {
         const analyser = latest.current.getAudioAnalyser();
         if (analyser) {
@@ -108,15 +125,6 @@ export function AudioVisualizer({
             playing,
             latest.current.trackKey,
           );
-          if (
-            interval > 0 &&
-            playing &&
-            previousTime &&
-            now - previousTime < interval - 0.5
-          ) {
-            frameId = requestAnimationFrame(draw);
-            return;
-          }
           const reduced =
             current.respectReducedMotion && motionPreference.matches;
           if (playing && previousTime && !reduced)
@@ -129,6 +137,7 @@ export function AudioVisualizer({
               (Math.PI * 2);
           renderer.resize(width, height, current.resolution);
           renderer.render(current, result, angle, colors, reduced);
+          colorPreviewPending = false;
           canvas.style.visibility = "visible";
         }
       } catch {
@@ -154,6 +163,7 @@ export function AudioVisualizer({
     const updateColors = () => {
       const current = latest.current.settings;
       const readColor = (value: string): [number, number, number] => {
+        if (value.startsWith("#")) return hexColor(value);
         colorProbe.style.color = value;
         const parts = getComputedStyle(colorProbe)
           .color.match(/[\d.]+/g)
@@ -172,6 +182,20 @@ export function AudioVisualizer({
       ];
       schedule();
     };
+    const previewColor = (event: Event) => {
+      const input = event.target;
+      if (
+        !(input instanceof HTMLInputElement) ||
+        latest.current.settings.colorMode !== "custom" ||
+        !/^#[0-9a-f]{6}$/i.test(input.value)
+      )
+        return;
+      const field = input.dataset.visualizerColor;
+      if (field !== "color1" && field !== "color2") return;
+      colors[field === "color1" ? 0 : 1] = hexColor(input.value);
+      colorPreviewPending = true;
+      schedule();
+    };
     refresh.current = updateColors;
     const reset = () => {
       analysis.reset();
@@ -185,6 +209,13 @@ export function AudioVisualizer({
     const visibility = () => {
       if (document.hidden) stop();
       else reset();
+    };
+    const colorBlur = (event: FocusEvent) => {
+      if (
+        event.target instanceof HTMLInputElement &&
+        event.target.dataset.visualizerColor
+      )
+        updateColors();
     };
     const resize = new ResizeObserver(([entry]) => {
       width = entry.contentRect.width;
@@ -211,6 +242,8 @@ export function AudioVisualizer({
     for (const [event, handler] of events)
       audio.addEventListener(event, handler);
     document.addEventListener("visibilitychange", visibility);
+    document.addEventListener("input", previewColor, true);
+    document.addEventListener("focusout", colorBlur);
     motionPreference.addEventListener("change", reset);
     latest.current.onStatus("loading");
     canvas.style.visibility = "hidden";
@@ -243,6 +276,8 @@ export function AudioVisualizer({
       resize.disconnect();
       intersection.disconnect();
       document.removeEventListener("visibilitychange", visibility);
+      document.removeEventListener("input", previewColor, true);
+      document.removeEventListener("focusout", colorBlur);
       motionPreference.removeEventListener("change", reset);
       for (const [event, handler] of events)
         audio.removeEventListener(event, handler);

@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type CSSProperties } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { AudioLines, RotateCcw } from "lucide-react";
 import { SettingsPicker } from "./SettingsPicker";
 import {
@@ -95,6 +95,65 @@ function NumberControl({
         aria-label={`${range.label} slider`}
         aria-valuetext={`${value}${range.unit ? ` ${range.unit}` : ""}`}
         onChange={(event) => onChange(Number(event.target.value))}
+      />
+    </div>
+  );
+}
+
+function ColorControl({
+  id,
+  field,
+  label,
+  value,
+  onChange,
+}: {
+  id: string;
+  field: "color1" | "color2";
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const onChangeRef = useRef(onChange);
+  const committedRef = useRef(value);
+  onChangeRef.current = onChange;
+
+  const commit = () => {
+    const next = inputRef.current?.value;
+    if (!next || next === committedRef.current) return;
+    committedRef.current = next;
+    onChangeRef.current(next);
+    inputRef.current?.blur();
+  };
+
+  useEffect(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    // Native change fires when the picker is dismissed. React's onChange
+    // follows every input event and would rerender the whole player on drag.
+    input.addEventListener("change", commit);
+    return () => input.removeEventListener("change", commit);
+  }, []);
+
+  useEffect(() => {
+    committedRef.current = value;
+    if (inputRef.current && inputRef.current.value !== value)
+      inputRef.current.value = value;
+  }, [value]);
+
+  return (
+    <div className="settings-row">
+      <label className="settings-row-label" htmlFor={id}>
+        {label}
+      </label>
+      <input
+        ref={inputRef}
+        id={id}
+        className="settings-color-input"
+        type="color"
+        data-visualizer-color={field}
+        defaultValue={value}
+        onBlur={commit}
       />
     </div>
   );
@@ -348,18 +407,14 @@ export function VisualizerSettingsPanel({
         {choice("colorMode", "Visualizer colors")}
         {settings.colorMode === "custom" &&
           (["color1", "color2"] as const).map((field, index) => (
-            <div className="settings-row" key={field}>
-              <label className="settings-row-label" htmlFor={`${id}-${field}`}>
-                Color {index + 1}
-              </label>
-              <input
-                id={`${id}-${field}`}
-                className="settings-color-input"
-                type="color"
-                value={settings[field]}
-                onChange={(event) => update({ [field]: event.target.value })}
-              />
-            </div>
+            <ColorControl
+              key={field}
+              id={`${id}-${field}`}
+              field={field}
+              label={`Color ${index + 1}`}
+              value={settings[field]}
+              onChange={(value) => update({ [field]: value })}
+            />
           ))}
         {number("opacity")}
       </details>
