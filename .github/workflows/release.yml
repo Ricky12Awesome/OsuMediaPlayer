@@ -15,8 +15,44 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  test:
+    name: Test with generated media
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install browser and media tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg xvfb xauth
+          npx playwright install --with-deps chromium
+
+      - name: Run unit and media tests
+        run: npm test
+
+      - name: Run offscreen Electron tests
+        run: xvfb-run -a -s "-screen 0 1600x1000x24" npm run test:e2e
+
+      - name: Run worker tests
+        run: npm run test:streaming
+
+      - name: Run visualizer tests
+        run: npm run test:visualizer
+
   prepare:
     name: Prepare release tag
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: write

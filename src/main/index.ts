@@ -42,11 +42,33 @@ import {
   parseSongListQuery,
   parseVideoEncodingSettings,
 } from "./ipc-validation";
+import { startOffscreenViewer } from "./test-viewer";
 
 const isWaylandSession =
   process.platform === "linux" &&
   (process.env.XDG_SESSION_TYPE === "wayland" ||
     Boolean(process.env.WAYLAND_DISPLAY));
+const offscreenTest =
+  !app.isPackaged && process.env.OSU_MEDIA_PLAYER_OFFSCREEN_TEST === "1";
+const testViewer =
+  offscreenTest && process.env.OSU_MEDIA_PLAYER_TEST_VIEWER === "1";
+const testInstallPath = offscreenTest
+  ? process.env.OSU_MEDIA_PLAYER_TEST_INSTALL_PATH
+  : undefined;
+
+if (offscreenTest) {
+  const userDataPath = process.env.OSU_MEDIA_PLAYER_TEST_USER_DATA;
+  if (
+    !testInstallPath ||
+    !isAbsolute(testInstallPath) ||
+    !userDataPath ||
+    !isAbsolute(userDataPath)
+  )
+    throw new Error(
+      "Offscreen tests need absolute fixture and user data paths.",
+    );
+  app.setPath("userData", userDataPath);
+}
 
 // Chromium's timer-based Wayland frame source can report a small negative
 // latency for frames that are presented just before the predicted timestamp.
@@ -81,6 +103,8 @@ let pendingPath: string | undefined;
 let importController: AbortController | null = null;
 let videoTranscoder: VideoTranscoder | null = null;
 let zoomStatusMenuItem: Electron.MenuItem | null = null;
+let offscreenViewer: Awaited<ReturnType<typeof startOffscreenViewer>> | null =
+  null;
 const rendererUrl = resolveRendererUrl(
   process.env.ELECTRON_RENDERER_URL,
   app.isPackaged,
@@ -187,6 +211,7 @@ function createWindow(): void {
     title: "OsuMediaPlayer",
     show: false,
     webPreferences: {
+      offscreen: offscreenTest,
       preload: join(__dirname, "preload.cjs"),
       contextIsolation: true,
       sandbox: true,
@@ -195,10 +220,12 @@ function createWindow(): void {
       backgroundThrottling: false,
     },
   });
-  window.once("ready-to-show", () => {
-    windowReadyToShow = true;
-    if (rendererReady) window?.show();
-  });
+  if (offscreenTest) window.setContentSize(1440, 920);
+  if (!offscreenTest)
+    window.once("ready-to-show", () => {
+      windowReadyToShow = true;
+      if (rendererReady) window?.show();
+    });
   window.on("enter-full-screen", () =>
     window?.webContents.send("window:fullscreen", true),
   );
@@ -280,7 +307,7 @@ async function copyAssetData(asset: ResolvedMediaFile): Promise<void> {
 }
 
 function openAsset(asset: ResolvedMediaFile | null): void {
-  if (!asset) return;
+  if (!asset || offscreenTest) return;
   void shell.openPath(asset.filename).catch(() => {
     /* The default application may be unavailable while closing. */
   });
@@ -499,7 +526,7 @@ function setupIPC(): void {
   ipcMain.on("window:ready", (event) => {
     if (!isTrusted(event)) return;
     rendererReady = true;
-    if (windowReadyToShow) window?.show();
+    if (!offscreenTest && windowReadyToShow) window?.show();
   });
   ipcMain.handle(
     "song-list:load-cached",
@@ -511,7 +538,8 @@ function setupIPC(): void {
         (typeof requestedPath !== "string" || !isAbsolute(requestedPath))
       )
         return null;
-      const installPath = requestedPath as string | undefined;
+      const installPath =
+        testInstallPath ?? (requestedPath as string | undefined);
       try {
         const loaded = await loadSongListInWorker(
           installPath,
@@ -544,7 +572,8 @@ function setupIPC(): void {
         (typeof requestedPath !== "string" || !isAbsolute(requestedPath))
       )
         throw new Error("Choose an absolute osu!lazer directory path.");
-      const installPath = requestedPath as string | undefined;
+      const installPath =
+        testInstallPath ?? (requestedPath as string | undefined);
       if (
         prioritySongId !== undefined &&
         (typeof prioritySongId !== "string" || prioritySongId.length > 256)
@@ -724,6 +753,7 @@ function setupIPC(): void {
   });
   ipcMain.handle("song-list:choose", async (event) => {
     requireTrusted(event);
+    if (offscreenTest) return testInstallPath ?? null;
     const result = await dialog.showOpenDialog(window!, {
       title: "Choose your osu!lazer directory",
       message: "Choose the directory containing client.realm and files.",
@@ -753,6 +783,7 @@ function setupIPC(): void {
 
       if (action === "open-listing") {
         if (song.onlineId === undefined) return;
+        if (offscreenTest) return;
         await shell.openExternal(
           `https://osu.ppy.sh/beatmapsets/${song.onlineId}`,
         );
@@ -817,6 +848,16 @@ void app.whenReady().then(() => {
   });
   setupIPC();
   createWindow();
+  if (testViewer && window)
+    void startOffscreenViewer(window)
+      .then((viewer) => {
+        offscreenViewer = viewer;
+        console.log(`Offscreen Electron viewer: ${viewer.url}`);
+      })
+      .catch((error) => {
+        console.error(error);
+        app.quit();
+      });
   const menu = Menu.buildFromTemplate([
     ...(process.platform === "darwin" ? [{ role: "appMenu" as const }] : []),
     {
@@ -864,7 +905,8 @@ void app.whenReady().then(() => {
   Menu.setApplicationMenu(menu);
   notifyZoomChange();
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (!offscreenTest && BrowserWindow.getAllWindows().length === 0)
+      createWindow();
   });
 });
 let quitReady = false;
@@ -876,12 +918,14 @@ app.on("before-quit", (event) => {
   quitting = true;
   importController?.abort();
   videoTranscoder?.dispose();
-  void waitForSongListWorkers().then(() => {
-    songList?.close();
-    songList = null;
-    quitReady = true;
-    app.quit();
-  });
+  void Promise.all([waitForSongListWorkers(), offscreenViewer?.close()]).then(
+    () => {
+      songList?.close();
+      songList = null;
+      quitReady = true;
+      app.quit();
+    },
+  );
 });
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();

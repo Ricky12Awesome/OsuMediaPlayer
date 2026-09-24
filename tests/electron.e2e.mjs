@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { chromium } from "playwright";
-import Realm from "realm";
-import { loadSongListFromRealm } from "../src/main/song-list/index.ts";
-import { startBrowserFixtureServer } from "./fixtures/browser-server.mjs";
+import { _electron as electron } from "playwright";
 
 const mediaTypes = {
   mp3: "audio/mpeg",
@@ -20,72 +18,43 @@ const installPath = resolve("tests/environment");
 const manifest = JSON.parse(
   await readFile(join(installPath, "manifest.json"), "utf8"),
 );
-let index;
-let server;
-let browser;
+const userData = await mkdtemp(join(tmpdir(), "osu-media-player-e2e-"));
+let app;
 try {
-  index = await loadSongListFromRealm(installPath);
-  server = await startBrowserFixtureServer(index);
-  const assetUrl = (hash) => `${server.url}__fixture_asset/${hash}`;
-  const browserSong = (song) =>
-    song && {
-      ...song,
-      audioUrl: assetUrl(song.audioHash),
-      artworkUrl: song.backgroundHash
-        ? assetUrl(song.backgroundHash)
-        : undefined,
-      videoUrl: song.videoHash ? assetUrl(song.videoHash) : undefined,
-    };
-  browser = await chromium.launch({
-    ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
-      ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH }
-      : {}),
-    headless: true,
-    args: ["--no-sandbox"],
+  const electronEnv = {
+    ...process.env,
+    OSU_MEDIA_PLAYER_OFFSCREEN_TEST: "1",
+    OSU_MEDIA_PLAYER_TEST_INSTALL_PATH: installPath,
+    OSU_MEDIA_PLAYER_TEST_USER_DATA: userData,
+    OSU_MEDIA_PLAYER_TEST_VIEWER: "0",
+  };
+  delete electronEnv.ELECTRON_RUN_AS_NODE;
+  delete electronEnv.ELECTRON_RENDERER_URL;
+  app = await electron.launch({
+    args: [
+      ".",
+      "--no-sandbox",
+      ...(process.platform === "linux" &&
+      !process.env.DISPLAY &&
+      !process.env.WAYLAND_DISPLAY
+        ? ["--ozone-platform=headless"]
+        : []),
+    ],
+    env: electronEnv,
   });
-  const page = await browser.newPage({
-    viewport: { width: 1440, height: 920 },
-  });
-  await page.exposeFunction("__fixtureQuerySongList", (query) => {
-    const result = index.query(query);
-    return { ...result, items: result.items.map(browserSong) };
-  });
-  await page.exposeFunction("__fixtureGetSong", (id) =>
-    browserSong(index.getSong(id)),
-  );
-  await page.addInitScript(
-    ({ path, summary, platform }) => {
-      localStorage.setItem("song-list-path", JSON.stringify(path));
-      const noListener = () => () => {};
-      window.playerAPI = {
-        loadSongList: async (requestedPath) => {
-          if (requestedPath !== path)
-            throw new Error("Unexpected song list path");
-          return summary;
-        },
-        querySongList: (query) => window.__fixtureQuerySongList(query),
-        getSong: (id) => window.__fixtureGetSong(id),
-        getSongDebugInfo: async () => null,
-        prepareVideo: async () => null,
-        cancelVideoEncoding: async () => {},
-        completeVideoStream: async () => {},
-        getCacheUsage: async () => ({ index: 0, video: 0 }),
-        clearCache: async () => {},
-        chooseSongList: async () => null,
-        onSongListProgress: noListener,
-        onMediaAction: noListener,
-        onVideoEncodingChange: noListener,
-        onFullscreenChange: noListener,
-        onZoomChange: noListener,
-        getSongContextMenuInfo: async () => null,
-        performSongContextMenuAction: async () => {},
-        windowControl: () => {},
-        platform,
+  const page = await app.firstWindow();
+  assert.deepEqual(
+    await app.evaluate(({ BrowserWindow, app }) => {
+      const window = BrowserWindow.getAllWindows()[0];
+      return {
+        offscreen: window.webContents.isOffscreen(),
+        visible: window.isVisible(),
+        userData: app.getPath("userData"),
       };
-    },
-    { path: installPath, summary: index.summary, platform: process.platform },
+    }),
+    { offscreen: true, visible: false, userData },
   );
-  await page.goto(server.url);
+  assert.equal(await page.evaluate(() => typeof window.require), "undefined");
   await page.waitForSelector(".app-shell");
   await page.waitForFunction(
     (count) =>
@@ -94,8 +63,34 @@ try {
         ?.textContent?.includes(`${count} songs in your song list`),
     manifest.songs.length,
   );
+  assert.equal(
+    await app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0].isVisible(),
+    ),
+    false,
+  );
+  assert.equal(
+    await page.evaluate(() => window.playerAPI.chooseSongList()),
+    installPath,
+  );
+  assert.equal(
+    await app.evaluate(
+      ({ BrowserWindow }) =>
+        new Promise((resolve) => {
+          const contents = BrowserWindow.getAllWindows()[0].webContents;
+          const timeout = setTimeout(() => resolve(false), 3000);
+          contents.once("paint", () => {
+            clearTimeout(timeout);
+            resolve(true);
+          });
+          contents.invalidate();
+        }),
+    ),
+    true,
+  );
   const loadedSongs = await page.evaluate(async () =>
     (await window.playerAPI.querySongList({ limit: 10 })).items.map((song) => ({
+      id: song.id,
       title: song.title,
       audioHash: song.audioHash,
       backgroundHash: song.backgroundHash,
@@ -111,7 +106,7 @@ try {
     for (const asset of [expected.audio, expected.background, expected.video]) {
       if (!asset) continue;
       const response = await page.evaluate(async (hash) => {
-        const result = await fetch(`/__fixture_asset/${hash}`, {
+        const result = await fetch(`omp://asset/${hash}`, {
           headers: { Range: "bytes=0-31" },
         });
         return {
@@ -126,6 +121,36 @@ try {
         length: 32,
       });
     }
+  }
+  for (const expected of manifest.songs.filter((song) => song.video)) {
+    const song = loadedSongs.find((item) => item.title === expected.title);
+    let prepared = null;
+    for (let attempt = 0; attempt < 3 && !prepared; attempt++) {
+      prepared = await page.evaluate(
+        (id) =>
+          window.playerAPI.prepareVideo(id, {
+            codec: "auto",
+            quality: "medium",
+            maxFps: 60,
+            forceRemux: false,
+            cacheLimitGb: 5,
+          }),
+        song.id,
+      );
+    }
+    assert.ok(prepared, `Could not prepare ${expected.title} video`);
+    const response = await page.evaluate(async (url) => {
+      const result = await fetch(url);
+      return {
+        status: result.status,
+        type: result.headers.get("content-type"),
+      };
+    }, prepared.url);
+    assert.equal(response.status, 200);
+    assert.ok(
+      ["video/mp4", "application/vnd.apple.mpegurl"].includes(response.type),
+      `Unexpected ${expected.title} video type: ${response.type}`,
+    );
   }
   assert.equal(await page.title(), "OsuMediaPlayer");
   assert.ok(await page.locator(".transport").count());
@@ -259,8 +284,6 @@ try {
     "true",
   );
 } finally {
-  await browser?.close();
-  await server?.close();
-  index?.close();
-  Realm.shutdown();
+  await app?.close();
+  await rm(userData, { recursive: true, force: true });
 }
