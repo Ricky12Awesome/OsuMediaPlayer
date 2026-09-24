@@ -247,6 +247,17 @@ try {
     settingsControlMetrics.picker.height,
     settingsControlMetrics.toggle.height,
   );
+  const backgroundDim = page.getByRole("slider", { name: "Dim background" });
+  await backgroundDim.press("End");
+  assert.equal(await backgroundDim.inputValue(), "100");
+  assert.equal(
+    await page
+      .locator(".artwork-dim")
+      .evaluate((element) => element.style.opacity),
+    "1",
+  );
+  await backgroundDim.press("Home");
+  assert.equal(await backgroundDim.inputValue(), "0");
   await page.getByRole("tab", { name: "Visualizer", exact: true }).click();
   const response = page.getByRole("spinbutton", {
     name: "Response time (ms)",

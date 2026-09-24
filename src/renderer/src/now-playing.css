@@ -61,6 +61,13 @@
 .artwork-stage.video-is-active .hero-background {
   opacity: 0;
 }
+.artwork-dim {
+  z-index: -1;
+  pointer-events: none;
+  background: #000;
+  position: absolute;
+  inset: 0;
+}
 .artwork-grain {
   opacity: 0.16;
   z-index: -1;
