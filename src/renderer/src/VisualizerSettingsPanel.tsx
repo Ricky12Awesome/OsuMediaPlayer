@@ -29,6 +29,11 @@ import {
   type VisualizerStatus,
 } from "./visualizer-settings";
 import "./visualizer-settings.css";
+import { PreferenceTransferControls } from "./PreferenceTransferControls";
+import {
+  exportVisualizerSettings,
+  importVisualizerSettings,
+} from "./preference-transfer";
 
 export interface VisualizerSettingsPanelProps {
   settings: VisualizerSettings;
@@ -661,6 +666,19 @@ export function VisualizerSettingsPanel({
         >
           <RotateCcw size={15} /> Restore visualizer defaults
         </button>
+      </div>
+      <div className="settings-block">
+        <span className="settings-label">IMPORT &amp; EXPORT</span>
+        <p className="settings-hint">
+          Import replaces all visualizer settings.
+        </p>
+        <PreferenceTransferControls
+          name="Visualizer settings"
+          filename="osu-media-player-visualizer.json"
+          exportData={() => exportVisualizerSettings(settings)}
+          parseImport={importVisualizerSettings}
+          onImport={onChange}
+        />
       </div>
     </>
   );

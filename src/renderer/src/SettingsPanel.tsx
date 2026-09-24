@@ -16,6 +16,8 @@ import type {
 } from "../../shared/types";
 import type { PlayerState } from "./usePlayer";
 import { SettingsPicker } from "./SettingsPicker";
+import { PreferenceTransferControls } from "./PreferenceTransferControls";
+import { exportFavorites, importFavorites } from "./preference-transfer";
 
 const videoCodecOptions = [
   { value: "auto", label: "Auto (best available)" },
@@ -52,6 +54,8 @@ export interface SettingsPanelProps {
   player: PlayerState;
   chooseSongList: () => Promise<void>;
   refreshSongList: () => Promise<void>;
+  favorites: ReadonlySet<string>;
+  mergeImportedFavorites: (ids: string[]) => void;
   songListPosition: SongListPosition;
   setSongListPosition: Dispatch<SetStateAction<SongListPosition>>;
   transportLayout: TransportLayout;
@@ -96,6 +100,8 @@ export function SettingsPanel({
   player,
   chooseSongList,
   refreshSongList,
+  favorites,
+  mergeImportedFavorites,
   songListPosition,
   setSongListPosition,
   transportLayout,
@@ -172,6 +178,21 @@ export function SettingsPanel({
             <RefreshCw size={15} /> Refresh song list
           </button>
         </div>
+      </div>
+      <div className="settings-block">
+        <span className="settings-label">
+          <FolderHeart size={16} /> FAVORITES
+        </span>
+        <p className="settings-hint">
+          Import adds songs to your existing favorites.
+        </p>
+        <PreferenceTransferControls
+          name="Favorites"
+          filename="osu-media-player-favorites.json"
+          exportData={() => exportFavorites(favorites)}
+          parseImport={importFavorites}
+          onImport={mergeImportedFavorites}
+        />
       </div>
       <div className="settings-block transport-layout-setting">
         <div className="settings-row">

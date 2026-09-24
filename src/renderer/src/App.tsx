@@ -40,6 +40,7 @@ import { AppOverlays, type SongContextMenuState } from "./AppOverlays";
 import { PlayerToolsPanel } from "./PlayerToolsPanel";
 import { PanelResizers } from "./PanelResizers";
 import { VisualizerSettingsPanel } from "./VisualizerSettingsPanel";
+import { mergeFavorites } from "./preference-transfer";
 import {
   defaultVisualizerSettings,
   type VisualizerStatus,
@@ -1275,6 +1276,10 @@ export function App({
                   setSidePanelOpen(false);
                   await loadSongList(summary?.installPath);
                 }}
+                favorites={favorites}
+                mergeImportedFavorites={(ids) =>
+                  setFavorites((current) => mergeFavorites(current, ids))
+                }
                 songListPosition={songListPosition}
                 setSongListPosition={setSongListPosition}
                 transportLayout={transportLayout}
