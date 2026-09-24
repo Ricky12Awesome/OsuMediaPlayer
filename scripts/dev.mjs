@@ -13,8 +13,12 @@ const viteCommand =
   process.platform === "win32"
     ? "node_modules/.bin/vite.cmd"
     : "node_modules/.bin/vite";
-const viteUrl = "http://127.0.0.1:5173/";
+const viteOrigin = "http://127.0.0.1:5173";
 const testEnvironment = process.argv.includes("--test-environment");
+// The viewer uses Vite's root while Electron loads the renderer on the same origin.
+const rendererUrl = testEnvironment
+  ? `${viteOrigin}/index.html`
+  : `${viteOrigin}/`;
 const testUserData = testEnvironment
   ? resolve("tests/environment/user-data")
   : null;
@@ -52,13 +56,17 @@ function waitForServer(url) {
 
 const vite = spawn(viteCommand, ["--host", "127.0.0.1", "--port", "5173"], {
   stdio: "inherit",
+  env: {
+    ...process.env,
+    OSU_MEDIA_PLAYER_TEST_VIEWER: testEnvironment ? "1" : "0",
+  },
 });
 
 try {
-  await waitForServer(viteUrl);
+  await waitForServer(rendererUrl);
   const electronEnv = {
     ...process.env,
-    ELECTRON_RENDERER_URL: viteUrl,
+    ELECTRON_RENDERER_URL: rendererUrl,
     ...(testEnvironment
       ? {
           OSU_MEDIA_PLAYER_OFFSCREEN_TEST: "1",
@@ -74,7 +82,10 @@ try {
     [
       ".",
       "--no-sandbox",
-      ...(testEnvironment && process.platform === "linux"
+      ...(testEnvironment &&
+      process.platform === "linux" &&
+      !process.env.DISPLAY &&
+      !process.env.WAYLAND_DISPLAY
         ? ["--ozone-platform=headless"]
         : []),
     ],

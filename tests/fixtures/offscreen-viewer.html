@@ -60,7 +60,7 @@
       let currentFrame;
       let moving = false;
 
-      fetch("/size")
+      fetch("/__offscreen/size")
         .then((response) => response.json())
         .then(([width, height]) => {
           contentWidth = width;
@@ -70,7 +70,9 @@
       async function updateFrame() {
         try {
           if (!document.hidden) {
-            const response = await fetch("/frame", { cache: "no-store" });
+            const response = await fetch("/__offscreen/frame", {
+              cache: "no-store",
+            });
             if (response.ok && response.status === 200) {
               const nextFrame = URL.createObjectURL(await response.blob());
               await new Promise((done) => {
@@ -115,7 +117,7 @@
       }
 
       function send(input) {
-        void fetch("/input", {
+        void fetch("/__offscreen/input", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(input),

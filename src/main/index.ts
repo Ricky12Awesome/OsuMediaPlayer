@@ -852,7 +852,6 @@ void app.whenReady().then(() => {
     void startOffscreenViewer(window)
       .then((viewer) => {
         offscreenViewer = viewer;
-        console.log(`Offscreen Electron viewer: ${viewer.url}`);
       })
       .catch((error) => {
         console.error(error);

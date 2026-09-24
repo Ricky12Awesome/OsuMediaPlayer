@@ -7,7 +7,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { BrowserWindow } from "electron";
 
-const origin = "http://127.0.0.1:5174";
+const origin = "http://127.0.0.1:5173";
 const modifiers = new Set([
   "shift",
   "control",
@@ -112,7 +112,6 @@ function sendInput(
 }
 
 export async function startOffscreenViewer(window: BrowserWindow): Promise<{
-  url: string;
   close: () => Promise<void>;
 }> {
   const html = await readFile(resolve("tests/fixtures/offscreen-viewer.html"));
@@ -149,7 +148,7 @@ export async function startOffscreenViewer(window: BrowserWindow): Promise<{
           reply.end(html);
           return;
         }
-        if (request.method === "GET" && pathname === "/frame") {
+        if (request.method === "GET" && pathname === "/__offscreen/frame") {
           lastFrameRequest = Date.now();
           if (!frame) void capture();
           if (!frame) {
@@ -164,12 +163,12 @@ export async function startOffscreenViewer(window: BrowserWindow): Promise<{
           reply.end(frame);
           return;
         }
-        if (request.method === "GET" && pathname === "/size") {
+        if (request.method === "GET" && pathname === "/__offscreen/size") {
           reply.writeHead(200, { "Content-Type": "application/json" });
           reply.end(JSON.stringify(window.getContentSize()));
           return;
         }
-        if (request.method === "POST" && pathname === "/input") {
+        if (request.method === "POST" && pathname === "/__offscreen/input") {
           if (
             request.headers.origin !== origin ||
             !request.headers["content-type"]?.startsWith("application/json")
@@ -198,7 +197,6 @@ export async function startOffscreenViewer(window: BrowserWindow): Promise<{
     throw error;
   }
   return {
-    url: `${origin}/`,
     close: () =>
       new Promise<void>((done, reject) => {
         clearInterval(timer);
