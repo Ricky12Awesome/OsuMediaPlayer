@@ -58,8 +58,25 @@
 .hero-video.is-active {
   opacity: 1;
 }
+.artwork-stage.blur-classic .hero-background,
+.artwork-stage.blur-classic .hero-video {
+  inset: calc(0px - var(--background-blur));
+  width: calc(100% + var(--background-blur) + var(--background-blur));
+  height: calc(100% + var(--background-blur) + var(--background-blur));
+  filter: blur(var(--background-blur));
+}
 .artwork-stage.video-is-active .hero-background {
   opacity: 0;
+}
+.artwork-glass {
+  z-index: -1;
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  background: rgb(18 24 30 / 6%);
+  -webkit-backdrop-filter: blur(var(--background-blur)) saturate(0.86)
+    contrast(0.96);
+  backdrop-filter: blur(var(--background-blur)) saturate(0.86) contrast(0.96);
 }
 .artwork-dim {
   z-index: -1;

@@ -27,6 +27,8 @@ export interface Preferences {
   debugMode: boolean;
   artworkTheme: boolean;
   backgroundDim: number;
+  backgroundBlur: number;
+  backgroundBlurStyle: "classic" | "frosted";
   nowPlayingPosition:
     | "top-left"
     | "top-center"
@@ -72,6 +74,8 @@ const keys: Record<PreferenceKey, string> = {
   debugMode: "debug-mode",
   artworkTheme: "artwork-theme",
   backgroundDim: "background-dim",
+  backgroundBlur: "background-blur",
+  backgroundBlurStyle: "background-blur-style",
   nowPlayingPosition: "now-playing-position",
   songListWidth: "song-list-width",
   sidePanelOpen: "side-panel-open",
@@ -105,6 +109,8 @@ export const preferenceDefaults: Preferences = {
   debugMode: false,
   artworkTheme: true,
   backgroundDim: 0,
+  backgroundBlur: 0,
+  backgroundBlurStyle: "classic",
   nowPlayingPosition: "top-left",
   songListWidth: 466,
   sidePanelOpen: false,
@@ -201,6 +207,15 @@ function parseValue<K extends PreferenceKey>(
       return Math.min(
         100,
         Math.max(0, parseNumber(value, fallback as number)),
+      ) as Preferences[K];
+    case "backgroundBlur":
+      return Math.min(
+        24,
+        Math.max(0, parseNumber(value, fallback as number)),
+      ) as Preferences[K];
+    case "backgroundBlurStyle":
+      return (
+        value === "classic" || value === "frosted" ? value : fallback
       ) as Preferences[K];
     case "sidePanelWidth":
       return Math.min(

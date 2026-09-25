@@ -18,6 +18,7 @@ import type { PlayerState } from "./usePlayer";
 import { SettingsPicker } from "./SettingsPicker";
 import { PreferenceTransferControls } from "./PreferenceTransferControls";
 import { exportFavorites, importFavorites } from "./preference-transfer";
+import type { Preferences } from "./preferences";
 
 const videoCodecOptions = [
   { value: "auto", label: "Auto (best available)" },
@@ -38,6 +39,10 @@ const videoFpsOptions = [
   { value: 24, label: "24 FPS" },
   { value: 30, label: "30 FPS" },
   { value: 60, label: "60 FPS" },
+] as const;
+const backgroundBlurStyles = [
+  { value: "classic", label: "Classic" },
+  { value: "frosted", label: "Frosted glass" },
 ] as const;
 
 export type CacheNotice = {
@@ -64,6 +69,12 @@ export interface SettingsPanelProps {
   setArtworkThemeEnabled: Dispatch<SetStateAction<boolean>>;
   backgroundDim: number;
   setBackgroundDim: Dispatch<SetStateAction<number>>;
+  backgroundBlur: number;
+  setBackgroundBlur: Dispatch<SetStateAction<number>>;
+  backgroundBlurStyle: Preferences["backgroundBlurStyle"];
+  setBackgroundBlurStyle: Dispatch<
+    SetStateAction<Preferences["backgroundBlurStyle"]>
+  >;
   showNowPlayingTitleArtist: boolean;
   setShowNowPlayingTitleArtist: Dispatch<SetStateAction<boolean>>;
   debugMode: boolean;
@@ -112,6 +123,10 @@ export function SettingsPanel({
   setArtworkThemeEnabled,
   backgroundDim,
   setBackgroundDim,
+  backgroundBlur,
+  setBackgroundBlur,
+  backgroundBlurStyle,
+  setBackgroundBlurStyle,
   showNowPlayingTitleArtist,
   setShowNowPlayingTitleArtist,
   debugMode,
@@ -318,6 +333,42 @@ export function SettingsPanel({
             aria-valuetext={`${backgroundDim}%`}
             style={{ "--range-progress": `${backgroundDim}%` } as CSSProperties}
             onChange={(event) => setBackgroundDim(Number(event.target.value))}
+          />
+        </div>
+        <div>
+          <div className="settings-row">
+            <label className="settings-row-label" htmlFor="background-blur">
+              Blur background
+            </label>
+            <span className="settings-row-value">
+              {backgroundBlur === 0 ? "Off" : `${backgroundBlur}px`}
+            </span>
+          </div>
+          <input
+            id="background-blur"
+            className="settings-range-input"
+            type="range"
+            min={0}
+            max={24}
+            value={backgroundBlur}
+            aria-valuetext={
+              backgroundBlur === 0 ? "Off" : `${backgroundBlur} pixels`
+            }
+            style={
+              {
+                "--range-progress": `${(backgroundBlur / 24) * 100}%`,
+              } as CSSProperties
+            }
+            onChange={(event) => setBackgroundBlur(Number(event.target.value))}
+          />
+        </div>
+        <div className="settings-row">
+          <span className="settings-row-label">Blur style</span>
+          <SettingsPicker
+            label="Blur style"
+            value={backgroundBlurStyle}
+            options={backgroundBlurStyles}
+            onChange={setBackgroundBlurStyle}
           />
         </div>
       </div>

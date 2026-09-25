@@ -50,6 +50,7 @@ import {
   readPreference,
   removePreference,
   writePreference,
+  preferenceDefaults,
   type Preferences,
 } from "./preferences";
 
@@ -295,6 +296,12 @@ export function App({
   );
   const [backgroundDim, setBackgroundDim] = useState(() =>
     readPreference("backgroundDim"),
+  );
+  const [backgroundBlur, setBackgroundBlur] = useState(() =>
+    readPreference("backgroundBlur"),
+  );
+  const [backgroundBlurStyle, setBackgroundBlurStyle] = useState(() =>
+    readPreference("backgroundBlurStyle"),
   );
   const [artworkTheme, setArtworkTheme] = useState<{
     url: string;
@@ -643,6 +650,14 @@ export function App({
   useEffect(
     () => writePreference("backgroundDim", backgroundDim),
     [backgroundDim],
+  );
+  useEffect(
+    () => writePreference("backgroundBlur", backgroundBlur),
+    [backgroundBlur],
+  );
+  useEffect(
+    () => writePreference("backgroundBlurStyle", backgroundBlurStyle),
+    [backgroundBlurStyle],
   );
   useEffect(
     () => writePreference("nowPlayingPosition", captionPosition),
@@ -1000,6 +1015,8 @@ export function App({
     setDebugMode(false);
     setArtworkThemeEnabled(true);
     setBackgroundDim(0);
+    setBackgroundBlur(preferenceDefaults.backgroundBlur);
+    setBackgroundBlurStyle(preferenceDefaults.backgroundBlurStyle);
     setVisualizerSettings({ ...defaultVisualizerSettings });
     setSongListWidth(minSongListWidth);
     setSidePanelWidth(defaultSidePanelWidth);
@@ -1252,6 +1269,8 @@ export function App({
           <NowPlaying
             player={player}
             backgroundDim={backgroundDim}
+            backgroundBlur={backgroundBlur}
+            backgroundBlurStyle={backgroundBlurStyle}
             visualizerSettings={visualizerSettings}
             onVisualizerStatus={updateVisualizerStatus}
             visualizerThemeKey={activeArtworkTheme}
@@ -1301,6 +1320,10 @@ export function App({
                 setArtworkThemeEnabled={setArtworkThemeEnabled}
                 backgroundDim={backgroundDim}
                 setBackgroundDim={setBackgroundDim}
+                backgroundBlur={backgroundBlur}
+                setBackgroundBlur={setBackgroundBlur}
+                backgroundBlurStyle={backgroundBlurStyle}
+                setBackgroundBlurStyle={setBackgroundBlurStyle}
                 showNowPlayingTitleArtist={showNowPlayingTitleArtist}
                 setShowNowPlayingTitleArtist={setShowNowPlayingTitleArtist}
                 debugMode={debugMode}

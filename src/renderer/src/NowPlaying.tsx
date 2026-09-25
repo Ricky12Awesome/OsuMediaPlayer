@@ -1,4 +1,4 @@
-import type { PointerEvent, RefObject } from "react";
+import type { CSSProperties, PointerEvent, RefObject } from "react";
 import { LoaderCircle, Sparkles } from "lucide-react";
 import type { SongDebugInfo } from "../../shared/types";
 import type { PlayerState } from "./usePlayer";
@@ -9,6 +9,7 @@ import type {
   VisualizerSettings,
   VisualizerStatus,
 } from "./visualizer-settings";
+import type { Preferences } from "./preferences";
 
 export const captionPositions = [
   "top-left",
@@ -26,6 +27,8 @@ export type CaptionPosition = (typeof captionPositions)[number];
 export interface NowPlayingProps {
   player: PlayerState;
   backgroundDim: number;
+  backgroundBlur: number;
+  backgroundBlurStyle: Preferences["backgroundBlurStyle"];
   visualizerSettings: VisualizerSettings;
   onVisualizerStatus: (status: VisualizerStatus, detail?: string) => void;
   visualizerThemeKey?: unknown;
@@ -44,6 +47,8 @@ export interface NowPlayingProps {
 export function NowPlaying({
   player,
   backgroundDim,
+  backgroundBlur,
+  backgroundBlurStyle,
   visualizerSettings,
   onVisualizerStatus,
   visualizerThemeKey,
@@ -96,8 +101,10 @@ export function NowPlaying({
           "artwork-stage " +
           (player.song?.artworkUrl ? "has-artwork " : "") +
           (player.playVideos && player.song?.videoUrl ? "has-video " : "") +
-          (videoActive ? "video-is-active" : "")
+          (videoActive ? "video-is-active " : "") +
+          (backgroundBlur > 0 ? `blur-enabled blur-${backgroundBlurStyle}` : "")
         }
+        style={{ "--background-blur": `${backgroundBlur}px` } as CSSProperties}
       >
         {player.song?.artworkUrl && (
           <img
@@ -120,6 +127,9 @@ export function NowPlaying({
             preload="metadata"
             aria-hidden="true"
           />
+        )}
+        {backgroundBlur > 0 && backgroundBlurStyle === "frosted" && (
+          <div className="artwork-glass" aria-hidden="true" />
         )}
         <div
           className="artwork-dim"
