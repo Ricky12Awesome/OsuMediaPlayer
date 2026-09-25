@@ -139,6 +139,20 @@ test("imports linked Realm records read-only, including collections and dates", 
     assert.equal(song.audioHash, audioHash);
     assert.deepEqual(song.collections, ["Favorites"]);
     assert.deepEqual(song.tags, ["dance", "favorite"]);
+    assert.deepEqual(song.beatmapSearch, [
+      {
+        duration: 120,
+        bpm: 180,
+        lastPlayedAt: date.getTime(),
+        status: 0,
+        userTags: ["favorite"],
+      },
+    ]);
+    assert.equal(
+      index.query({ search: "status=p tag=favorite played=yes" }).total,
+      1,
+    );
+    assert.equal(index.query({ search: "tag=dance" }).total, 0);
     assert.equal(await checksum(), before);
     await assert.rejects(
       loadSongListFromRealm(directory, undefined, AbortSignal.abort()),

@@ -417,8 +417,18 @@ async function buildIndex(
       ? Math.max(0, playedTimestamp)
       : 0;
     const { dateAddedAt, dateSubmittedAt, dateRankedAt } = set;
+    const beatmapSearch = {
+      duration: Math.max(0, number(map.Length) / 1000),
+      bpm: Math.max(0, number(map.BPM)),
+      lastPlayedAt,
+      status: number(map.Status),
+      userTags: Array.from(metadata.UserTags, (value) =>
+        string(value).trim().toLocaleLowerCase(),
+      ).filter(Boolean),
+    };
     const current = songs.get(id);
     if (current) {
+      current.beatmapSearch?.push(beatmapSearch);
       current.difficultyCount++;
       current.tags = [...new Set([...current.tags, ...tags])];
       current.collections = [
@@ -466,6 +476,7 @@ async function buildIndex(
         dateSubmittedAt,
         dateRankedAt,
         lastPlayedAt,
+        beatmapSearch: [beatmapSearch],
       };
       songs.set(id, song);
       const videos = [...set.files.entries()].filter(([, file]) =>

@@ -21,7 +21,7 @@ const facetCollator = collator;
 const songReferenceBytes = 40;
 const md5Bytes = 16;
 const sha256Bytes = 32;
-const binaryVersion = 3;
+const binaryVersion = 4;
 const songsMagic = Buffer.from("OMTR");
 const collectionsMagic = Buffer.from("OMCL");
 const ordersMagic = Buffer.from("OMOR");
@@ -281,6 +281,26 @@ export function serializeSongs(snapshot: SongListSnapshot): Buffer | null {
       if (song.videoOffset !== undefined) record.writeFloat64(song.videoOffset);
       record.writeUint32(song.tags.length);
       for (const tag of song.tags) record.writeString(tag);
+      const beatmapSearch = song.beatmapSearch ?? [];
+      record.writeUint32(beatmapSearch.length);
+      for (const beatmap of beatmapSearch) {
+        if (
+          !Number.isFinite(beatmap.duration) ||
+          !Number.isFinite(beatmap.bpm) ||
+          !Number.isSafeInteger(beatmap.lastPlayedAt) ||
+          beatmap.lastPlayedAt < 0 ||
+          !Number.isSafeInteger(beatmap.status) ||
+          beatmap.status < -128 ||
+          beatmap.status > 127
+        )
+          return null;
+        record.writeFloat64(beatmap.duration);
+        record.writeFloat64(beatmap.bpm);
+        record.writeBigUint64(BigInt(beatmap.lastPlayedAt));
+        record.writeUint16(beatmap.status + 128);
+        record.writeUint32(beatmap.userTags.length);
+        for (const tag of beatmap.userTags) record.writeString(tag);
+      }
       record.writeUint32(beatmapHashes.length);
       for (const hash of beatmapHashes) record.writeBytes(hash!);
       const bytes = record.toBuffer();
@@ -425,6 +445,42 @@ function deserializeSongRecord(data: Buffer): DecodedSong | null {
     if (tag === null) return null;
     tags.push(tag);
   }
+  const beatmapCount = reader.readUint32();
+  if (beatmapCount === null || beatmapCount > difficultyCount) return null;
+  const beatmapSearch: NonNullable<Song["beatmapSearch"]> = [];
+  for (let index = 0; index < beatmapCount; index++) {
+    const duration = reader.readFloat64();
+    const bpm = reader.readFloat64();
+    const lastPlayedAt = reader.readBigUint64();
+    const status = reader.readUint16();
+    const userTagCount = reader.readUint32();
+    if (
+      duration === null ||
+      !Number.isFinite(duration) ||
+      bpm === null ||
+      !Number.isFinite(bpm) ||
+      lastPlayedAt === null ||
+      lastPlayedAt > BigInt(Number.MAX_SAFE_INTEGER) ||
+      status === null ||
+      status > 255 ||
+      userTagCount === null ||
+      userTagCount > reader.remaining / 2
+    )
+      return null;
+    const userTags: string[] = [];
+    for (let tagIndex = 0; tagIndex < userTagCount; tagIndex++) {
+      const tag = reader.readString();
+      if (tag === null) return null;
+      userTags.push(tag);
+    }
+    beatmapSearch.push({
+      duration,
+      bpm,
+      lastPlayedAt: Number(lastPlayedAt),
+      status: status - 128,
+      userTags,
+    });
+  }
   const beatmapHashCount = reader.readUint32();
   if (beatmapHashCount === null) return null;
   const beatmapHashes: string[] = [];
@@ -464,6 +520,7 @@ function deserializeSongRecord(data: Buffer): DecodedSong | null {
     dateSubmittedAt: Number(dateSubmittedAt),
     dateRankedAt: Number(dateRankedAt),
     lastPlayedAt: Number(lastPlayedAt),
+    beatmapSearch,
   };
   return {
     song,
