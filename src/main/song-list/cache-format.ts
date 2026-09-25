@@ -5,6 +5,7 @@ import {
   type SortKey,
   type Song,
 } from "../../shared/types";
+import { videoPlaysDirectly } from "../../shared/video";
 import type {
   SongListCollection,
   SongListCollectionFingerprint,
@@ -454,6 +455,7 @@ function deserializeSongRecord(data: Buffer): DecodedSong | null {
     backgroundHash: background?.hash,
     videoUrl: video ? assetUrl(video.hash) : undefined,
     videoHash: video?.hash,
+    videoDirectPlayable: video ? videoPlaysDirectly(video.filename) : undefined,
     videoOffset,
     onlineId: onlineId > 0n ? Number(onlineId) : undefined,
     md5Hash: md5Hash ?? undefined,

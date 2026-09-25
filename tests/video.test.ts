@@ -40,6 +40,7 @@ async function writeCachedVideo(
   hash: string,
   settings: VideoEncodingSettings,
   contents: string,
+  encoder = "libx264",
 ): Promise<string> {
   const filename = join(cache, `${hash}.mp4`);
   await writeFile(filename, contents);
@@ -55,7 +56,7 @@ async function writeCachedVideo(
         maxFps: settings.maxFps,
         forceRemux: settings.forceRemux,
       },
-      encoder: "libx264",
+      encoder,
     }),
   );
   return filename;
@@ -99,6 +100,154 @@ test("video encoders follow codec and hardware priority", () => {
     [true, true, true, false],
   );
 });
+
+for (const scenario of [
+  {
+    name: "a compatible MP4 with backward decoded timestamps",
+    filename: "video.mp4",
+    hasBFrames: 0,
+    packets: [
+      { pts: -512, dts: -512 },
+      { pts: 0, dts: 0 },
+    ],
+    frames: [
+      { best_effort_timestamp: 512 },
+      { best_effort_timestamp: 1024 },
+      { best_effort_timestamp: 512 },
+    ],
+  },
+  {
+    name: "an AVI with B-frames and no presentation timestamps",
+    filename: "video.avi",
+    hasBFrames: 2,
+    packets: Array.from({ length: 8 }, (_, dts) => ({ dts })),
+    frames: [],
+  },
+]) {
+  test(`${scenario.name} is re-encoded instead of copied`, async () => {
+    const root = await mkdtemp(join(process.cwd(), ".video-timing-test-"));
+    const cache = join(root, "video-cache");
+    const hash = "8".repeat(64);
+    const source = join(root, "files", hash[0], hash.slice(0, 2), hash);
+    const ffmpeg = join(root, "ffmpeg");
+    const ffprobe = join(root, "ffprobe");
+    const argumentsFile = join(root, "encoding-args.json");
+    let transcoder: VideoTranscoder | null = null;
+    try {
+      await mkdir(join(source, ".."), { recursive: true });
+      await writeFile(source, "source");
+      await writeFile(
+        ffprobe,
+        `#!/usr/bin/env node
+const args = process.argv.slice(2);
+const data = args.includes("packet=pts,dts")
+  ? { packets: ${JSON.stringify(scenario.packets)} }
+  : args.includes("frame=best_effort_timestamp")
+    ? { frames: ${JSON.stringify(scenario.frames)} }
+    : { streams: [{ codec_name: "h264", avg_frame_rate: "25/1", has_b_frames: ${scenario.hasBFrames} }], format: { duration: "10" } };
+process.stdout.write(JSON.stringify(data));
+`,
+      );
+      await writeFile(
+        ffmpeg,
+        `#!/usr/bin/env node
+const fs = await import("node:fs");
+const path = await import("node:path");
+const args = process.argv.slice(2);
+if (args.includes("-encoders")) {
+  process.stdout.write(" V....D libx264\\n");
+  process.exit(0);
+}
+fs.writeFileSync(${JSON.stringify(argumentsFile)}, JSON.stringify(args));
+const playlist = args.at(-1);
+fs.mkdirSync(path.dirname(playlist), { recursive: true });
+fs.writeFileSync(path.join(path.dirname(playlist), "init.mp4"), "init");
+fs.writeFileSync(path.join(path.dirname(playlist), "segment-000000.m4s"), "segment");
+fs.writeFileSync(playlist, "#EXTM3U\\n#EXT-X-MAP:URI=\\\"init.mp4\\\"\\n#EXTINF:1,\\nsegment-000000.m4s\\n");
+`,
+      );
+      await chmod(ffmpeg, 0o755);
+      await chmod(ffprobe, 0o755);
+      const songList = {
+        summary: { installPath: root },
+        assets: new Map([[hash, { hash, filename: scenario.filename }]]),
+        getSong: () => ({ videoUrl: assetUrl(hash) }),
+      } as unknown as SongListIndex;
+      transcoder = new VideoTranscoder(cache, ffmpeg);
+      const settings = {
+        ...videoSettings,
+        forceRemux: scenario.filename.endsWith(".avi"),
+        cacheLimitGb: scenario.filename.endsWith(".avi") ? 0 : 5,
+      };
+      if (scenario.filename.endsWith(".mp4")) {
+        await mkdir(cache, { recursive: true });
+        await writeCachedVideo(cache, hash, settings, "copied", "stream copy");
+      }
+      if (scenario.filename.endsWith(".avi")) {
+        const stream = join(cache, "stream");
+        await mkdir(stream, { recursive: true });
+        await writeFile(
+          join(cache, "stream.json"),
+          JSON.stringify({
+            hash,
+            profileHash: videoEncodingProfileHash(settings),
+            encoder: "stream copy",
+          }),
+        );
+        await writeFile(join(stream, "playlist.m3u8"), "#EXTM3U\n");
+      }
+
+      assert.deepEqual(await transcoder.prepare(songList, "song", settings), {
+        url: profiledVideoUrl(hash, settings),
+        streaming: true,
+      });
+      const args = JSON.parse(
+        await readFile(argumentsFile, "utf8"),
+      ) as string[];
+      assert.ok(args.includes("libx264"));
+      assert.ok(args.some((arg) => arg.includes("setpts=N/(25*TB)")));
+      await transcoder.cancelEncoding();
+      if (scenario.filename.endsWith(".mp4")) {
+        assert.match(
+          await readFile(join(cache, "timing-checks.json"), "utf8"),
+          /true/,
+        );
+        await writeFile(
+          ffprobe,
+          `#!/usr/bin/env node
+if (process.argv.includes("packet=pts,dts")) process.exit(1);
+process.stdout.write(JSON.stringify({ streams: [{ codec_name: "h264", avg_frame_rate: "25/1", has_b_frames: 0 }], format: { duration: "10" } }));
+`,
+        );
+        const reopened = new VideoTranscoder(cache, ffmpeg);
+        try {
+          const prepared = await reopened.prepare(songList, "song", settings);
+          assert.equal(prepared?.url, profiledVideoUrl(hash, settings));
+          await reopened.cancelEncoding();
+          await reopened.clearCache();
+          await writeFile(
+            ffprobe,
+            `#!/usr/bin/env node
+const args = process.argv.slice(2);
+process.stdout.write(JSON.stringify(args.includes("packet=pts,dts")
+  ? { packets: [{ pts: 0, dts: 0 }] }
+  : { streams: [{ codec_name: "h264", avg_frame_rate: "25/1", has_b_frames: 0 }], format: { duration: "10" } }));
+`,
+          );
+          assert.deepEqual(await reopened.prepare(songList, "song", settings), {
+            url: assetUrl(hash),
+            streaming: false,
+          });
+        } finally {
+          reopened.dispose();
+        }
+      }
+    } finally {
+      transcoder?.dispose();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+}
 
 test("a changed encoding profile invalidates the source-hash cache", async () => {
   const root = await mkdtemp(join(process.cwd(), ".video-profile-test-"));

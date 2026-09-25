@@ -63,6 +63,26 @@ export function usePlayerVideo({
   const videoRequestVersion = useRef(0);
   const videoHls = useRef<{ destroy: () => void } | null>(null);
   const lastVideoSongId = useRef<string | null>(null);
+  const currentSource = useRef<{ url: string | null; streaming: boolean }>({
+    url: null,
+    streaming: false,
+  });
+
+  const showVideo = useCallback(
+    (url: string, streaming: boolean, force = false) => {
+      if (
+        !force &&
+        currentSource.current.url === url &&
+        currentSource.current.streaming === streaming
+      )
+        return;
+      currentSource.current = { url, streaming };
+      setVideoUrl(url);
+      setVideoStreaming(streaming);
+      setVideoSourceRevision((revision) => revision + 1);
+    },
+    [],
+  );
 
   const stopCurrentVideo = useCallback(() => {
     videoRequestVersion.current += 1;
@@ -74,6 +94,7 @@ export function usePlayerVideo({
       currentVideo.removeAttribute("src");
       currentVideo.load();
     }
+    currentSource.current = { url: null, streaming: false };
     setVideoUrl(null);
   }, [videoRef]);
 
@@ -102,8 +123,10 @@ export function usePlayerVideo({
       }
       if (
         status.finalized &&
-        activeSong.current?.videoHash?.toLowerCase() === status.hash
+        activeSong.current?.videoHash?.toLowerCase() === status.hash &&
+        currentSource.current.url?.startsWith("omp://video-cache/")
       ) {
+        currentSource.current.streaming = false;
         setVideoStreaming(false);
         setVideoSourceRevision((revision) => revision + 1);
       }
@@ -124,10 +147,14 @@ export function usePlayerVideo({
       setVideoLoading(false);
       return;
     }
+    if (!sameSong) stopCurrentVideo();
+    if (song.videoDirectPlayable && !currentSource.current.url) {
+      showVideo(song.videoUrl, false, true);
+      setVideoLoading(false);
+    }
     const prepare = () => {
       if (!active) return;
-      stopCurrentVideo();
-      setVideoLoading(true);
+      if (!currentSource.current.url) setVideoLoading(true);
       api
         .prepareVideo(song.id, {
           codec: videoEncodingCodec,
@@ -138,22 +165,24 @@ export function usePlayerVideo({
         })
         .then((prepared) => {
           if (active && activeSong.current?.id === song.id) {
-            setVideoUrl(prepared?.url ?? null);
-            setVideoStreaming(prepared?.streaming ?? false);
-            setVideoSourceRevision((revision) => revision + 1);
-            setVideoLoading(false);
-            if (!prepared)
+            if (prepared) {
+              showVideo(prepared.url, prepared.streaming);
+              setVideoError(null);
+            } else if (!currentSource.current.url) {
               setVideoError("The beatmap video could not be prepared.");
+            }
+            setVideoLoading(false);
           }
         })
         .catch((reason: unknown) => {
           if (active && activeSong.current?.id === song.id) {
             setVideoLoading(false);
-            setVideoError(
-              reason instanceof Error
-                ? reason.message
-                : "The beatmap video could not be prepared.",
-            );
+            if (!currentSource.current.url)
+              setVideoError(
+                reason instanceof Error
+                  ? reason.message
+                  : "The beatmap video could not be prepared.",
+              );
           }
         });
     };
@@ -165,6 +194,7 @@ export function usePlayerVideo({
   }, [
     api,
     playVideos,
+    showVideo,
     stopCurrentVideo,
     song?.id,
     song?.videoUrl,
@@ -176,7 +206,9 @@ export function usePlayerVideo({
   ]);
 
   const handleVideoError = useCallback(() => {
+    currentSource.current = { url: null, streaming: false };
     setVideoUrl(null);
+    setVideoStreaming(false);
     setVideoLoading(false);
     setVideoError("This video's codec is not supported by Electron.");
   }, []);

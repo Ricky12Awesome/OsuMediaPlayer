@@ -36,6 +36,7 @@ export interface Song {
   backgroundHash?: string;
   videoUrl?: string;
   videoHash?: string;
+  videoDirectPlayable?: boolean;
   videoOffset?: number;
   onlineId?: number;
   md5Hash?: string;

@@ -134,6 +134,7 @@ export interface CacheManifest {
   profileHash: string;
   profile: EncodingProfile;
   encoder: string;
+  timestampRepaired?: boolean;
 }
 
 export function encodingProfile(

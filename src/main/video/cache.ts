@@ -1,4 +1,14 @@
-import { readdir, readFile, rm, stat, utimes } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import {
+  mkdir,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 import { isAssetHash } from "../media";
 import {
@@ -13,6 +23,7 @@ export interface StreamMetadata {
   profile?: EncodingProfile;
   cacheLimitBytes?: number;
   encoder?: string;
+  timestampRepaired?: boolean;
 }
 
 export interface CachedVideo {
@@ -29,6 +40,46 @@ export class VideoCache {
 
   manifestFile(hash: string): string {
     return join(this.directory, `${hash}.manifest.json`);
+  }
+
+  async readTimingChecks(): Promise<Map<string, boolean>> {
+    try {
+      const parsed = JSON.parse(
+        await readFile(join(this.directory, "timing-checks.json"), "utf8"),
+      ) as { version?: number; results?: unknown };
+      if (parsed.version !== 1 || !Array.isArray(parsed.results))
+        return new Map();
+      const results = new Map<string, boolean>();
+      for (const entry of parsed.results.slice(-1024)) {
+        if (
+          Array.isArray(entry) &&
+          entry.length === 2 &&
+          typeof entry[0] === "string" &&
+          isAssetHash(entry[0]) &&
+          typeof entry[1] === "boolean"
+        )
+          results.set(entry[0].toLowerCase(), entry[1]);
+      }
+      return results;
+    } catch {
+      return new Map();
+    }
+  }
+
+  async writeTimingChecks(
+    results: ReadonlyMap<string, boolean>,
+  ): Promise<void> {
+    await mkdir(this.directory, { recursive: true });
+    const temporary = join(this.directory, `timing-checks.${randomUUID()}.tmp`);
+    try {
+      await writeFile(
+        temporary,
+        JSON.stringify({ version: 1, results: [...results] }),
+      );
+      await rename(temporary, join(this.directory, "timing-checks.json"));
+    } finally {
+      await rm(temporary, { force: true }).catch(() => {});
+    }
   }
 
   async readCacheManifest(hash: string): Promise<CacheManifest | null> {

@@ -96,6 +96,7 @@ try {
       audioHash: song.audioHash,
       backgroundHash: song.backgroundHash,
       videoHash: song.videoHash,
+      videoDirectPlayable: song.videoDirectPlayable,
     })),
   );
   for (const expected of manifest.songs) {
@@ -104,6 +105,14 @@ try {
     assert.equal(song.audioHash, expected.audio.hash);
     assert.equal(song.backgroundHash, expected.background?.hash);
     assert.equal(song.videoHash, expected.video?.hash);
+    assert.equal(
+      song.videoDirectPlayable,
+      expected.video
+        ? ["mp4", "m4v", "webm"].includes(
+            expected.video.filename.split(".").at(-1),
+          )
+        : undefined,
+    );
     for (const asset of [expected.audio, expected.background, expected.video]) {
       if (!asset) continue;
       const response = await page.evaluate(async (hash) => {
@@ -306,6 +315,21 @@ try {
       BrowserWindow.getAllWindows()[0].webContents.isAudioMuted(),
     ),
     true,
+  );
+  const directVideo = manifest.songs.find((song) =>
+    song.video?.filename.endsWith(".mp4"),
+  );
+  assert.ok(directVideo);
+  await page
+    .locator(".song-row")
+    .filter({ hasText: directVideo.title })
+    .first()
+    .click();
+  await page.waitForFunction(
+    (hash) =>
+      document.querySelector(".hero-video")?.getAttribute("src") ===
+      `omp://asset/${hash}`,
+    directVideo.video.hash,
   );
 } finally {
   await app?.close();

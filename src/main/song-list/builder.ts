@@ -12,6 +12,7 @@ import type {
   SongListSummary,
   Song,
 } from "../../shared/types";
+import { videoPlaysDirectly } from "../../shared/video";
 import {
   assetUrl,
   hashedFileCandidates,
@@ -492,6 +493,7 @@ async function buildIndex(
               : fallback;
           song.videoUrl = assetUrl(video.hash);
           song.videoHash = video.hash;
+          song.videoDirectPlayable = videoPlaysDirectly(video.filename);
           song.videoOffset = referenced && event ? event.offset : 0;
           assets.set(video.hash, {
             hash: video.hash,
@@ -538,6 +540,7 @@ async function buildIndex(
           : pending.fallback;
       pending.song.videoUrl = assetUrl(video.hash);
       pending.song.videoHash = video.hash;
+      pending.song.videoDirectPlayable = videoPlaysDirectly(video.filename);
       pending.song.videoOffset = referenced && event ? event.offset : 0;
       assets.set(video.hash, { hash: video.hash, filename: video.filename });
       if (onBatch) changedSongs.set(pending.song.id, pending.song);
