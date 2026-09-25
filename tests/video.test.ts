@@ -445,6 +445,11 @@ process.stdout.write(JSON.stringify({
       await assert.rejects(stat(join(cache, `${hash}.mp4`)), {
         code: "ENOENT",
       });
+      assert.equal(
+        JSON.parse(await readFile(join(cache, "stream.json"), "utf8"))
+          .completed,
+        true,
+      );
       assert.ok(
         statuses.some(
           (status) => status.encoder === "libx264" && status.progress === 1,
@@ -482,6 +487,7 @@ test("an existing shared HLS stream is reused and served through the hash URL", 
         },
         cacheLimitBytes: 5 * 1024 ** 3,
         encoder: "libx264",
+        completed: true,
       }),
     );
     await writeFile(join(stream, "init.mp4"), "init");
@@ -493,6 +499,7 @@ test("an existing shared HLS stream is reused and served through the hash URL", 
         '#EXT-X-MAP:URI="init.mp4"',
         "#EXTINF:2,",
         "segment-000000.m4s",
+        "#EXT-X-ENDLIST",
       ].join("\n"),
     );
     const songList = {
@@ -537,6 +544,111 @@ test("an existing shared HLS stream is reused and served through the hash URL", 
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test(
+  "an interrupted HLS stream with ENDLIST is re-encoded after restart",
+  { skip: process.platform === "win32" },
+  async () => {
+    const root = await mkdtemp(join(process.cwd(), ".video-restart-test-"));
+    const cache = join(root, "video-cache");
+    const stream = join(cache, "stream");
+    const hash = "7".repeat(64);
+    const source = join(root, "files", hash[0], hash.slice(0, 2), hash);
+    const ffmpeg = join(root, "ffmpeg");
+    const ffprobe = join(root, "ffprobe");
+    const invocations = join(root, "ffmpeg-invocations.txt");
+    const converted = join(cache, `${hash}.mp4`);
+    let transcoder: VideoTranscoder | null = null;
+    try {
+      await mkdir(join(source, ".."), { recursive: true });
+      await mkdir(stream, { recursive: true });
+      await writeFile(source, "source");
+      await writeFile(
+        join(cache, "stream.json"),
+        JSON.stringify({
+          hash,
+          profileHash: videoEncodingProfileHash(videoSettings),
+          profile: {
+            encoderVersion: 1,
+            codec: videoSettings.codec,
+            quality: videoSettings.quality,
+            maxFps: videoSettings.maxFps,
+            forceRemux: videoSettings.forceRemux,
+          },
+          encoder: "libx264",
+          cacheLimitBytes: 5 * 1024 ** 3,
+          completed: false,
+        }),
+      );
+      await writeFile(join(stream, "init.mp4"), "old init");
+      await writeFile(join(stream, "segment-000001.m4s"), "old segment");
+      await writeFile(
+        join(stream, "playlist.m3u8"),
+        "#EXTM3U\n#EXTINF:1,\nsegment-000001.m4s\n#EXT-X-ENDLIST\n",
+      );
+      await writeFile(
+        ffprobe,
+        `#!/usr/bin/env node
+process.stdout.write(JSON.stringify({
+  streams: [{ codec_name: "h264", avg_frame_rate: "30/1" }],
+  format: { duration: "10" }
+}));
+`,
+      );
+      await writeFile(
+        ffmpeg,
+        `#!/usr/bin/env node
+const fs = await import("node:fs");
+const path = await import("node:path");
+const args = process.argv.slice(2);
+if (args.includes("-encoders")) {
+  process.stdout.write(" V....D libx264\\n");
+  process.exit(0);
+}
+const output = args.at(-1);
+if (output.endsWith(".partial.mp4")) {
+  fs.appendFileSync(${JSON.stringify(invocations)}, "finalize\\n");
+  const playlist = fs.readFileSync(args[args.indexOf("-i") + 1], "utf8");
+  fs.writeFileSync(output, playlist.includes("segment-000000.m4s") ? "converted full video" : "truncated video");
+} else {
+  fs.appendFileSync(${JSON.stringify(invocations)}, "encode\\n");
+  fs.mkdirSync(path.dirname(output), { recursive: true });
+  fs.writeFileSync(path.join(path.dirname(output), "init.mp4"), "new init");
+  fs.writeFileSync(path.join(path.dirname(output), "segment-000000.m4s"), "new segment");
+  fs.writeFileSync(output, "#EXTM3U\\n#EXT-X-MAP:URI=\\\"init.mp4\\\"\\n#EXTINF:1,\\nsegment-000000.m4s\\n#EXT-X-ENDLIST\\n");
+}
+`,
+      );
+      await chmod(ffmpeg, 0o755);
+      await chmod(ffprobe, 0o755);
+      const songList = {
+        summary: { installPath: root },
+        assets: new Map([[hash, { hash, filename: "video.avi" }]]),
+        getSong: () => ({ videoUrl: assetUrl(hash) }),
+      } as unknown as SongListIndex;
+      transcoder = new VideoTranscoder(cache, ffmpeg);
+
+      const prepared = await transcoder.prepare(
+        songList,
+        "song",
+        videoSettings,
+      );
+      assert.equal(prepared?.url, profiledVideoUrl(hash));
+      for (let attempt = 0; attempt < 100; attempt++) {
+        if (await stat(converted).catch(() => null)) break;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      assert.equal(await readFile(converted, "utf8"), "converted full video");
+      assert.equal(await readFile(invocations, "utf8"), "encode\nfinalize\n");
+      await assert.rejects(stat(join(stream, "segment-000001.m4s")), {
+        code: "ENOENT",
+      });
+    } finally {
+      transcoder?.dispose();
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);
 
 test(
   "cancelling an in-flight preparation resolves without a superseded error",

@@ -24,6 +24,8 @@ export interface StreamMetadata {
   cacheLimitBytes?: number;
   encoder?: string;
   timestampRepaired?: boolean;
+  // FFmpeg can write ENDLIST after SIGTERM; only a successful exit sets this.
+  completed?: boolean;
 }
 
 export interface CachedVideo {
@@ -184,6 +186,16 @@ export class VideoCache {
       return { ...parsed, hash: parsed.hash.toLowerCase() } as StreamMetadata;
     } catch {
       return null;
+    }
+  }
+
+  async writeStreamMetadata(metadata: StreamMetadata): Promise<void> {
+    const temporary = join(this.directory, `stream.${randomUUID()}.tmp`);
+    try {
+      await writeFile(temporary, JSON.stringify(metadata));
+      await rename(temporary, join(this.directory, "stream.json"));
+    } finally {
+      await rm(temporary, { force: true }).catch(() => {});
     }
   }
 
