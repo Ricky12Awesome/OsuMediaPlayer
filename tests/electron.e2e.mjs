@@ -518,6 +518,125 @@ try {
       localStorage.getItem("background-blur") === "1" &&
       localStorage.getItem("background-blur-style") === '"none"',
   );
+
+  const queueRows = page.locator(".song-row:not(.row-placeholder)");
+  const queueTitles = await queueRows.locator(".song-title").allTextContents();
+  assert.equal(queueTitles.length, 4);
+  await queueRows.nth(0).click();
+  await page.waitForFunction(
+    (title) =>
+      document.querySelector(".transport-song-text strong")?.textContent ===
+      title,
+    queueTitles[0],
+  );
+  for (const index of [2, 3]) {
+    await queueRows.nth(index).click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Add to queue" }).click();
+  }
+  await page.getByRole("button", { name: "Up next" }).click();
+  assert.deepEqual(
+    await page.locator(".transport-queue-song strong").allTextContents(),
+    [queueTitles[2], queueTitles[3]],
+  );
+  await page
+    .getByRole("button", { name: `Remove ${queueTitles[3]} from queue` })
+    .click();
+  assert.deepEqual(
+    await page.locator(".transport-queue-song strong").allTextContents(),
+    [queueTitles[2]],
+  );
+  await page.getByRole("button", { name: "Up next" }).click();
+  await queueRows.nth(3).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Add to queue" }).click();
+  assert.equal(
+    await page.locator(".transport-song-text strong").textContent(),
+    queueTitles[0],
+  );
+  for (const title of [queueTitles[2], queueTitles[3], queueTitles[1]]) {
+    await page.getByRole("button", { name: "Next song" }).click();
+    await page.waitForFunction(
+      (expected) =>
+        document.querySelector(".transport-song-text strong")?.textContent ===
+        expected,
+      title,
+    );
+  }
+  await page.getByRole("button", { name: "Previous song" }).click();
+  await page.waitForFunction(
+    (title) =>
+      document.querySelector(".transport-song-text strong")?.textContent ===
+      title,
+    queueTitles[3],
+  );
+  await page.getByRole("button", { name: "Next song" }).click();
+  await page.waitForFunction(
+    (title) =>
+      document.querySelector(".transport-song-text strong")?.textContent ===
+      title,
+    queueTitles[1],
+  );
+
+  await queueRows.nth(3).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Add to queue" }).click();
+  await page.getByRole("button", { name: "Up next" }).click();
+  await page.getByRole("button", { name: "Clear queue" }).click();
+  assert.equal(await page.locator(".transport-queue-song").count(), 0);
+  await page.getByRole("button", { name: "Up next" }).click();
+  await queueRows.nth(3).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Add to queue" }).click();
+  await queueRows.nth(0).click();
+  await page.getByRole("button", { name: "Up next" }).click();
+  assert.deepEqual(
+    await page.locator(".transport-queue-song strong").allTextContents(),
+    [queueTitles[3]],
+  );
+  await page.getByRole("button", { name: "Up next" }).click();
+  await page.getByRole("button", { name: "Next song" }).click();
+  await page.waitForFunction(
+    (title) =>
+      document.querySelector(".transport-song-text strong")?.textContent ===
+      title,
+    queueTitles[3],
+  );
+  await page.getByRole("button", { name: "Next song" }).click();
+  await page.waitForFunction(
+    (title) =>
+      document.querySelector(".transport-song-text strong")?.textContent ===
+      title,
+    queueTitles[1],
+  );
+  await queueRows.nth(3).click();
+  await queueRows.nth(2).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Add to queue" }).click();
+  await page.getByRole("button", { name: "Next song" }).click();
+  await page.waitForFunction(
+    (title) =>
+      document.querySelector(".transport-song-text strong")?.textContent ===
+      title,
+    queueTitles[2],
+  );
+  await page.getByRole("button", { name: "Next song" }).click();
+  assert.equal(
+    await page.locator(".transport-song-text strong").textContent(),
+    queueTitles[2],
+  );
+  await page.getByRole("button", { name: "Previous song" }).click();
+  await page.waitForFunction(
+    (title) =>
+      document.querySelector(".transport-song-text strong")?.textContent ===
+      title,
+    queueTitles[3],
+  );
+  for (const width of [600, 380]) {
+    await page.setViewportSize({ width, height: 700 });
+    const button = await page
+      .getByRole("button", { name: "Up next" })
+      .boundingBox();
+    const controls = await page.locator(".transport-extra").boundingBox();
+    assert.ok(button && controls);
+    assert.ok(button.x >= controls.x);
+    assert.ok(button.x + button.width <= controls.x + controls.width);
+  }
 } finally {
   await app?.close();
   await rm(userData, { recursive: true, force: true });

@@ -56,7 +56,7 @@ export interface VirtualSongListProps {
   favorites: Set<string>;
   onPlay: (song: Song, index: number) => void;
   onFavorite: (song: Song) => void;
-  onContextMenu: (song: Song, x: number, y: number) => void;
+  onContextMenu: (song: Song, index: number, x: number, y: number) => void;
   onTotal: (total: number) => void;
   onFirstSong?: (song: Song) => void;
   keyboardControlsRef?: {
@@ -541,7 +541,12 @@ export function VirtualSongList({
           event.stopPropagation();
           select(index);
           listRef.current?.focus({ preventScroll: true });
-          latest.current.onContextMenu(song, event.clientX, event.clientY);
+          latest.current.onContextMenu(
+            song,
+            index,
+            event.clientX,
+            event.clientY,
+          );
         }}
       >
         {song ? (

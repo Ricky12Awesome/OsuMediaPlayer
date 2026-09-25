@@ -18,7 +18,6 @@ import type {
   TagMatchMode,
   Song,
   SongDebugInfo,
-  SongContextMenuAction,
 } from "../../shared/types";
 import { sortKeys } from "../../shared/types";
 import { extractArtworkTheme, type ArtworkTheme } from "./artwork-theme";
@@ -38,6 +37,7 @@ import {
 import { Transport } from "./Transport";
 import { useKeyboardShortcuts } from "./useKeyboardShortcuts";
 import { AppOverlays, type SongContextMenuState } from "./AppOverlays";
+import type { SongMenuAction } from "./SongContextMenu";
 import { PlayerToolsPanel } from "./PlayerToolsPanel";
 import { PanelResizers } from "./PanelResizers";
 import { VisualizerSettingsPanel } from "./VisualizerSettingsPanel";
@@ -902,9 +902,10 @@ export function App({
   }, []);
 
   const openSongContextMenu = useCallback(
-    (song: Song, x: number, y: number) => {
+    (song: Song, index: number, x: number, y: number) => {
       setSongContextMenu({
         song,
+        index,
         x,
         y,
         info: {
@@ -934,17 +935,25 @@ export function App({
   }, []);
 
   const performSongContextMenuAction = useCallback(
-    (action: SongContextMenuAction) => {
+    (action: SongMenuAction) => {
       const current = songContextMenu;
       if (!current) return;
       setSongContextMenu(null);
+      if (action === "add-to-queue") {
+        if (!player.song) {
+          initialSongRestore.current += 1;
+          songInitialized.current = true;
+        }
+        player.addToQueue(current.song, query, current.index);
+        return;
+      }
       void api
         .performSongContextMenuAction(current.song.id, action)
         .catch(() => {
           // Native actions are best-effort; closing the menu keeps the UI responsive.
         });
     },
-    [songContextMenu],
+    [player.addToQueue, player.song, query, songContextMenu],
   );
 
   const chooseSongList = useCallback(async () => {

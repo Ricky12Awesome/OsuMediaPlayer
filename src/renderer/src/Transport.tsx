@@ -8,6 +8,7 @@ import {
 import {
   Heart,
   Keyboard,
+  ListMusic,
   LoaderCircle,
   Maximize2,
   Minimize2,
@@ -26,6 +27,7 @@ import {
   Volume1,
   Volume2,
   VolumeX,
+  X,
 } from "lucide-react";
 import type { Song } from "../../shared/types";
 import type { PlayerState } from "./usePlayer";
@@ -84,7 +86,10 @@ export function Transport({
   const [seekTooltipPreview, setSeekTooltipPreview] =
     useState<SeekPreview | null>(null);
   const [scrubTime, setScrubTime] = useState<number | null>(null);
+  const [queueOpen, setQueueOpen] = useState(false);
   const seekPreviewClearTimer = useRef<number | null>(null);
+  const queueButtonRef = useRef<HTMLButtonElement>(null);
+  const queuePopoverRef = useRef<HTMLElement>(null);
   const scrubPointer = useRef<number | null>(null);
   const scrubTimeRef = useRef<number | null>(null);
 
@@ -97,6 +102,27 @@ export function Transport({
     },
     [],
   );
+
+  useEffect(() => {
+    if (!queueOpen) return;
+    const onPointerDown = (event: globalThis.PointerEvent) => {
+      const target = event.target as Node;
+      if (
+        !queueButtonRef.current?.contains(target) &&
+        !queuePopoverRef.current?.contains(target)
+      )
+        setQueueOpen(false);
+    };
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") setQueueOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [queueOpen]);
 
   const duration = player.duration || player.song?.duration || 0;
   const displayedTime = scrubTime ?? player.currentTime;
@@ -377,6 +403,22 @@ export function Transport({
 
       <div className="transport-extra">
         <button
+          ref={queueButtonRef}
+          className="icon-button transport-queue-toggle"
+          aria-label="Up next"
+          aria-expanded={queueOpen}
+          aria-controls={queueOpen ? "transport-queue" : undefined}
+          title={`Up next (${player.queuedSongs.length})`}
+          onClick={() => setQueueOpen((open) => !open)}
+        >
+          <ListMusic size={17} />
+          {player.queuedSongs.length > 0 && (
+            <span className="transport-queue-count" aria-hidden="true">
+              {player.queuedSongs.length}
+            </span>
+          )}
+        </button>
+        <button
           className="icon-button"
           aria-label="Keyboard shortcuts"
           title="Keyboard shortcuts"
@@ -457,6 +499,50 @@ export function Transport({
           {fullscreen ? <Minimize2 size={19} /> : <Maximize2 size={19} />}
         </button>
       </div>
+      {queueOpen && (
+        <section
+          ref={queuePopoverRef}
+          id="transport-queue"
+          className="control-popover transport-queue-popover"
+          aria-label="Up next"
+        >
+          <div className="transport-queue-heading">
+            <h2>Up next</h2>
+            <button
+              type="button"
+              className="control-option transport-queue-clear"
+              disabled={player.queuedSongs.length === 0}
+              onClick={player.clearQueue}
+            >
+              Clear queue
+            </button>
+          </div>
+          {player.queuedSongs.length === 0 ? (
+            <p className="transport-queue-empty">
+              Right-click a song and choose Add to queue.
+            </p>
+          ) : (
+            <ol className="transport-queue-list">
+              {player.queuedSongs.map((song, index) => (
+                <li key={`${song.id}-${index}`}>
+                  <div className="transport-queue-song">
+                    <strong>{displaySongTitle(song, showTitleUnicode)}</strong>
+                    <span>{displaySongArtist(song, showArtistUnicode)}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label={`Remove ${displaySongTitle(song, showTitleUnicode)} from queue`}
+                    onClick={() => player.removeFromQueue(index)}
+                  >
+                    <X size={16} />
+                  </button>
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
+      )}
     </footer>
   );
 }

@@ -15,6 +15,7 @@ import {
   FileVideo,
   Hash,
   Link2,
+  ListPlus,
   Text,
 } from "lucide-react";
 import type {
@@ -23,21 +24,23 @@ import type {
   SongContextMenuInfo,
 } from "../../shared/types";
 
+export type SongMenuAction = SongContextMenuAction | "add-to-queue";
+
 interface SongContextMenuProps {
   song: Song;
   x: number;
   y: number;
   info: SongContextMenuInfo;
-  onAction: (action: SongContextMenuAction) => void;
+  onAction: (action: SongMenuAction) => void;
   onClose: () => void;
 }
 
 type MenuItemProps = {
   label: string;
-  action: SongContextMenuAction;
+  action: SongMenuAction;
   disabled?: boolean;
   icon?: ReactNode;
-  onAction: (action: SongContextMenuAction) => void;
+  onAction: (action: SongMenuAction) => void;
 };
 
 function MenuItem({
@@ -74,7 +77,7 @@ export function SongContextMenu({
   onClose,
 }: SongContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
-  const copyButtonRef = useRef<HTMLButtonElement>(null);
+  const firstButtonRef = useRef<HTMLButtonElement>(null);
   const [openSubmenu, setOpenSubmenu] = useState<"copy" | "open" | null>(null);
   const [position, setPosition] = useState({ x, y });
 
@@ -89,7 +92,7 @@ export function SongContextMenu({
   }, [x, y]);
 
   useEffect(() => {
-    copyButtonRef.current?.focus();
+    firstButtonRef.current?.focus();
     const closeOnOutsidePointer = (event: PointerEvent) => {
       if (!menuRef.current?.contains(event.target as Node)) onClose();
     };
@@ -154,9 +157,22 @@ export function SongContextMenu({
         aria-label={`Actions for ${song.title}`}
         style={{ left: position.x, top: position.y }}
       >
+        <button
+          ref={firstButtonRef}
+          type="button"
+          className="control-option song-context-item"
+          role="menuitem"
+          onClick={() => onAction("add-to-queue")}
+          onPointerEnter={() => setOpenSubmenu(null)}
+        >
+          <span className="song-context-item-icon" aria-hidden="true">
+            <ListPlus size={15} />
+          </span>
+          <span className="control-option-label">Add to queue</span>
+        </button>
+        <div className="song-context-separator" />
         <div className="song-context-menu-group">
           <button
-            ref={copyButtonRef}
             type="button"
             className="control-option song-context-item song-context-parent"
             role="menuitem"

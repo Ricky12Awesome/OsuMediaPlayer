@@ -45,6 +45,7 @@ function playbackError(error: unknown): string {
 
 export interface PlayerState {
   song: Song | null;
+  queuedSongs: Song[];
   queueIndex: number | null;
   queueQuery: SongListQuery;
   playing: boolean;
@@ -80,6 +81,9 @@ export interface PlayerState {
   loading: boolean;
   playSong: (song: Song, query?: SongListQuery, index?: number) => void;
   cueSong: (song: Song, query?: SongListQuery, index?: number) => void;
+  addToQueue: (song: Song, query?: SongListQuery, index?: number) => void;
+  removeFromQueue: (index: number) => void;
+  clearQueue: () => void;
   reset: () => void;
   toggle: () => void;
   seek: (time: number) => void;
@@ -97,6 +101,18 @@ export interface PlayerState {
   videoEncoder: string | null;
   videoError: string | null;
   handleVideoError: () => void;
+}
+
+interface QueueTrailEntry {
+  song: Song;
+  query: SongListQuery;
+  index: number;
+  manual: boolean;
+}
+
+interface QueueTrail {
+  entries: QueueTrailEntry[];
+  position: number;
 }
 
 export function usePlayer(
@@ -120,6 +136,7 @@ export function usePlayer(
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [settings] = useState(readSettings);
   const [song, setSong] = useState<Song | null>(initialSong);
+  const [queuedSongs, setQueuedSongs] = useState<Song[]>([]);
   const [queueIndex, setQueueIndex] = useState<number | null>(
     initialSong ? 0 : null,
   );
@@ -154,12 +171,19 @@ export function usePlayer(
       index: 0,
     },
   );
+  const pendingSongs = useRef<Song[]>([]);
+  const queueTrail = useRef<QueueTrail | null>(null);
   const history = useRef<number[]>([]);
   const historyPosition = useRef(-1);
   const generation = useRef(0);
   const mounted = useRef(false);
   const latestModes = useRef({ shuffle, repeat });
   const playVideosRef = useRef(playVideos);
+
+  const updatePendingSongs = useCallback((songs: Song[]) => {
+    pendingSongs.current = songs;
+    setQueuedSongs(songs);
+  }, []);
 
   latestModes.current = { shuffle, repeat };
   playVideosRef.current = playVideos;
@@ -228,6 +252,8 @@ export function usePlayer(
     generation.current++;
     activeSong.current = null;
     queue.current = { query: {}, index: 0 };
+    updatePendingSongs([]);
+    queueTrail.current = null;
     history.current = [];
     historyPosition.current = -1;
     audio.pause();
@@ -243,7 +269,7 @@ export function usePlayer(
     setLoading(false);
     setError(null);
     resetVideo();
-  }, [audio, resetVideo]);
+  }, [audio, resetVideo, updatePendingSongs]);
 
   const resumeGeneration = useCallback(
     async (id: number) => {
@@ -277,6 +303,7 @@ export function usePlayer(
       index = 0,
       autoPlay = true,
       fromShuffle = false,
+      manual = false,
     ) => {
       const id = ++generation.current;
       const nextIndex = Math.max(0, Math.trunc(index));
@@ -291,7 +318,7 @@ export function usePlayer(
       videoRef.current?.pause();
       setLoading(false);
       setSong(nextSong);
-      setQueueIndex(nextIndex);
+      setQueueIndex(manual ? null : nextIndex);
       setQueueQuery(copiedQuery);
       setCurrentTime(0);
       setDuration(nextSong.duration);
@@ -306,14 +333,48 @@ export function usePlayer(
   );
 
   const playSong = useCallback(
-    (nextSong: Song, query: SongListQuery = {}, index = 0) =>
-      loadSong(nextSong, query, index, true),
+    (nextSong: Song, query: SongListQuery = {}, index = 0) => {
+      queueTrail.current = null;
+      loadSong(nextSong, query, index, true);
+    },
     [loadSong],
   );
   const cueSong = useCallback(
-    (nextSong: Song, query: SongListQuery = {}, index = 0) =>
-      loadSong(nextSong, query, index, false),
+    (nextSong: Song, query: SongListQuery = {}, index = 0) => {
+      queueTrail.current = null;
+      loadSong(nextSong, query, index, false);
+    },
     [loadSong],
+  );
+
+  const addToQueue = useCallback(
+    (nextSong: Song, query: SongListQuery = {}, index = 0) => {
+      if (!activeSong.current) {
+        cueSong(nextSong, query, index);
+        return;
+      }
+      updatePendingSongs([...pendingSongs.current, nextSong]);
+    },
+    [cueSong, updatePendingSongs],
+  );
+
+  const removeFromQueue = useCallback(
+    (index: number) => {
+      if (
+        !Number.isInteger(index) ||
+        index < 0 ||
+        index >= pendingSongs.current.length
+      )
+        return;
+      updatePendingSongs(
+        pendingSongs.current.filter((_, position) => position !== index),
+      );
+    },
+    [updatePendingSongs],
+  );
+  const clearQueue = useCallback(
+    () => updatePendingSongs([]),
+    [updatePendingSongs],
   );
 
   const seek = useCallback(
@@ -359,6 +420,47 @@ export function usePlayer(
     else pause();
   }, [audio.paused, pause, resume]);
 
+  const playNextPending = useCallback(() => {
+    const nextSong = pendingSongs.current[0];
+    const currentSong = activeSong.current;
+    if (!nextSong || !currentSong) return false;
+    updatePendingSongs(pendingSongs.current.slice(1));
+    const currentQueue = queue.current;
+    const trail = queueTrail.current ?? {
+      entries: [
+        {
+          song: currentSong,
+          query: currentQueue.query,
+          index: currentQueue.index,
+          manual: false,
+        },
+      ],
+      position: 0,
+    };
+    const entries = trail.entries.slice(0, trail.position + 1);
+    queueTrail.current = {
+      entries: [
+        ...entries,
+        {
+          song: nextSong,
+          query: currentQueue.query,
+          index: currentQueue.index,
+          manual: true,
+        },
+      ],
+      position: entries.length,
+    };
+    loadSong(
+      nextSong,
+      currentQueue.query,
+      currentQueue.index,
+      true,
+      true,
+      true,
+    );
+    return true;
+  }, [loadSong, updatePendingSongs]);
+
   const navigate = useCallback(
     async (direction: 1 | -1, ended = false) => {
       if (!activeSong.current) return;
@@ -372,6 +474,40 @@ export function usePlayer(
       if (ended && latestModes.current.repeat === "one") {
         seek(0);
         resume();
+        return;
+      }
+      if (direction === 1 && playNextPending()) return;
+      const trail = queueTrail.current;
+      if (
+        trail &&
+        direction === 1 &&
+        trail.position < trail.entries.length - 1
+      ) {
+        const position = trail.position + 1;
+        const entry = trail.entries[position]!;
+        trail.position = position;
+        loadSong(
+          entry.song,
+          entry.query,
+          entry.index,
+          true,
+          true,
+          entry.manual,
+        );
+        return;
+      }
+      if (trail && direction === -1 && trail.position > 0) {
+        const position = trail.position - 1;
+        const entry = trail.entries[position]!;
+        trail.position = position;
+        loadSong(
+          entry.song,
+          entry.query,
+          entry.index,
+          true,
+          true,
+          entry.manual,
+        );
         return;
       }
       const currentQueue = queue.current;
@@ -389,6 +525,7 @@ export function usePlayer(
           total = page.total;
           currentQueue.total = total;
         }
+        if (direction === 1 && playNextPending()) return;
         const selected = latestModes.current.shuffle
           ? navigateShuffleHistory({
               history: {
@@ -438,10 +575,33 @@ export function usePlayer(
           );
           return;
         }
+        if (direction === 1 && playNextPending()) return;
         if (selected) {
           history.current = selected.history.entries;
           historyPosition.current = selected.history.position;
         }
+        const remainingTrail = queueTrail.current;
+        if (
+          direction === 1 &&
+          remainingTrail?.entries[remainingTrail.position]?.manual
+        ) {
+          const entries = remainingTrail.entries.slice(
+            0,
+            remainingTrail.position + 1,
+          );
+          queueTrail.current = {
+            entries: [
+              ...entries,
+              {
+                song: nextSong,
+                query: currentQueue.query,
+                index: nextIndex,
+                manual: false,
+              },
+            ],
+            position: entries.length,
+          };
+        } else queueTrail.current = null;
         loadSong(
           nextSong,
           currentQueue.query,
@@ -458,7 +618,7 @@ export function usePlayer(
         );
       }
     },
-    [api, audio, loadSong, resume, seek],
+    [api, audio, loadSong, playNextPending, resume, seek],
   );
 
   const next = useCallback(() => navigate(1), [navigate]);
@@ -516,6 +676,7 @@ export function usePlayer(
 
         history.current = selected.history.entries;
         historyPosition.current = selected.history.position;
+        queueTrail.current = null;
         loadSong(nextSong, currentQueue.query, selected.index, true, true);
         queue.current.total = page.total;
       } catch {
@@ -823,6 +984,7 @@ export function usePlayer(
 
   return {
     song,
+    queuedSongs,
     queueIndex,
     queueQuery,
     playing,
@@ -854,6 +1016,9 @@ export function usePlayer(
     loading,
     playSong,
     cueSong,
+    addToQueue,
+    removeFromQueue,
+    clearQueue,
     reset,
     toggle,
     seek,
