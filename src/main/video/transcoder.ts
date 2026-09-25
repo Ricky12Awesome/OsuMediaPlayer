@@ -286,7 +286,10 @@ export class VideoTranscoder {
           if (requestVersion !== this.requestVersion)
             throw new VideoEncodingSupersededError();
           if (this.active?.hash === hash) return { ready: this.active.ready };
-          if (await fileHasContents(this.playlist)) {
+          if (
+            streamMetadata?.completed === true &&
+            (await fileHasContents(this.playlist))
+          ) {
             if (requestVersion !== this.requestVersion)
               throw new VideoEncodingSupersededError();
             return { ready: null as Promise<void> | null };
@@ -551,8 +554,9 @@ export class VideoTranscoder {
       profile: encodingProfile(settings),
       cacheLimitBytes: cacheLimitBytes(settings),
       timestampRepaired: timingIssue,
+      completed: false,
     };
-    await writeFile(this.metadataFile, JSON.stringify(metadata));
+    await this.cache.writeStreamMetadata(metadata);
 
     let resolveReady!: () => void;
     let rejectReady!: (error: Error) => void;
@@ -710,17 +714,15 @@ export class VideoTranscoder {
       await this.removeHlsFiles();
       session.encoder = attempt.label;
       session.progress = 0;
-      await writeFile(
-        this.metadataFile,
-        JSON.stringify({
-          hash: session.hash,
-          profileHash: session.profileHash,
-          profile: encodingProfile(session.settings),
-          cacheLimitBytes: cacheLimitBytes(session.settings),
-          encoder: attempt.label,
-          timestampRepaired: timingIssue,
-        } satisfies StreamMetadata),
-      );
+      await this.cache.writeStreamMetadata({
+        hash: session.hash,
+        profileHash: session.profileHash,
+        profile: encodingProfile(session.settings),
+        cacheLimitBytes: cacheLimitBytes(session.settings),
+        encoder: attempt.label,
+        timestampRepaired: timingIssue,
+        completed: false,
+      });
       this.emitEncodingStatus(session);
       let progressOutput = "";
       let lastPercent = 0;
@@ -790,6 +792,15 @@ export class VideoTranscoder {
           resolveReady();
         }
         if (!ready) throw new Error("FFmpeg did not produce an HLS playlist.");
+        await this.cache.writeStreamMetadata({
+          hash: session.hash,
+          profileHash: session.profileHash,
+          profile: encodingProfile(session.settings),
+          cacheLimitBytes: cacheLimitBytes(session.settings),
+          encoder: attempt.label,
+          timestampRepaired: timingIssue,
+          completed: true,
+        });
         session.progress = 1;
         this.emitEncodingStatus(session);
         return;
@@ -843,18 +854,16 @@ export class VideoTranscoder {
     generation: number,
     waitForRenderer: boolean,
   ): Promise<boolean> {
-    if (
-      generation !== this.cacheGeneration ||
-      !(await fileHasContents(this.playlist))
-    )
-      return false;
+    if (generation !== this.cacheGeneration) return false;
     const metadata = await this.cache.readStreamMetadata();
     if (
       metadata?.hash !== hash ||
+      metadata.completed !== true ||
       !metadata.profileHash ||
       !metadata.profile ||
       !metadata.encoder ||
-      metadata.cacheLimitBytes === 0
+      metadata.cacheLimitBytes === 0 ||
+      !(await fileHasContents(this.playlist))
     )
       return false;
     const destination = join(this.cacheDirectory, `${hash}.mp4`);
