@@ -41,8 +41,15 @@ const videoFpsOptions = [
   { value: 60, label: "60 FPS" },
 ] as const;
 const backgroundBlurStyles = [
+  { value: "none", label: "No blur" },
   { value: "classic", label: "Classic" },
   { value: "frosted", label: "Frosted glass" },
+  { value: "focus", label: "Focus blur" },
+  { value: "directional", label: "Directional blur" },
+] as const;
+const backgroundBlurDirections = [
+  { value: "horizontal", label: "Horizontal" },
+  { value: "vertical", label: "Vertical" },
 ] as const;
 
 export type CacheNotice = {
@@ -74,6 +81,10 @@ export interface SettingsPanelProps {
   backgroundBlurStyle: Preferences["backgroundBlurStyle"];
   setBackgroundBlurStyle: Dispatch<
     SetStateAction<Preferences["backgroundBlurStyle"]>
+  >;
+  backgroundBlurDirection: Preferences["backgroundBlurDirection"];
+  setBackgroundBlurDirection: Dispatch<
+    SetStateAction<Preferences["backgroundBlurDirection"]>
   >;
   showNowPlayingTitleArtist: boolean;
   setShowNowPlayingTitleArtist: Dispatch<SetStateAction<boolean>>;
@@ -127,6 +138,8 @@ export function SettingsPanel({
   setBackgroundBlur,
   backgroundBlurStyle,
   setBackgroundBlurStyle,
+  backgroundBlurDirection,
+  setBackgroundBlurDirection,
   showNowPlayingTitleArtist,
   setShowNowPlayingTitleArtist,
   debugMode,
@@ -340,23 +353,19 @@ export function SettingsPanel({
             <label className="settings-row-label" htmlFor="background-blur">
               Blur background
             </label>
-            <span className="settings-row-value">
-              {backgroundBlur === 0 ? "Off" : `${backgroundBlur}px`}
-            </span>
+            <span className="settings-row-value">{backgroundBlur}px</span>
           </div>
           <input
             id="background-blur"
             className="settings-range-input"
             type="range"
-            min={0}
+            min={1}
             max={24}
             value={backgroundBlur}
-            aria-valuetext={
-              backgroundBlur === 0 ? "Off" : `${backgroundBlur} pixels`
-            }
+            aria-valuetext={`${backgroundBlur} ${backgroundBlur === 1 ? "pixel" : "pixels"}`}
             style={
               {
-                "--range-progress": `${(backgroundBlur / 24) * 100}%`,
+                "--range-progress": `${((backgroundBlur - 1) / 23) * 100}%`,
               } as CSSProperties
             }
             onChange={(event) => setBackgroundBlur(Number(event.target.value))}
@@ -371,6 +380,17 @@ export function SettingsPanel({
             onChange={setBackgroundBlurStyle}
           />
         </div>
+        {backgroundBlurStyle === "directional" && (
+          <div className="settings-row">
+            <span className="settings-row-label">Direction</span>
+            <SettingsPicker
+              label="Blur direction"
+              value={backgroundBlurDirection}
+              options={backgroundBlurDirections}
+              onChange={setBackgroundBlurDirection}
+            />
+          </div>
+        )}
       </div>
       <div className="settings-block video-encoding-setting">
         <span className="settings-label">

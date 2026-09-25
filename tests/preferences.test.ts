@@ -38,19 +38,32 @@ test("background blur settings persist and reject invalid values", () => {
     },
   });
 
-  assert.equal(preferences.get("backgroundBlur"), 0);
-  assert.equal(preferences.get("backgroundBlurStyle"), "classic");
+  assert.equal(preferences.get("backgroundBlur"), 1);
+  assert.equal(preferences.get("backgroundBlurStyle"), "none");
+  assert.equal(preferences.get("backgroundBlurDirection"), "horizontal");
   preferences.set("backgroundBlur", 12);
-  preferences.set("backgroundBlurStyle", "frosted");
+  preferences.set("backgroundBlurStyle", "focus");
+  preferences.set("backgroundBlurDirection", "vertical");
   assert.equal(preferences.get("backgroundBlur"), 12);
+  assert.equal(preferences.get("backgroundBlurStyle"), "focus");
+  assert.equal(preferences.get("backgroundBlurDirection"), "vertical");
+  preferences.set("backgroundBlurStyle", "directional");
+  assert.equal(preferences.get("backgroundBlurStyle"), "directional");
+  preferences.set("backgroundBlurStyle", "frosted");
   assert.equal(preferences.get("backgroundBlurStyle"), "frosted");
+  preferences.set("backgroundBlurStyle", "none");
+  assert.equal(preferences.get("backgroundBlurStyle"), "none");
 
   data.set("background-blur", "-2");
+  assert.equal(preferences.get("backgroundBlur"), 0);
+  data.set("background-blur", "0");
   assert.equal(preferences.get("backgroundBlur"), 0);
   data.set("background-blur", "999");
   assert.equal(preferences.get("backgroundBlur"), 24);
   data.set("background-blur", '"bad"');
-  assert.equal(preferences.get("backgroundBlur"), 0);
+  assert.equal(preferences.get("backgroundBlur"), 1);
   data.set("background-blur-style", '"unknown"');
-  assert.equal(preferences.get("backgroundBlurStyle"), "classic");
+  assert.equal(preferences.get("backgroundBlurStyle"), "none");
+  data.set("background-blur-direction", '"diagonal"');
+  assert.equal(preferences.get("backgroundBlurDirection"), "horizontal");
 });
