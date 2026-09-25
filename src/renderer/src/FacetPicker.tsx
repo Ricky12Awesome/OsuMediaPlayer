@@ -9,7 +9,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown, Search, X } from "lucide-react";
-import type { SongListFacet } from "../../shared/types";
+import type { SongListFacet, TagMatchMode } from "../../shared/types";
 
 const rowHeight = 32;
 const viewportRows = 8;
@@ -26,12 +26,16 @@ interface SingleFacetPickerProps extends FacetPickerBaseProps {
   multiple?: false;
   value: string;
   onChange: (value: string) => void;
+  matchMode?: never;
+  onMatchModeChange?: never;
 }
 
 interface MultipleFacetPickerProps extends FacetPickerBaseProps {
   multiple: true;
   value: string[];
   onChange: (value: string[]) => void;
+  matchMode?: TagMatchMode;
+  onMatchModeChange?: (mode: TagMatchMode) => void;
 }
 
 export type FacetPickerProps =
@@ -48,6 +52,8 @@ export function FacetPicker({
   items,
   icon,
   multiple = false,
+  matchMode,
+  onMatchModeChange,
 }: FacetPickerProps) {
   const id = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -142,10 +148,11 @@ export function FacetPicker({
         Math.min(viewportRows, Math.max(1, filtered.length)) * rowHeight;
       const below = window.innerHeight - trigger.bottom - 16;
       const above = trigger.top - 16;
-      const flip = below < wanted + 116 && above > below;
+      const chromeHeight = 116 + (matchMode ? 40 : 0);
+      const flip = below < wanted + chromeHeight && above > below;
       const viewportHeight = Math.max(
         rowHeight,
-        Math.min(wanted, (flip ? above : below) - 116),
+        Math.min(wanted, (flip ? above : below) - chromeHeight),
       );
       setHeight(viewportHeight);
       setPosition({
@@ -155,7 +162,7 @@ export function FacetPicker({
           Math.min(trigger.left, window.innerWidth - width - 12),
         ),
         top: flip
-          ? Math.max(12, trigger.top - viewportHeight - 116 - 6)
+          ? Math.max(12, trigger.top - viewportHeight - chromeHeight - 6)
           : trigger.bottom + 6,
       });
     };
@@ -169,7 +176,7 @@ export function FacetPicker({
       window.removeEventListener("resize", update);
       document.removeEventListener("scroll", onScroll, true);
     };
-  }, [filtered.length, open]);
+  }, [filtered.length, matchMode, open]);
 
   useLayoutEffect(() => {
     if (open) searchRef.current?.focus({ preventScroll: true });
@@ -312,6 +319,29 @@ export function FacetPicker({
                 </button>
               )}
             </div>
+            {multiple && matchMode && onMatchModeChange && (
+              <div
+                className="facet-picker-match"
+                role="group"
+                aria-label="Match selected tags"
+              >
+                <span>Match tags</span>
+                <div className="facet-picker-match-options">
+                  {(["any", "all"] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      className="facet-picker-match-option"
+                      aria-pressed={matchMode === mode}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => onMatchModeChange(mode)}
+                    >
+                      {mode === "any" ? "Any" : "All"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div
               id={id + "-listbox"}
               role="listbox"

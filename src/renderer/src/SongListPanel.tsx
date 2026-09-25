@@ -23,6 +23,7 @@ import type {
   SongListSummary,
   PlayerAPI,
   SortKey,
+  TagMatchMode,
   Song,
   SongContextMenuInfo,
 } from "../../shared/types";
@@ -51,6 +52,8 @@ export interface SongListPanelProps {
   favorites: Set<string>;
   tags: string[];
   setTags: Dispatch<SetStateAction<string[]>>;
+  tagMatch: TagMatchMode;
+  setTagMatch: Dispatch<SetStateAction<TagMatchMode>>;
   collection: string;
   setCollection: Dispatch<SetStateAction<string>>;
   sort: SortKey;
@@ -96,6 +99,8 @@ export function SongListPanel({
   favorites,
   tags,
   setTags,
+  tagMatch,
+  setTagMatch,
   collection,
   setCollection,
   sort,
@@ -199,6 +204,8 @@ export function SongListPanel({
           allLabel="All tags"
           value={tags}
           multiple
+          matchMode={tagMatch}
+          onMatchModeChange={setTagMatch}
           onChange={(value) =>
             setTags(Array.isArray(value) ? value : value ? [value] : [])
           }
@@ -239,7 +246,9 @@ export function SongListPanel({
         <div className="active-filters">
           <span>
             {tags.length
-              ? tags.map((value) => "#" + value).join(", ")
+              ? tags
+                  .map((value) => "#" + value)
+                  .join(tagMatch === "any" ? " or " : " + ")
               : collection ||
                 (tab === "favorites" ? "Your favorites" : "“" + search + "”")}
           </span>

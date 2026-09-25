@@ -103,6 +103,7 @@ export function VirtualSongList({
         collection: query.collection ?? "",
         tag: query.tag ?? "",
         tags: query.tags ?? [],
+        tagMatch: query.tagMatch ?? "all",
         sort: query.sort ?? "title",
         descending: query.descending ?? false,
         favoriteIds: query.favoriteIds,

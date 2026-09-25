@@ -61,6 +61,19 @@ test("song list queries search, filter, sort, and paginate songs", () => {
     index.query({ tags: ["electronic", "vocal"] }).items.map((song) => song.id),
     ["3"],
   );
+  assert.deepEqual(
+    index
+      .query({ tags: ["electronic", "vocal"], tagMatch: "any" })
+      .items.map((song) => song.id),
+    ["1", "2", "3"],
+  );
+  assert.deepEqual(
+    index
+      .query({ tags: ["vocal", "missing"], tagMatch: "any" })
+      .items.map((song) => song.id),
+    ["3"],
+  );
+  assert.equal(index.query({ tags: [], tagMatch: "any" }).total, 3);
   assert.deepEqual(index.getSongLocation("2"), {
     song: index.getSong("2"),
     index: 1,

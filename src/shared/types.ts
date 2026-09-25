@@ -84,11 +84,14 @@ export interface SongListSummary {
   skippedCount: number;
 }
 
+export type TagMatchMode = "any" | "all";
+
 export interface SongListQuery {
   search?: string;
   collection?: string;
   tag?: string;
   tags?: string[];
+  tagMatch?: TagMatchMode;
   sort?: SortKey;
   descending?: boolean;
   favoriteIds?: string[];

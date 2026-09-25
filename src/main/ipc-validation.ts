@@ -29,6 +29,8 @@ export function parseSongListQuery(
     query.tags = value.tags.filter(
       (tag): tag is string => typeof tag === "string",
     );
+  if (value.tagMatch === "any" || value.tagMatch === "all")
+    query.tagMatch = value.tagMatch;
   if (
     typeof value.sort === "string" &&
     validSortKeys.has(value.sort as SortKey)
