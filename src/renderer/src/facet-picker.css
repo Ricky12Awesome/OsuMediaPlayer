@@ -106,6 +106,46 @@
   padding: 0;
   display: grid;
 }
+.facet-picker-match {
+  color: #ba9fc7;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 2.125rem;
+  margin-bottom: 0.375rem;
+  padding: 0 0.3125rem;
+  font-size: 1rem;
+  display: flex;
+}
+.facet-picker-match-options {
+  background: var(--panel-deep);
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  padding: 0.125rem;
+  display: flex;
+}
+.facet-picker-match-option {
+  color: #ba9fc7;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 0.25rem;
+  min-width: 2.75rem;
+  min-height: 1.625rem;
+  padding: 0.125rem 0.375rem;
+  font:
+    600 1rem Nunito Sans,
+    sans-serif;
+}
+.facet-picker-match-option:hover,
+.facet-picker-match-option:focus-visible {
+  color: var(--pink-pale);
+  outline: 1px solid var(--pink);
+}
+.facet-picker-match-option[aria-pressed="true"] {
+  color: var(--pink-bright);
+  background: rgb(var(--pink-rgb) / 0.17);
+}
 .facet-picker-option > small {
   font-variant-numeric: tabular-nums;
   color: #887095;

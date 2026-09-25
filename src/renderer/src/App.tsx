@@ -15,6 +15,7 @@ import type {
   SongListSummary,
   PlayerAPI,
   SortKey,
+  TagMatchMode,
   Song,
   SongDebugInfo,
   SongContextMenuAction,
@@ -213,6 +214,7 @@ export function App({
   const [tab, setTab] = useState<SongListTab>("all");
   const [collection, setCollection] = useState("");
   const [tags, setTags] = useState<string[]>([]);
+  const [tagMatch, setTagMatch] = useState<TagMatchMode>("all");
   const [sort, setSort] = useState<SortKey>(() => {
     const stored = readPreference("sort");
     return isSortKey(stored) ? stored : "title";
@@ -780,11 +782,12 @@ export function App({
       search,
       collection: collection || undefined,
       tags: tags.length ? tags : undefined,
+      tagMatch: tags.length ? tagMatch : undefined,
       sort,
       descending,
       favoriteIds: tab === "favorites" ? [...favorites] : undefined,
     }),
-    [collection, descending, favorites, search, sort, tab, tags],
+    [collection, descending, favorites, search, sort, tab, tagMatch, tags],
   );
   const queryKey = useMemo(() => JSON.stringify(query), [query]);
   const queryKeyRef = useRef(queryKey);
@@ -1049,6 +1052,7 @@ export function App({
     setSearchDraft("");
     setSearch("");
     setTags([]);
+    setTagMatch("all");
     setCollection("");
     setTab("all");
   };
@@ -1356,6 +1360,8 @@ export function App({
             favorites={favorites}
             tags={tags}
             setTags={setTags}
+            tagMatch={tagMatch}
+            setTagMatch={setTagMatch}
             collection={collection}
             setCollection={setCollection}
             sort={sort}

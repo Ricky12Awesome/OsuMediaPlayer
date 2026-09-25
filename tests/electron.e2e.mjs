@@ -132,6 +132,29 @@ try {
       });
     }
   }
+  await page.getByRole("button", { name: "Filter by tag" }).click();
+  const coralTag = page.getByRole("option", { name: /coral/ });
+  await coralTag.click();
+  await page.getByRole("option", { name: "All tags" }).hover();
+  const selectedBackground = await coralTag.evaluate(
+    (element) => getComputedStyle(element).backgroundColor,
+  );
+  await coralTag.hover();
+  assert.equal(await coralTag.getAttribute("aria-selected"), "true");
+  assert.notEqual(
+    await coralTag.evaluate(
+      (element) => getComputedStyle(element).backgroundColor,
+    ),
+    selectedBackground,
+  );
+  await page.getByRole("option", { name: /emerald/ }).click();
+  await page.getByText("0 songs found").waitFor();
+  await page.getByRole("button", { name: "Any", exact: true }).click();
+  await page.getByText("2 songs found").waitFor();
+  await page.getByRole("button", { name: "All", exact: true }).click();
+  await page.getByText("0 songs found").waitFor();
+  await page.getByRole("button", { name: /Clear filters/ }).click();
+  await page.getByText("4 songs in your song list").waitFor();
   for (const expected of manifest.songs.filter((song) => song.video)) {
     const song = loadedSongs.find((item) => item.title === expected.title);
     let prepared = null;

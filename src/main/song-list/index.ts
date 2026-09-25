@@ -395,6 +395,7 @@ export class SongListIndex {
     const tagFilters = [...strings(input.tags), string(input.tag)]
       .map(normalize)
       .filter(Boolean);
+    const tagMatch = input.tagMatch === "any" ? "any" : "all";
     const sort = sorts.has(input.sort as SortKey) ? input.sort! : "title";
     const descending = input.descending === true;
     const favorites = Array.isArray(input.favoriteIds)
@@ -404,6 +405,7 @@ export class SongListIndex {
       search,
       collection,
       tagFilters,
+      tagMatch,
       sort,
       descending,
       favorites ? [...favorites] : null,
@@ -418,7 +420,10 @@ export class SongListIndex {
         if (
           item &&
           (!collection || item.collections.has(collection)) &&
-          tagFilters.every((tag) => item.tags.has(tag)) &&
+          (tagFilters.length === 0 ||
+            (tagMatch === "any"
+              ? tagFilters.some((tag) => item.tags.has(tag))
+              : tagFilters.every((tag) => item.tags.has(tag)))) &&
           (!favorites || favorites.has(item.song.id)) &&
           terms.every((term) => item.search.includes(term))
         ) {

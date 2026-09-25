@@ -133,6 +133,11 @@
   color: var(--pink-bright);
   background: rgb(var(--pink-rgb) / 0.05);
 }
+.control-option[aria-selected="true"]:hover,
+.control-option[aria-selected="true"].is-active,
+.control-option[aria-selected="true"]:focus-visible {
+  background: rgb(var(--pink-rgb) / 0.18);
+}
 .control-option:disabled {
   color: #806e8d;
   cursor: default;
