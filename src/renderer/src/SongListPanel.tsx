@@ -147,8 +147,9 @@ export function SongListPanel({
               setSearchDraft(event.target.value)
             }
             onKeyDown={onSearchKeyDown}
-            placeholder="Search songs, artists, tags…"
+            placeholder="Search songs or try length>=120"
             aria-label="Search song list"
+            title="Search filters: artist, title, source, bpm, length, lastplayed, played, created, submitted, ranked, status, tag. Example: status=r,l length>=120"
           />
           {searchDraft ? (
             <button

@@ -5,7 +5,7 @@ import type {
   SongListSnapshot,
 } from "./types";
 
-export const songListCacheVersion = 8;
+export const songListCacheVersion = 9;
 
 export interface SongListCachePaths {
   directory: string;

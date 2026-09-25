@@ -99,6 +99,15 @@ try {
       videoDirectPlayable: song.videoDirectPlayable,
     })),
   );
+  const search = page.getByRole("textbox", { name: "Search song list" });
+  await search.fill("status=p length=10 bpm>=110");
+  await page.getByText("4 songs found").waitFor();
+  await search.fill("status=r");
+  await page.getByText("0 songs found").waitFor();
+  await search.fill("tag=coral");
+  await page.getByText("0 songs found").waitFor();
+  await search.fill("");
+  await page.getByText("4 songs in your song list").waitFor();
   for (const expected of manifest.songs) {
     const song = loadedSongs.find((item) => item.title === expected.title);
     assert.ok(song, `Missing ${expected.title}`);

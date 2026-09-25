@@ -45,6 +45,16 @@ export interface Song {
   dateSubmittedAt?: number;
   dateRankedAt?: number;
   lastPlayedAt?: number;
+  /** Per-difficulty values used by osu-style search on grouped song rows. */
+  beatmapSearch?: BeatmapSearchData[];
+}
+
+export interface BeatmapSearchData {
+  duration: number;
+  bpm: number;
+  lastPlayedAt: number;
+  status: number;
+  userTags: string[];
 }
 
 /** A media asset's technical metadata used by the now-playing debug widget. */

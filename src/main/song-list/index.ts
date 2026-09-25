@@ -9,6 +9,7 @@ import type {
 } from "../../shared/types";
 import { assetUrl, type MediaAsset } from "../media";
 import { realmSongOrder } from "./realm";
+import { matchesSearch, parseSearch } from "./search";
 import type {
   SongListCancellation,
   SongListCollection,
@@ -390,7 +391,8 @@ export class SongListIndex {
   }
 
   query(input: SongListQuery = {}): SongListPage {
-    const search = normalize(string(input.search).slice(0, 1000)).trim();
+    const search = string(input.search).slice(0, 1000).trim();
+    const criteria = parseSearch(search);
     const collection = normalize(string(input.collection));
     const tagFilters = [...strings(input.tags), string(input.tag)]
       .map(normalize)
@@ -403,6 +405,7 @@ export class SongListIndex {
       : null;
     const key = JSON.stringify([
       search,
+      criteria.timeSensitive ? Math.floor(Date.now() / 1000) : null,
       collection,
       tagFilters,
       tagMatch,
@@ -412,7 +415,6 @@ export class SongListIndex {
     ]);
     let matches = this.queryCache.get(key);
     if (!matches) {
-      const terms = search.split(/\s+/).filter(Boolean);
       const ordered = this.orderFor(sort, descending);
       matches = [];
       for (const id of ordered) {
@@ -425,7 +427,7 @@ export class SongListIndex {
               ? tagFilters.some((tag) => item.tags.has(tag))
               : tagFilters.every((tag) => item.tags.has(tag)))) &&
           (!favorites || favorites.has(item.song.id)) &&
-          terms.every((term) => item.search.includes(term))
+          matchesSearch(item.song, item.search, criteria)
         ) {
           matches.push(item.song);
         }

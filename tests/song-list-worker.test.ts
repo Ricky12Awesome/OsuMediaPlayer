@@ -281,6 +281,7 @@ test("worker imports Realm and transfers canonical sort orders; errors and cance
       "キャッシュアーティスト",
     );
     assert.equal(cached.getSong(firstSongId)?.videoOffset, 1.25);
+    assert.equal(cached.query({ search: "status=p bpm>=100" }).total, 3);
     assert.equal(cached.assets.get("b".repeat(64))?.filename, "background.jpg");
     assert.equal(cached.assets.get("c".repeat(64))?.filename, "video.mp4");
     assert.equal(cached.snapshot().orders.size, 12);
