@@ -1,4 +1,4 @@
-import type { PointerEvent, RefObject } from "react";
+import type { CSSProperties, PointerEvent, RefObject } from "react";
 import { LoaderCircle, Sparkles } from "lucide-react";
 import type { SongDebugInfo } from "../../shared/types";
 import type { PlayerState } from "./usePlayer";
@@ -9,6 +9,7 @@ import type {
   VisualizerSettings,
   VisualizerStatus,
 } from "./visualizer-settings";
+import type { Preferences } from "./preferences";
 
 export const captionPositions = [
   "top-left",
@@ -26,6 +27,9 @@ export type CaptionPosition = (typeof captionPositions)[number];
 export interface NowPlayingProps {
   player: PlayerState;
   backgroundDim: number;
+  backgroundBlur: number;
+  backgroundBlurStyle: Preferences["backgroundBlurStyle"];
+  backgroundBlurDirection: Preferences["backgroundBlurDirection"];
   visualizerSettings: VisualizerSettings;
   onVisualizerStatus: (status: VisualizerStatus, detail?: string) => void;
   visualizerThemeKey?: unknown;
@@ -44,6 +48,9 @@ export interface NowPlayingProps {
 export function NowPlaying({
   player,
   backgroundDim,
+  backgroundBlur,
+  backgroundBlurStyle,
+  backgroundBlurDirection,
   visualizerSettings,
   onVisualizerStatus,
   visualizerThemeKey,
@@ -87,6 +94,7 @@ export function NowPlaying({
         },
       }
     : debugInfo;
+  const blurEnabled = backgroundBlur > 0 && backgroundBlurStyle !== "none";
 
   return (
     <section className="now-playing-panel" aria-label="Now playing">
@@ -96,9 +104,34 @@ export function NowPlaying({
           "artwork-stage " +
           (player.song?.artworkUrl ? "has-artwork " : "") +
           (player.playVideos && player.song?.videoUrl ? "has-video " : "") +
-          (videoActive ? "video-is-active" : "")
+          (videoActive ? "video-is-active " : "") +
+          (blurEnabled ? `blur-enabled blur-${backgroundBlurStyle}` : "")
         }
+        style={{ "--background-blur": `${backgroundBlur}px` } as CSSProperties}
       >
+        {blurEnabled && backgroundBlurStyle === "directional" && (
+          <svg width="0" height="0" aria-hidden="true" focusable="false">
+            <defs>
+              <filter
+                id="now-playing-directional-blur"
+                x="-50%"
+                y="-50%"
+                width="200%"
+                height="200%"
+              >
+                <feGaussianBlur
+                  in="SourceGraphic"
+                  edgeMode="duplicate"
+                  stdDeviation={
+                    backgroundBlurDirection === "horizontal"
+                      ? `${backgroundBlur} 0`
+                      : `0 ${backgroundBlur}`
+                  }
+                />
+              </filter>
+            </defs>
+          </svg>
+        )}
         {player.song?.artworkUrl && (
           <img
             className="hero-background"
@@ -120,6 +153,12 @@ export function NowPlaying({
             preload="metadata"
             aria-hidden="true"
           />
+        )}
+        {blurEnabled && backgroundBlurStyle === "frosted" && (
+          <div className="artwork-glass" aria-hidden="true" />
+        )}
+        {blurEnabled && backgroundBlurStyle === "focus" && (
+          <div className="artwork-focus" aria-hidden="true" />
         )}
         <div
           className="artwork-dim"

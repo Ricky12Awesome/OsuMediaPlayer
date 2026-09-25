@@ -50,6 +50,7 @@ import {
   readPreference,
   removePreference,
   writePreference,
+  preferenceDefaults,
   type Preferences,
 } from "./preferences";
 
@@ -295,6 +296,17 @@ export function App({
   );
   const [backgroundDim, setBackgroundDim] = useState(() =>
     readPreference("backgroundDim"),
+  );
+  const [backgroundBlur, setBackgroundBlur] = useState(() =>
+    Math.max(1, readPreference("backgroundBlur")),
+  );
+  const [backgroundBlurStyle, setBackgroundBlurStyle] = useState(() =>
+    readPreference("backgroundBlur") === 0
+      ? "none"
+      : readPreference("backgroundBlurStyle"),
+  );
+  const [backgroundBlurDirection, setBackgroundBlurDirection] = useState(() =>
+    readPreference("backgroundBlurDirection"),
   );
   const [artworkTheme, setArtworkTheme] = useState<{
     url: string;
@@ -643,6 +655,18 @@ export function App({
   useEffect(
     () => writePreference("backgroundDim", backgroundDim),
     [backgroundDim],
+  );
+  useEffect(
+    () => writePreference("backgroundBlur", backgroundBlur),
+    [backgroundBlur],
+  );
+  useEffect(
+    () => writePreference("backgroundBlurStyle", backgroundBlurStyle),
+    [backgroundBlurStyle],
+  );
+  useEffect(
+    () => writePreference("backgroundBlurDirection", backgroundBlurDirection),
+    [backgroundBlurDirection],
   );
   useEffect(
     () => writePreference("nowPlayingPosition", captionPosition),
@@ -1000,6 +1024,9 @@ export function App({
     setDebugMode(false);
     setArtworkThemeEnabled(true);
     setBackgroundDim(0);
+    setBackgroundBlur(preferenceDefaults.backgroundBlur);
+    setBackgroundBlurStyle(preferenceDefaults.backgroundBlurStyle);
+    setBackgroundBlurDirection(preferenceDefaults.backgroundBlurDirection);
     setVisualizerSettings({ ...defaultVisualizerSettings });
     setSongListWidth(minSongListWidth);
     setSidePanelWidth(defaultSidePanelWidth);
@@ -1252,6 +1279,9 @@ export function App({
           <NowPlaying
             player={player}
             backgroundDim={backgroundDim}
+            backgroundBlur={backgroundBlur}
+            backgroundBlurStyle={backgroundBlurStyle}
+            backgroundBlurDirection={backgroundBlurDirection}
             visualizerSettings={visualizerSettings}
             onVisualizerStatus={updateVisualizerStatus}
             visualizerThemeKey={activeArtworkTheme}
@@ -1301,6 +1331,12 @@ export function App({
                 setArtworkThemeEnabled={setArtworkThemeEnabled}
                 backgroundDim={backgroundDim}
                 setBackgroundDim={setBackgroundDim}
+                backgroundBlur={backgroundBlur}
+                setBackgroundBlur={setBackgroundBlur}
+                backgroundBlurStyle={backgroundBlurStyle}
+                setBackgroundBlurStyle={setBackgroundBlurStyle}
+                backgroundBlurDirection={backgroundBlurDirection}
+                setBackgroundBlurDirection={setBackgroundBlurDirection}
                 showNowPlayingTitleArtist={showNowPlayingTitleArtist}
                 setShowNowPlayingTitleArtist={setShowNowPlayingTitleArtist}
                 debugMode={debugMode}

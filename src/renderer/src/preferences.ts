@@ -27,6 +27,9 @@ export interface Preferences {
   debugMode: boolean;
   artworkTheme: boolean;
   backgroundDim: number;
+  backgroundBlur: number;
+  backgroundBlurStyle: "none" | "classic" | "frosted" | "focus" | "directional";
+  backgroundBlurDirection: "horizontal" | "vertical";
   nowPlayingPosition:
     | "top-left"
     | "top-center"
@@ -72,6 +75,9 @@ const keys: Record<PreferenceKey, string> = {
   debugMode: "debug-mode",
   artworkTheme: "artwork-theme",
   backgroundDim: "background-dim",
+  backgroundBlur: "background-blur",
+  backgroundBlurStyle: "background-blur-style",
+  backgroundBlurDirection: "background-blur-direction",
   nowPlayingPosition: "now-playing-position",
   songListWidth: "song-list-width",
   sidePanelOpen: "side-panel-open",
@@ -105,6 +111,9 @@ export const preferenceDefaults: Preferences = {
   debugMode: false,
   artworkTheme: true,
   backgroundDim: 0,
+  backgroundBlur: 1,
+  backgroundBlurStyle: "none",
+  backgroundBlurDirection: "horizontal",
   nowPlayingPosition: "top-left",
   songListWidth: 466,
   sidePanelOpen: false,
@@ -201,6 +210,26 @@ function parseValue<K extends PreferenceKey>(
       return Math.min(
         100,
         Math.max(0, parseNumber(value, fallback as number)),
+      ) as Preferences[K];
+    case "backgroundBlur":
+      // Preserve legacy 0 until App migrates it to the No blur style.
+      return Math.min(
+        24,
+        Math.max(0, parseNumber(value, fallback as number)),
+      ) as Preferences[K];
+    case "backgroundBlurStyle":
+      return (
+        value === "none" ||
+        value === "classic" ||
+        value === "frosted" ||
+        value === "focus" ||
+        value === "directional"
+          ? value
+          : fallback
+      ) as Preferences[K];
+    case "backgroundBlurDirection":
+      return (
+        value === "horizontal" || value === "vertical" ? value : fallback
       ) as Preferences[K];
     case "sidePanelWidth":
       return Math.min(

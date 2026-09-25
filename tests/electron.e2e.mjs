@@ -299,6 +299,90 @@ try {
   );
   await backgroundDim.press("Home");
   assert.equal(await backgroundDim.inputValue(), "0");
+  const backgroundBlur = page.getByRole("slider", {
+    name: "Blur background",
+  });
+  assert.equal(await backgroundBlur.inputValue(), "1");
+  assert.equal(await page.locator(".artwork-stage.blur-enabled").count(), 0);
+  await backgroundBlur.press("End");
+  assert.equal(await backgroundBlur.inputValue(), "24");
+  assert.equal(await page.locator(".artwork-stage.blur-enabled").count(), 0);
+  await page.getByRole("button", { name: "Blur style" }).click();
+  await page.getByRole("option", { name: "Classic" }).click();
+  assert.equal(await page.locator(".artwork-stage.blur-classic").count(), 1);
+  await page.getByRole("button", { name: "Blur style" }).click();
+  await page.getByRole("option", { name: "Frosted glass" }).click();
+  assert.equal(await page.locator(".artwork-stage.blur-frosted").count(), 1);
+  assert.equal(await page.locator(".artwork-glass").count(), 1);
+  assert.deepEqual(
+    await page.locator(".artwork-stage").evaluate((stage) => {
+      const glass = stage.querySelector(".artwork-glass");
+      const stageBounds = stage.getBoundingClientRect();
+      const glassBounds = glass.getBoundingClientRect();
+      return [
+        glassBounds.left - stageBounds.left,
+        glassBounds.top - stageBounds.top,
+        glassBounds.width - stageBounds.width,
+        glassBounds.height - stageBounds.height,
+      ];
+    }),
+    [0, 0, 0, 0],
+  );
+  assert.equal(
+    await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("background-blur-style")),
+    ),
+    "frosted",
+  );
+  await page.getByRole("button", { name: "Blur style" }).click();
+  await page.getByRole("option", { name: "Focus blur" }).click();
+  assert.equal(await page.locator(".artwork-focus").count(), 1);
+  assert.match(
+    await page
+      .locator(".artwork-focus")
+      .evaluate((element) => getComputedStyle(element).maskImage),
+    /radial-gradient/,
+  );
+  await page.getByRole("button", { name: "Blur style" }).click();
+  await page.getByRole("option", { name: "Directional blur" }).click();
+  assert.equal(
+    await page
+      .locator("#now-playing-directional-blur feGaussianBlur")
+      .getAttribute("stdDeviation"),
+    "24 0",
+  );
+  await page.getByRole("button", { name: "Blur direction" }).click();
+  await page.getByRole("option", { name: "Vertical" }).click();
+  assert.equal(
+    await page
+      .locator("#now-playing-directional-blur feGaussianBlur")
+      .getAttribute("stdDeviation"),
+    "0 24",
+  );
+  assert.equal(
+    await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("background-blur-direction")),
+    ),
+    "vertical",
+  );
+  await backgroundBlur.press("Home");
+  assert.equal(await backgroundBlur.inputValue(), "1");
+  assert.equal(
+    await page
+      .locator("#now-playing-directional-blur feGaussianBlur")
+      .getAttribute("stdDeviation"),
+    "0 1",
+  );
+  await page.getByRole("button", { name: "Blur style" }).click();
+  await page.getByRole("option", { name: "No blur" }).click();
+  assert.equal(await page.locator(".artwork-stage.blur-enabled").count(), 0);
+  assert.equal(await page.locator(".artwork-glass").count(), 0);
+  assert.equal(await page.locator(".artwork-focus").count(), 0);
+  assert.equal(await page.locator("#now-playing-directional-blur").count(), 0);
+  await backgroundBlur.press("End");
+  assert.equal(await page.locator(".artwork-stage.blur-enabled").count(), 0);
+  await page.getByRole("button", { name: "Blur style" }).click();
+  await page.getByRole("option", { name: "Frosted glass" }).click();
   await page.getByRole("tab", { name: "Visualizer", exact: true }).click();
   const response = page.getByRole("spinbutton", {
     name: "Response time (ms)",
@@ -362,6 +446,77 @@ try {
       document.querySelector(".hero-video")?.getAttribute("src") ===
       `omp://asset/${hash}`,
     directVideo.video.hash,
+  );
+  assert.match(
+    await page
+      .locator(".artwork-glass")
+      .evaluate((element) => getComputedStyle(element).backdropFilter),
+    /blur\(24px\)/,
+  );
+  assert.equal(
+    await page
+      .locator(".hero-video")
+      .evaluate((element) => getComputedStyle(element).filter),
+    "none",
+  );
+  await page.getByRole("button", { name: "Blur style" }).click();
+  await page.getByRole("option", { name: "Directional blur" }).click();
+  assert.match(
+    await page
+      .locator(".hero-video")
+      .evaluate((element) => getComputedStyle(element).filter),
+    /now-playing-directional-blur/,
+  );
+  await page.getByRole("button", { name: "Blur style" }).click();
+  await page.getByRole("option", { name: "Classic" }).click();
+  assert.equal(await page.locator(".artwork-glass").count(), 0);
+  assert.equal(
+    await page
+      .locator(".hero-video")
+      .evaluate((element) => getComputedStyle(element).filter),
+    "blur(24px)",
+  );
+  await backgroundBlur.press("Home");
+  assert.equal(await backgroundBlur.inputValue(), "1");
+  assert.equal(
+    await page
+      .locator(".hero-video")
+      .evaluate((element) => getComputedStyle(element).filter),
+    "blur(1px)",
+  );
+  await page.getByRole("button", { name: "Blur style" }).click();
+  await page.getByRole("option", { name: "No blur" }).click();
+  assert.equal(
+    await page
+      .locator(".hero-background")
+      .evaluate((element) => getComputedStyle(element).filter),
+    "none",
+  );
+  assert.equal(
+    await page
+      .locator(".hero-video")
+      .evaluate((element) => getComputedStyle(element).filter),
+    "none",
+  );
+  await page.evaluate(() => {
+    localStorage.setItem("background-blur", "0");
+    localStorage.setItem("background-blur-style", '"classic"');
+  });
+  await page.reload();
+  if ((await panelToggle.getAttribute("aria-expanded")) !== "true") {
+    await panelToggle.click();
+  }
+  await backgroundBlur.waitFor();
+  assert.equal(await backgroundBlur.inputValue(), "1");
+  assert.equal(await page.locator(".artwork-stage.blur-enabled").count(), 0);
+  assert.equal(
+    await page.getByRole("button", { name: "Blur style" }).innerText(),
+    "No blur",
+  );
+  await page.waitForFunction(
+    () =>
+      localStorage.getItem("background-blur") === "1" &&
+      localStorage.getItem("background-blur-style") === '"none"',
   );
 } finally {
   await app?.close();

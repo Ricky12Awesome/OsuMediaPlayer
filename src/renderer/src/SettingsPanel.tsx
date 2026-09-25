@@ -18,6 +18,7 @@ import type { PlayerState } from "./usePlayer";
 import { SettingsPicker } from "./SettingsPicker";
 import { PreferenceTransferControls } from "./PreferenceTransferControls";
 import { exportFavorites, importFavorites } from "./preference-transfer";
+import type { Preferences } from "./preferences";
 
 const videoCodecOptions = [
   { value: "auto", label: "Auto (best available)" },
@@ -38,6 +39,17 @@ const videoFpsOptions = [
   { value: 24, label: "24 FPS" },
   { value: 30, label: "30 FPS" },
   { value: 60, label: "60 FPS" },
+] as const;
+const backgroundBlurStyles = [
+  { value: "none", label: "No blur" },
+  { value: "classic", label: "Classic" },
+  { value: "frosted", label: "Frosted glass" },
+  { value: "focus", label: "Focus blur" },
+  { value: "directional", label: "Directional blur" },
+] as const;
+const backgroundBlurDirections = [
+  { value: "horizontal", label: "Horizontal" },
+  { value: "vertical", label: "Vertical" },
 ] as const;
 
 export type CacheNotice = {
@@ -64,6 +76,16 @@ export interface SettingsPanelProps {
   setArtworkThemeEnabled: Dispatch<SetStateAction<boolean>>;
   backgroundDim: number;
   setBackgroundDim: Dispatch<SetStateAction<number>>;
+  backgroundBlur: number;
+  setBackgroundBlur: Dispatch<SetStateAction<number>>;
+  backgroundBlurStyle: Preferences["backgroundBlurStyle"];
+  setBackgroundBlurStyle: Dispatch<
+    SetStateAction<Preferences["backgroundBlurStyle"]>
+  >;
+  backgroundBlurDirection: Preferences["backgroundBlurDirection"];
+  setBackgroundBlurDirection: Dispatch<
+    SetStateAction<Preferences["backgroundBlurDirection"]>
+  >;
   showNowPlayingTitleArtist: boolean;
   setShowNowPlayingTitleArtist: Dispatch<SetStateAction<boolean>>;
   debugMode: boolean;
@@ -112,6 +134,12 @@ export function SettingsPanel({
   setArtworkThemeEnabled,
   backgroundDim,
   setBackgroundDim,
+  backgroundBlur,
+  setBackgroundBlur,
+  backgroundBlurStyle,
+  setBackgroundBlurStyle,
+  backgroundBlurDirection,
+  setBackgroundBlurDirection,
   showNowPlayingTitleArtist,
   setShowNowPlayingTitleArtist,
   debugMode,
@@ -320,6 +348,49 @@ export function SettingsPanel({
             onChange={(event) => setBackgroundDim(Number(event.target.value))}
           />
         </div>
+        <div>
+          <div className="settings-row">
+            <label className="settings-row-label" htmlFor="background-blur">
+              Blur background
+            </label>
+            <span className="settings-row-value">{backgroundBlur}px</span>
+          </div>
+          <input
+            id="background-blur"
+            className="settings-range-input"
+            type="range"
+            min={1}
+            max={24}
+            value={backgroundBlur}
+            aria-valuetext={`${backgroundBlur} ${backgroundBlur === 1 ? "pixel" : "pixels"}`}
+            style={
+              {
+                "--range-progress": `${((backgroundBlur - 1) / 23) * 100}%`,
+              } as CSSProperties
+            }
+            onChange={(event) => setBackgroundBlur(Number(event.target.value))}
+          />
+        </div>
+        <div className="settings-row">
+          <span className="settings-row-label">Blur style</span>
+          <SettingsPicker
+            label="Blur style"
+            value={backgroundBlurStyle}
+            options={backgroundBlurStyles}
+            onChange={setBackgroundBlurStyle}
+          />
+        </div>
+        {backgroundBlurStyle === "directional" && (
+          <div className="settings-row">
+            <span className="settings-row-label">Direction</span>
+            <SettingsPicker
+              label="Blur direction"
+              value={backgroundBlurDirection}
+              options={backgroundBlurDirections}
+              onChange={setBackgroundBlurDirection}
+            />
+          </div>
+        )}
       </div>
       <div className="settings-block video-encoding-setting">
         <span className="settings-label">
