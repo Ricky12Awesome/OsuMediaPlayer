@@ -207,6 +207,41 @@ fs.writeFileSync(playlist, "#EXTM3U\\n#EXT-X-MAP:URI=\\\"init.mp4\\\"\\n#EXTINF:
       assert.ok(args.includes("libx264"));
       assert.ok(args.some((arg) => arg.includes("setpts=N/(25*TB)")));
       await transcoder.cancelEncoding();
+      if (scenario.filename.endsWith(".mp4")) {
+        assert.match(
+          await readFile(join(cache, "timing-checks.json"), "utf8"),
+          /true/,
+        );
+        await writeFile(
+          ffprobe,
+          `#!/usr/bin/env node
+if (process.argv.includes("packet=pts,dts")) process.exit(1);
+process.stdout.write(JSON.stringify({ streams: [{ codec_name: "h264", avg_frame_rate: "25/1", has_b_frames: 0 }], format: { duration: "10" } }));
+`,
+        );
+        const reopened = new VideoTranscoder(cache, ffmpeg);
+        try {
+          const prepared = await reopened.prepare(songList, "song", settings);
+          assert.equal(prepared?.url, profiledVideoUrl(hash, settings));
+          await reopened.cancelEncoding();
+          await reopened.clearCache();
+          await writeFile(
+            ffprobe,
+            `#!/usr/bin/env node
+const args = process.argv.slice(2);
+process.stdout.write(JSON.stringify(args.includes("packet=pts,dts")
+  ? { packets: [{ pts: 0, dts: 0 }] }
+  : { streams: [{ codec_name: "h264", avg_frame_rate: "25/1", has_b_frames: 0 }], format: { duration: "10" } }));
+`,
+          );
+          assert.deepEqual(await reopened.prepare(songList, "song", settings), {
+            url: assetUrl(hash),
+            streaming: false,
+          });
+        } finally {
+          reopened.dispose();
+        }
+      }
     } finally {
       transcoder?.dispose();
       await rm(root, { recursive: true, force: true });

@@ -247,6 +247,14 @@ test("generated MP4 plays directly while AVI and FLV encode or remux to HLS", as
           url: song.videoUrl,
           streaming: false,
         });
+        const timingChecks = JSON.parse(
+          await readFile(join(cache, "timing-checks.json"), "utf8"),
+        ) as { results: Array<[string, boolean]> };
+        assert.ok(
+          timingChecks.results.some(
+            ([hash, needsRepair]) => hash === song.videoHash && !needsRepair,
+          ),
+        );
       } else {
         assert.ok(extension === "avi" || extension === "flv");
         assert.equal(prepared.streaming, true);

@@ -1,7 +1,8 @@
 import { type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
-import { extname, join } from "node:path";
+import { join } from "node:path";
+import { videoPlaysDirectly } from "../../shared/video";
 import type {
   VideoEncodingSettings,
   VideoEncodingStatus,
@@ -38,7 +39,6 @@ export {
 } from "./encoding";
 export type { VideoEncoderChoice } from "./encoding";
 
-const directlyPlayableExtensions = new Set([".mp4", ".m4v", ".webm"]);
 const streamDirectoryName = "stream";
 const streamMetadataName = "stream.json";
 const videoEncodingSupersededMessage = "Video encoding was superseded.";
@@ -51,7 +51,7 @@ class VideoEncodingSupersededError extends Error {
 }
 
 export const videoNeedsConversion = (filename: string): boolean =>
-  !directlyPlayableExtensions.has(extname(filename).toLocaleLowerCase());
+  !videoPlaysDirectly(filename);
 
 function hashFromAssetUrl(value: string): string | null {
   try {
@@ -93,6 +93,9 @@ export class VideoTranscoder {
   private clearPromise: Promise<void> | null = null;
   private requestVersion = 0;
   private readonly timingChecks = new Map<string, Promise<boolean>>();
+  private timingResults: Map<string, boolean> | null = null;
+  private timingResultsLoading: Promise<Map<string, boolean>> | null = null;
+  private timingWrite: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly cacheDirectory: string,
@@ -416,22 +419,52 @@ export class VideoTranscoder {
     }
   }
 
-  private needsTimestampRepair(
+  private async needsTimestampRepair(
     hash: string,
     filename: string,
   ): Promise<boolean> {
+    if (!this.timingResultsLoading) {
+      const generation = this.cacheGeneration;
+      this.timingResultsLoading = this.cache
+        .readTimingChecks()
+        .then((results) => {
+          if (generation === this.cacheGeneration && !this.timingResults)
+            this.timingResults = results;
+          return this.timingResults ?? new Map();
+        });
+    }
+    const results = await this.timingResultsLoading;
+    const cached = results.get(hash);
+    if (cached !== undefined) return cached;
     const existing = this.timingChecks.get(hash);
     if (existing) return existing;
-    const check = this.detectTimestampIssue(filename).catch(() => false);
+    const generation = this.cacheGeneration;
+    const check = this.detectTimestampIssue(filename)
+      .catch(() => null)
+      .then(async (result) => {
+        if (result === null) return false;
+        if (generation !== this.cacheGeneration) return result;
+        results.delete(hash);
+        results.set(hash, result);
+        if (results.size > 1024) results.delete(results.keys().next().value!);
+        const write = this.timingWrite.then(() =>
+          this.cache.writeTimingChecks(results),
+        );
+        this.timingWrite = write.catch(() => {});
+        await this.timingWrite;
+        return result;
+      });
     this.timingChecks.set(hash, check);
     if (this.timingChecks.size > 128)
       this.timingChecks.delete(this.timingChecks.keys().next().value!);
     return check;
   }
 
-  private async detectTimestampIssue(filename: string): Promise<boolean> {
+  private async detectTimestampIssue(
+    filename: string,
+  ): Promise<boolean | null> {
     const source = await this.probeSource(filename);
-    if (source.hasBFrames === null) return false;
+    if (source.hasBFrames === null) return null;
     const intervals =
       source.duration && source.duration > 16
         ? `%+#64,${source.duration / 2}%+#64`
@@ -450,11 +483,12 @@ export class VideoTranscoder {
       filename,
     ]);
     const completed = await result;
-    if (completed.code !== 0) return false;
+    if (completed.code !== 0) return null;
     const parsed = JSON.parse(completed.stdout) as {
       packets?: Array<{ pts?: number; dts?: number }>;
     };
     const packets = parsed.packets ?? [];
+    if (!packets.length) return null;
     if (
       source.hasBFrames > 0 &&
       packets.length >= 8 &&
@@ -485,7 +519,7 @@ export class VideoTranscoder {
       filename,
     ]);
     const frames = await frameResult;
-    if (frames.code !== 0) return false;
+    if (frames.code !== 0) return null;
     const timestamps = (
       JSON.parse(frames.stdout) as {
         frames?: Array<{ best_effort_timestamp?: number }>;
@@ -952,10 +986,14 @@ export class VideoTranscoder {
     this.requestVersion += 1;
     this.cacheGeneration += 1;
     this.cache.ready.clear();
+    this.timingChecks.clear();
+    this.timingResults = new Map();
+    this.timingResultsLoading = Promise.resolve(this.timingResults);
     if (this.cleanupTimer) clearTimeout(this.cleanupTimer);
     this.cleanupTimer = null;
     this.pendingCleanupHash = null;
     const clear = this.locked(async () => {
+      await this.timingWrite;
       if (this.active?.encoding) {
         this.active.cancelled = true;
         this.active.child?.kill("SIGTERM");
