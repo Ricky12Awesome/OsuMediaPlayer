@@ -76,7 +76,7 @@ export interface SongListPanelProps {
   showArtistUnicode: boolean;
   onPlay: (song: Song, index: number) => void;
   onFavorite: (song: Song) => void;
-  onContextMenu: (song: Song, x: number, y: number) => void;
+  onContextMenu: (song: Song, index: number, x: number, y: number) => void;
   onTotal: (total: number) => void;
   onFirstSong: (song: Song) => void;
   keyboardControlsRef: RefObject<VirtualSongListKeyboardControls | null>;

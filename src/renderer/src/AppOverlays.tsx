@@ -1,16 +1,12 @@
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { createPortal } from "react-dom";
 import { RefreshCw, Trash2, X } from "lucide-react";
-import type {
-  CacheKind,
-  Song,
-  SongContextMenuAction,
-  SongContextMenuInfo,
-} from "../../shared/types";
-import { SongContextMenu } from "./SongContextMenu";
+import type { CacheKind, Song, SongContextMenuInfo } from "../../shared/types";
+import { SongContextMenu, type SongMenuAction } from "./SongContextMenu";
 
 export type SongContextMenuState = {
   song: Song;
+  index: number;
   x: number;
   y: number;
   info: SongContextMenuInfo;
@@ -22,7 +18,7 @@ interface AppOverlaysProps {
   zoomIndicatorVisible: boolean;
   zoomPercent: number;
   songContextMenu: SongContextMenuState | null;
-  onSongContextMenuAction: (action: SongContextMenuAction) => void;
+  onSongContextMenuAction: (action: SongMenuAction) => void;
   onCloseSongContextMenu: () => void;
   shortcutsDialogRef: RefObject<HTMLDialogElement | null>;
   shortcutsOpen: boolean;

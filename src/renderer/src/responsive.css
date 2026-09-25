@@ -45,6 +45,7 @@
 }
 @media (width<=68.75rem) {
   .transport {
+    grid-template-columns: minmax(10rem, 1fr) minmax(0, 1fr) minmax(16rem, 1fr);
     gap: 1rem;
     padding-left: 1.125rem;
     padding-right: 1.25rem;
@@ -203,6 +204,10 @@
     font-size: 1rem;
   }
   .transport {
+    grid-template-columns: minmax(10rem, 1fr) minmax(0, 1fr) minmax(
+        12.5rem,
+        1fr
+      );
     gap: 0.5rem;
     --transport-height: 4.375rem;
     height: var(--transport-height);
