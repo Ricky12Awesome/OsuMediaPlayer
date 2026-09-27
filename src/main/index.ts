@@ -43,6 +43,7 @@ import {
   parseVideoEncodingSettings,
 } from "./ipc-validation";
 import { startOffscreenViewer } from "./test-viewer";
+import { DiscordPresence, parseDiscordPlaybackState } from "./discord-presence";
 
 const isWaylandSession =
   process.platform === "linux" &&
@@ -102,6 +103,7 @@ let pendingIndexCacheClear: Promise<void> | null = null;
 let pendingPath: string | undefined;
 let importController: AbortController | null = null;
 let videoTranscoder: VideoTranscoder | null = null;
+const discordPresence = offscreenTest ? null : new DiscordPresence();
 let zoomStatusMenuItem: Electron.MenuItem | null = null;
 let offscreenViewer: Awaited<ReturnType<typeof startOffscreenViewer>> | null =
   null;
@@ -236,8 +238,12 @@ function createWindow(): void {
     window?.webContents.send("window:fullscreen", false),
   );
   window.on("closed", () => {
+    discordPresence?.update(null, null);
     window = null;
   });
+  window.webContents.on("did-start-loading", () =>
+    discordPresence?.update(null, null),
+  );
   window.webContents.on("zoom-changed", notifyZoomChange);
   window.webContents.on("did-finish-load", notifyZoomChange);
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
@@ -526,6 +532,18 @@ function assetKindForAction(
 }
 
 function setupIPC(): void {
+  ipcMain.on("discord:presence", (event, input: unknown) => {
+    if (!isTrusted(event) || !discordPresence) return;
+    try {
+      const state = parseDiscordPlaybackState(input);
+      discordPresence.update(
+        state ? (songList?.getSong(state.songId) ?? null) : null,
+        state,
+      );
+    } catch {
+      // Ignore malformed presence updates from the renderer.
+    }
+  });
   ipcMain.on("window:ready", (event) => {
     if (!isTrusted(event)) return;
     rendererReady = true;
@@ -920,14 +938,16 @@ app.on("before-quit", (event) => {
   quitting = true;
   importController?.abort();
   videoTranscoder?.dispose();
-  void Promise.all([waitForSongListWorkers(), offscreenViewer?.close()]).then(
-    () => {
-      songList?.close();
-      songList = null;
-      quitReady = true;
-      app.quit();
-    },
-  );
+  void Promise.all([
+    waitForSongListWorkers(),
+    offscreenViewer?.close(),
+    discordPresence?.dispose(),
+  ]).then(() => {
+    songList?.close();
+    songList = null;
+    quitReady = true;
+    app.quit();
+  });
 });
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();

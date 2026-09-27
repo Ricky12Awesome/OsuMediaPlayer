@@ -288,6 +288,10 @@ try {
     settingsControlMetrics.picker.height,
     settingsControlMetrics.toggle.height,
   );
+  const discordToggle = page.getByRole("button", { name: "Rich Presence" });
+  assert.equal(await discordToggle.getAttribute("aria-pressed"), "true");
+  await discordToggle.click();
+  assert.equal(await discordToggle.getAttribute("aria-pressed"), "false");
   const backgroundDim = page.getByRole("slider", { name: "Dim background" });
   await backgroundDim.press("End");
   assert.equal(await backgroundDim.inputValue(), "100");
@@ -506,6 +510,7 @@ try {
   if ((await panelToggle.getAttribute("aria-expanded")) !== "true") {
     await panelToggle.click();
   }
+  assert.equal(await discordToggle.getAttribute("aria-pressed"), "false");
   await backgroundBlur.waitFor();
   assert.equal(await backgroundBlur.inputValue(), "1");
   assert.equal(await page.locator(".artwork-stage.blur-enabled").count(), 0);

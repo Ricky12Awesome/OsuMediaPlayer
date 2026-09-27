@@ -156,6 +156,12 @@ export type SongListProgress =
 export type MediaAction =
   "stop" | "play" | "pause" | "toggle" | "next" | "previous";
 
+export interface DiscordPlaybackState {
+  songId: string;
+  position: number;
+  duration: number;
+}
+
 export type CacheKind = "index" | "video";
 
 export interface CacheUsage {
@@ -198,6 +204,7 @@ export interface PreparedVideo {
 }
 
 export interface PlayerAPI {
+  setDiscordPresence: (state: DiscordPlaybackState | null) => void;
   loadSongList: (
     installPath?: string,
     prioritySongId?: string,

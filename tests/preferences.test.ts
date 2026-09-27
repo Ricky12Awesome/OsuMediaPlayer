@@ -2,6 +2,24 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createPreferencesStore } from "../src/renderer/src/preferences";
 
+test("Discord presence preference can be disabled and rejects invalid data", () => {
+  const data = new Map<string, string>();
+  const preferences = createPreferencesStore({
+    getItem: (key) => data.get(key) ?? null,
+    setItem: (key, value) => {
+      data.set(key, value);
+    },
+    removeItem: (key) => {
+      data.delete(key);
+    },
+  });
+  assert.equal(preferences.get("discordPresence"), true);
+  preferences.set("discordPresence", false);
+  assert.equal(preferences.get("discordPresence"), false);
+  data.set("discord-presence", '"invalid"');
+  assert.equal(preferences.get("discordPresence"), true);
+});
+
 test("background dim preference persists and clamps invalid values", () => {
   const data = new Map<string, string>();
   const preferences = createPreferencesStore({

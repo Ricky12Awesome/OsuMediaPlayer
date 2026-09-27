@@ -25,6 +25,7 @@ export interface Preferences {
   transportLayout: "controls-left" | "controls-centered";
   showNowPlayingTitleArtist: boolean;
   debugMode: boolean;
+  discordPresence: boolean;
   artworkTheme: boolean;
   backgroundDim: number;
   backgroundBlur: number;
@@ -73,6 +74,7 @@ const keys: Record<PreferenceKey, string> = {
   transportLayout: "transport-layout",
   showNowPlayingTitleArtist: "show-now-playing-title-artist",
   debugMode: "debug-mode",
+  discordPresence: "discord-presence",
   artworkTheme: "artwork-theme",
   backgroundDim: "background-dim",
   backgroundBlur: "background-blur",
@@ -109,6 +111,7 @@ export const preferenceDefaults: Preferences = {
   transportLayout: "controls-centered",
   showNowPlayingTitleArtist: true,
   debugMode: false,
+  discordPresence: true,
   artworkTheme: true,
   backgroundDim: 0,
   backgroundBlur: 1,
@@ -182,6 +185,7 @@ function parseValue<K extends PreferenceKey>(
     case "sidebarHidden":
     case "showNowPlayingTitleArtist":
     case "debugMode":
+    case "discordPresence":
     case "artworkTheme":
     case "sidePanelOpen":
       return parseBoolean(value, fallback as boolean) as Preferences[K];

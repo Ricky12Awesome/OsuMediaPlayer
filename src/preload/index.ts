@@ -9,6 +9,7 @@ import type {
 } from "../shared/types";
 
 const api: PlayerAPI = {
+  setDiscordPresence: (state) => ipcRenderer.send("discord:presence", state),
   loadSongList: (installPath, prioritySongId) =>
     ipcRenderer.invoke("song-list:load", installPath, prioritySongId),
   loadCachedSongList: (installPath) =>

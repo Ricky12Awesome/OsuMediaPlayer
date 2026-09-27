@@ -90,6 +90,8 @@ export interface SettingsPanelProps {
   setShowNowPlayingTitleArtist: Dispatch<SetStateAction<boolean>>;
   debugMode: boolean;
   setDebugMode: Dispatch<SetStateAction<boolean>>;
+  discordPresence: boolean;
+  setDiscordPresence: Dispatch<SetStateAction<boolean>>;
   showTitleUnicode: boolean;
   setShowTitleUnicode: Dispatch<SetStateAction<boolean>>;
   showArtistUnicode: boolean;
@@ -144,6 +146,8 @@ export function SettingsPanel({
   setShowNowPlayingTitleArtist,
   debugMode,
   setDebugMode,
+  discordPresence,
+  setDiscordPresence,
   showTitleUnicode,
   setShowTitleUnicode,
   showArtistUnicode,
@@ -225,6 +229,15 @@ export function SettingsPanel({
           parseImport={importFavorites}
           onImport={mergeImportedFavorites}
         />
+      </div>
+      <div className="settings-block">
+        <span className="settings-label">DISCORD</span>
+        {settingsSwitch(
+          "Rich Presence",
+          "Show the current song in Discord while it plays",
+          discordPresence,
+          () => setDiscordPresence((value) => !value),
+        )}
       </div>
       <div className="settings-block transport-layout-setting">
         <div className="settings-row">
