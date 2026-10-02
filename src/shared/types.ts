@@ -156,10 +156,14 @@ export type SongListProgress =
 export type MediaAction =
   "stop" | "play" | "pause" | "toggle" | "next" | "previous";
 
+export type DiscordUnicodeMode = "app" | "on" | "off";
+
 export interface DiscordPlaybackState {
   songId: string;
   position: number;
   duration: number;
+  useTitleUnicode: boolean;
+  useArtistUnicode: boolean;
 }
 
 export type CacheKind = "index" | "video";

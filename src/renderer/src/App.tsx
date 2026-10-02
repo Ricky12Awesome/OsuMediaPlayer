@@ -51,6 +51,7 @@ import {
   removePreference,
   writePreference,
   preferenceDefaults,
+  resolveDiscordUnicode,
   type Preferences,
 } from "./preferences";
 
@@ -252,6 +253,11 @@ export function App({
   const [discordPresence, setDiscordPresence] = useState(() =>
     readPreference("discordPresence"),
   );
+  const [discordUnicode, setDiscordUnicode] = useState(() =>
+    readPreference("discordUnicode"),
+  );
+  const { title: discordTitleUnicode, artist: discordArtistUnicode } =
+    resolveDiscordUnicode(discordUnicode, showTitleUnicode, showArtistUnicode);
   const [visualizerSettings, setVisualizerSettings] = useState(() =>
     readPreference("visualizer"),
   );
@@ -625,6 +631,11 @@ export function App({
     () => writePreference("discordPresence", discordPresence),
     [discordPresence],
   );
+  useEffect(
+    () => writePreference("discordUnicode", discordUnicode),
+    [discordUnicode],
+  );
+  useEffect(() => () => api.setDiscordPresence(null), []);
   useEffect(() => {
     const audio = player.audioRef.current;
     const update = () => {
@@ -636,16 +647,19 @@ export function App({
         songId: player.song.id,
         position: audio?.currentTime ?? player.currentTime,
         duration: player.duration,
+        useTitleUnicode: discordTitleUnicode,
+        useArtistUnicode: discordArtistUnicode,
       });
     };
     update();
     audio?.addEventListener("seeked", update);
     return () => {
       audio?.removeEventListener("seeked", update);
-      api.setDiscordPresence(null);
     };
   }, [
     discordPresence,
+    discordTitleUnicode,
+    discordArtistUnicode,
     player.audioRef,
     player.duration,
     player.playing,
@@ -1066,6 +1080,7 @@ export function App({
     setShowNowPlayingTitleArtist(true);
     setDebugMode(false);
     setDiscordPresence(preferenceDefaults.discordPresence);
+    setDiscordUnicode(preferenceDefaults.discordUnicode);
     setArtworkThemeEnabled(true);
     setBackgroundDim(0);
     setBackgroundBlur(preferenceDefaults.backgroundBlur);
@@ -1387,6 +1402,8 @@ export function App({
                 setDebugMode={setDebugMode}
                 discordPresence={discordPresence}
                 setDiscordPresence={setDiscordPresence}
+                discordUnicode={discordUnicode}
+                setDiscordUnicode={setDiscordUnicode}
                 showTitleUnicode={showTitleUnicode}
                 setShowTitleUnicode={setShowTitleUnicode}
                 showArtistUnicode={showArtistUnicode}

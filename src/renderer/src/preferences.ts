@@ -1,5 +1,6 @@
 import {
   sortKeys,
+  type DiscordUnicodeMode,
   type SortKey,
   type VideoEncodingCodec,
   type VideoEncodingQuality,
@@ -26,6 +27,7 @@ export interface Preferences {
   showNowPlayingTitleArtist: boolean;
   debugMode: boolean;
   discordPresence: boolean;
+  discordUnicode: DiscordUnicodeMode;
   artworkTheme: boolean;
   backgroundDim: number;
   backgroundBlur: number;
@@ -75,6 +77,7 @@ const keys: Record<PreferenceKey, string> = {
   showNowPlayingTitleArtist: "show-now-playing-title-artist",
   debugMode: "debug-mode",
   discordPresence: "discord-presence",
+  discordUnicode: "discord-unicode",
   artworkTheme: "artwork-theme",
   backgroundDim: "background-dim",
   backgroundBlur: "background-blur",
@@ -112,6 +115,7 @@ export const preferenceDefaults: Preferences = {
   showNowPlayingTitleArtist: true,
   debugMode: false,
   discordPresence: true,
+  discordUnicode: "app",
   artworkTheme: true,
   backgroundDim: 0,
   backgroundBlur: 1,
@@ -135,6 +139,17 @@ export const preferenceDefaults: Preferences = {
     videoCacheLimitGb: 5,
   },
 };
+
+export function resolveDiscordUnicode(
+  mode: DiscordUnicodeMode,
+  showTitleUnicode: boolean,
+  showArtistUnicode: boolean,
+): { title: boolean; artist: boolean } {
+  return {
+    title: mode === "on" || (mode === "app" && showTitleUnicode),
+    artist: mode === "on" || (mode === "app" && showArtistUnicode),
+  };
+}
 
 function storage(): StorageLike | null {
   try {
@@ -234,6 +249,10 @@ function parseValue<K extends PreferenceKey>(
     case "backgroundBlurDirection":
       return (
         value === "horizontal" || value === "vertical" ? value : fallback
+      ) as Preferences[K];
+    case "discordUnicode":
+      return (
+        value === "app" || value === "on" || value === "off" ? value : fallback
       ) as Preferences[K];
     case "sidePanelWidth":
       return Math.min(

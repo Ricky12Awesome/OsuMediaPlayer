@@ -4,7 +4,7 @@ import {
   discordActivity,
   parseDiscordPlaybackState,
 } from "../src/main/discord-presence";
-import type { Song } from "../src/shared/types";
+import type { DiscordPlaybackState, Song } from "../src/shared/types";
 
 const song: Song = {
   id: "song-1",
@@ -21,6 +21,13 @@ const song: Song = {
   addedAt: 0,
   onlineId: 12345,
 };
+const playbackState: DiscordPlaybackState = {
+  songId: song.id,
+  position: 30,
+  duration: 120,
+  useTitleUnicode: true,
+  useArtistUnicode: true,
+};
 
 test("Discord playback IPC accepts bounded playback data and clear requests", () => {
   assert.equal(parseDiscordPlaybackState(null), null);
@@ -29,18 +36,28 @@ test("Discord playback IPC accepts bounded playback data and clear requests", ()
       songId: "song-1",
       position: 130,
       duration: 120,
+      useTitleUnicode: true,
+      useArtistUnicode: false,
       ignored: "not forwarded",
     }),
-    { songId: "song-1", position: 120, duration: 120 },
+    {
+      songId: "song-1",
+      position: 120,
+      duration: 120,
+      useTitleUnicode: true,
+      useArtistUnicode: false,
+    },
   );
   for (const invalid of [
     undefined,
     [],
-    { songId: "", position: 0, duration: 10 },
-    { songId: "a".repeat(257), position: 0, duration: 10 },
-    { songId: "song-1", position: -1, duration: 10 },
-    { songId: "song-1", position: Number.NaN, duration: 10 },
-    { songId: "song-1", position: 1, duration: 86_401 },
+    { ...playbackState, songId: "" },
+    { ...playbackState, songId: "a".repeat(257) },
+    { ...playbackState, position: -1 },
+    { ...playbackState, position: Number.NaN },
+    { ...playbackState, duration: 86_401 },
+    { ...playbackState, useTitleUnicode: "yes" },
+    { ...playbackState, useArtistUnicode: undefined },
   ])
     assert.throws(() => parseDiscordPlaybackState(invalid));
 });
@@ -48,7 +65,7 @@ test("Discord playback IPC accepts bounded playback data and clear requests", ()
 test("Discord activity shows track, beatmap, and playback progress", () => {
   const activity = discordActivity(
     { ...song, titleUnicode: "テスト曲", artistUnicode: "テスト歌手" },
-    { songId: song.id, position: 30, duration: 120 },
+    playbackState,
     1_000_000,
     1_010_000,
   );
@@ -65,10 +82,32 @@ test("Discord activity shows track, beatmap, and playback progress", () => {
   ]);
 });
 
+test("Discord activity uses standard text when Unicode is disabled", () => {
+  const activity = discordActivity(
+    { ...song, titleUnicode: "テスト曲", artistUnicode: "テスト歌手" },
+    { ...playbackState, useTitleUnicode: false, useArtistUnicode: false },
+    0,
+    0,
+  );
+  assert.equal(activity.details, "Test track");
+  assert.equal(activity.state, "Test artist");
+});
+
+test("Discord activity selects title and artist Unicode independently", () => {
+  const activity = discordActivity(
+    { ...song, titleUnicode: "テスト曲", artistUnicode: "テスト歌手" },
+    { ...playbackState, useArtistUnicode: false },
+    0,
+    0,
+  );
+  assert.equal(activity.details, "テスト曲");
+  assert.equal(activity.state, "Test artist");
+});
+
 test("Discord activity falls back to standard text when Unicode is unavailable", () => {
   const activity = discordActivity(
     { ...song, titleUnicode: "", artistUnicode: undefined },
-    { songId: song.id, position: 0, duration: 120 },
+    { ...playbackState, position: 0 },
     0,
     0,
   );
@@ -80,7 +119,7 @@ test("Discord activity falls back to standard text when Unicode is unavailable",
 test("Discord activity omits missing artwork and invalid timeline data", () => {
   const activity = discordActivity(
     { ...song, onlineId: undefined, title: "", artist: "" },
-    { songId: song.id, position: 0, duration: 0 },
+    { ...playbackState, position: 0, duration: 0 },
     0,
     0,
   );

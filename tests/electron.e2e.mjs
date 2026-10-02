@@ -292,6 +292,33 @@ try {
   assert.equal(await discordToggle.getAttribute("aria-pressed"), "true");
   await discordToggle.click();
   assert.equal(await discordToggle.getAttribute("aria-pressed"), "false");
+  assert.equal(
+    await page
+      .locator(".artwork-theme-setting + .settings-block .settings-label")
+      .textContent(),
+    "DISCORD",
+  );
+  const unicodeChoices = page.locator(
+    '.settings-choice-group[aria-label="Discord Unicode"]',
+  );
+  const appUnicode = unicodeChoices.getByRole("button", { name: "App" });
+  const onUnicode = unicodeChoices.getByRole("button", { name: "On" });
+  const offUnicode = unicodeChoices.getByRole("button", { name: "Off" });
+  assert.equal(await appUnicode.getAttribute("aria-pressed"), "true");
+  const [appBox, onBox, offBox] = await Promise.all([
+    appUnicode.boundingBox(),
+    onUnicode.boundingBox(),
+    offUnicode.boundingBox(),
+  ]);
+  assert.ok(appBox && onBox && offBox);
+  assert.ok(appBox.x < onBox.x && onBox.x < offBox.x);
+  assert.ok(
+    Math.abs(appBox.y - onBox.y) < 1 && Math.abs(onBox.y - offBox.y) < 1,
+  );
+  await onUnicode.click();
+  assert.equal(await onUnicode.getAttribute("aria-pressed"), "true");
+  await offUnicode.click();
+  assert.equal(await offUnicode.getAttribute("aria-pressed"), "true");
   const backgroundDim = page.getByRole("slider", { name: "Dim background" });
   await backgroundDim.press("End");
   assert.equal(await backgroundDim.inputValue(), "100");
@@ -511,6 +538,7 @@ try {
     await panelToggle.click();
   }
   assert.equal(await discordToggle.getAttribute("aria-pressed"), "false");
+  assert.equal(await offUnicode.getAttribute("aria-pressed"), "true");
   await backgroundBlur.waitFor();
   assert.equal(await backgroundBlur.inputValue(), "1");
   assert.equal(await page.locator(".artwork-stage.blur-enabled").count(), 0);

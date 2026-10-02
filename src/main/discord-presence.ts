@@ -21,13 +21,17 @@ export function parseDiscordPlaybackState(
     typeof state.duration !== "number" ||
     !Number.isFinite(state.duration) ||
     state.duration < 0 ||
-    state.duration > 86_400
+    state.duration > 86_400 ||
+    typeof state.useTitleUnicode !== "boolean" ||
+    typeof state.useArtistUnicode !== "boolean"
   )
     throw new Error("Invalid Discord playback state.");
   return {
     songId: state.songId,
     position: Math.min(state.position, state.duration),
     duration: state.duration,
+    useTitleUnicode: state.useTitleUnicode,
+    useArtistUnicode: state.useArtistUnicode,
   };
 }
 
@@ -38,12 +42,18 @@ export function discordActivity(
   now = Date.now(),
 ): SetActivity {
   const title =
-    (song.titleUnicode || song.title).slice(0, 128) || "Unknown title";
+    (state.useTitleUnicode
+      ? song.titleUnicode || song.title
+      : song.title
+    ).slice(0, 128) || "Unknown title";
   const activity: SetActivity = {
     type: 2,
     details: title,
     state:
-      (song.artistUnicode || song.artist).slice(0, 128) || "Unknown artist",
+      (state.useArtistUnicode
+        ? song.artistUnicode || song.artist
+        : song.artist
+      ).slice(0, 128) || "Unknown artist",
   };
   if (state.duration > 0) {
     const elapsed = Math.min(

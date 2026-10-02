@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createPreferencesStore } from "../src/renderer/src/preferences";
+import {
+  createPreferencesStore,
+  resolveDiscordUnicode,
+} from "../src/renderer/src/preferences";
 
 test("Discord presence preference can be disabled and rejects invalid data", () => {
   const data = new Map<string, string>();
@@ -18,6 +21,45 @@ test("Discord presence preference can be disabled and rejects invalid data", () 
   assert.equal(preferences.get("discordPresence"), false);
   data.set("discord-presence", '"invalid"');
   assert.equal(preferences.get("discordPresence"), true);
+});
+
+test("Discord Unicode mode persists and rejects invalid values", () => {
+  const data = new Map<string, string>();
+  const preferences = createPreferencesStore({
+    getItem: (key) => data.get(key) ?? null,
+    setItem: (key, value) => {
+      data.set(key, value);
+    },
+    removeItem: (key) => {
+      data.delete(key);
+    },
+  });
+  assert.equal(preferences.get("discordUnicode"), "app");
+  preferences.set("discordUnicode", "on");
+  assert.equal(preferences.get("discordUnicode"), "on");
+  preferences.set("discordUnicode", "off");
+  assert.equal(preferences.get("discordUnicode"), "off");
+  data.set("discord-unicode", '"invalid"');
+  assert.equal(preferences.get("discordUnicode"), "app");
+});
+
+test("Discord Unicode mode follows app title and artist settings independently", () => {
+  assert.deepEqual(resolveDiscordUnicode("app", true, false), {
+    title: true,
+    artist: false,
+  });
+  assert.deepEqual(resolveDiscordUnicode("app", false, true), {
+    title: false,
+    artist: true,
+  });
+  assert.deepEqual(resolveDiscordUnicode("on", false, false), {
+    title: true,
+    artist: true,
+  });
+  assert.deepEqual(resolveDiscordUnicode("off", true, true), {
+    title: false,
+    artist: false,
+  });
 });
 
 test("background dim preference persists and clamps invalid values", () => {
