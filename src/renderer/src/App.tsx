@@ -51,6 +51,7 @@ import {
   removePreference,
   writePreference,
   preferenceDefaults,
+  resolveDiscordUnicode,
   type Preferences,
 } from "./preferences";
 
@@ -92,6 +93,7 @@ const combinedShowUnicodeKey = "show-unicode";
 const legacyShowUnicodeTitleKey = "show-unicode-title";
 
 const defaultApi: PlayerAPI = {
+  setDiscordPresence: () => {},
   loadSongList: async () => {
     throw new Error(
       "Open OsuMediaPlayer in the desktop app to connect to your osu!lazer songs. Run npm run dev in the project folder.",
@@ -248,6 +250,14 @@ export function App({
     () => readPreference("showNowPlayingTitleArtist"),
   );
   const [debugMode, setDebugMode] = useState(() => readPreference("debugMode"));
+  const [discordPresence, setDiscordPresence] = useState(() =>
+    readPreference("discordPresence"),
+  );
+  const [discordUnicode, setDiscordUnicode] = useState(() =>
+    readPreference("discordUnicode"),
+  );
+  const { title: discordTitleUnicode, artist: discordArtistUnicode } =
+    resolveDiscordUnicode(discordUnicode, showTitleUnicode, showArtistUnicode);
   const [visualizerSettings, setVisualizerSettings] = useState(() =>
     readPreference("visualizer"),
   );
@@ -617,6 +627,44 @@ export function App({
     [showNowPlayingTitleArtist],
   );
   useEffect(() => writePreference("debugMode", debugMode), [debugMode]);
+  useEffect(
+    () => writePreference("discordPresence", discordPresence),
+    [discordPresence],
+  );
+  useEffect(
+    () => writePreference("discordUnicode", discordUnicode),
+    [discordUnicode],
+  );
+  useEffect(() => () => api.setDiscordPresence(null), []);
+  useEffect(() => {
+    const audio = player.audioRef.current;
+    const update = () => {
+      if (!discordPresence || !player.playing || !player.song) {
+        api.setDiscordPresence(null);
+        return;
+      }
+      api.setDiscordPresence({
+        songId: player.song.id,
+        position: audio?.currentTime ?? player.currentTime,
+        duration: player.duration,
+        useTitleUnicode: discordTitleUnicode,
+        useArtistUnicode: discordArtistUnicode,
+      });
+    };
+    update();
+    audio?.addEventListener("seeked", update);
+    return () => {
+      audio?.removeEventListener("seeked", update);
+    };
+  }, [
+    discordPresence,
+    discordTitleUnicode,
+    discordArtistUnicode,
+    player.audioRef,
+    player.duration,
+    player.playing,
+    player.song,
+  ]);
   useEffect(
     () => writePreference("visualizer", visualizerSettings),
     [visualizerSettings],
@@ -1031,6 +1079,8 @@ export function App({
     setShowArtistUnicode(false);
     setShowNowPlayingTitleArtist(true);
     setDebugMode(false);
+    setDiscordPresence(preferenceDefaults.discordPresence);
+    setDiscordUnicode(preferenceDefaults.discordUnicode);
     setArtworkThemeEnabled(true);
     setBackgroundDim(0);
     setBackgroundBlur(preferenceDefaults.backgroundBlur);
@@ -1350,6 +1400,10 @@ export function App({
                 setShowNowPlayingTitleArtist={setShowNowPlayingTitleArtist}
                 debugMode={debugMode}
                 setDebugMode={setDebugMode}
+                discordPresence={discordPresence}
+                setDiscordPresence={setDiscordPresence}
+                discordUnicode={discordUnicode}
+                setDiscordUnicode={setDiscordUnicode}
                 showTitleUnicode={showTitleUnicode}
                 setShowTitleUnicode={setShowTitleUnicode}
                 showArtistUnicode={showArtistUnicode}

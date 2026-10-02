@@ -51,6 +51,23 @@ const backgroundBlurDirections = [
   { value: "horizontal", label: "Horizontal" },
   { value: "vertical", label: "Vertical" },
 ] as const;
+const discordUnicodeOptions = [
+  {
+    value: "app",
+    label: "App",
+    title: "Follow the app's title and artist Unicode settings",
+  },
+  {
+    value: "on",
+    label: "On",
+    title: "Always use Unicode title and artist when available",
+  },
+  {
+    value: "off",
+    label: "Off",
+    title: "Always use standard title and artist",
+  },
+] as const;
 
 export type CacheNotice = {
   kind: "success" | "error";
@@ -90,6 +107,10 @@ export interface SettingsPanelProps {
   setShowNowPlayingTitleArtist: Dispatch<SetStateAction<boolean>>;
   debugMode: boolean;
   setDebugMode: Dispatch<SetStateAction<boolean>>;
+  discordPresence: boolean;
+  setDiscordPresence: Dispatch<SetStateAction<boolean>>;
+  discordUnicode: Preferences["discordUnicode"];
+  setDiscordUnicode: Dispatch<SetStateAction<Preferences["discordUnicode"]>>;
   showTitleUnicode: boolean;
   setShowTitleUnicode: Dispatch<SetStateAction<boolean>>;
   showArtistUnicode: boolean;
@@ -144,6 +165,10 @@ export function SettingsPanel({
   setShowNowPlayingTitleArtist,
   debugMode,
   setDebugMode,
+  discordPresence,
+  setDiscordPresence,
+  discordUnicode,
+  setDiscordUnicode,
   showTitleUnicode,
   setShowTitleUnicode,
   showArtistUnicode,
@@ -391,6 +416,35 @@ export function SettingsPanel({
             />
           </div>
         )}
+      </div>
+      <div className="settings-block">
+        <span className="settings-label">DISCORD</span>
+        {settingsSwitch(
+          "Rich Presence",
+          "Show the current song in Discord while it plays",
+          discordPresence,
+          () => setDiscordPresence((value) => !value),
+        )}
+        <div className="settings-row">
+          <span className="settings-row-label">Unicode text</span>
+          <div className="settings-choice-group" aria-label="Discord Unicode">
+            {discordUnicodeOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={
+                  "settings-choice-option " +
+                  (discordUnicode === option.value ? "active" : "")
+                }
+                aria-pressed={discordUnicode === option.value}
+                title={option.title}
+                onClick={() => setDiscordUnicode(option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
       <div className="settings-block video-encoding-setting">
         <span className="settings-label">
